@@ -26,6 +26,8 @@ let mockPayments: Array<{
   houseId: string;
   description?: string;
 }> = [];
+// Outstanding comes from residents' balances, not pending charges (#183).
+let mockGuests: Record<string, { id: string; rentOwed?: number; status?: string }> = {};
 
 jest.mock('victory-native', () => ({
   VictoryBar: () => null,
@@ -43,7 +45,11 @@ jest.mock('../../../state/queries/paymentQueries', () => ({
 }));
 
 jest.mock('@tanstack/react-query', () => ({
-  useQuery: () => ({ data: mockPayments, isLoading: false, error: null }),
+  useQuery: ({ queryKey }: { queryKey: readonly unknown[] }) => ({
+    data: queryKey[0] === 'guests' ? mockGuests : mockPayments,
+    isLoading: false,
+    error: null,
+  }),
   useQueryClient: () => ({ invalidateQueries: jest.fn() }),
 }));
 
@@ -92,22 +98,32 @@ describe('PaymentDashboard — stats aggregation', () => {
     return within(utils.getByTestId('payment-stats-card'));
   };
 
-  it('sums succeeded amounts into Collected, pending into Outstanding', () => {
+  beforeEach(() => {
+    mockGuests = {};
+  });
+
+  it('sums succeeded amounts into Collected, and what residents owe into Outstanding', () => {
     mockPayments = [
       payment('p1', 'succeeded', 30000), // $300
       payment('p2', 'succeeded', 20000), // $200
-      payment('p3', 'pending', 15000), // $150
+      payment('p3', 'pending', 15000), // $150, a charge, not a balance
       payment('p4', 'pending', 10000), // $100
     ];
+    mockGuests = {
+      a: { id: 'a', rentOwed: 12000, status: 'active' },
+      b: { id: 'b', rentOwed: 3000, status: 'active' },
+      gone: { id: 'gone', rentOwed: 40000, status: 'discharged' },
+    };
 
     const stats = renderAndGetStats();
     expect(stats.getByText('$500.00')).toBeTruthy(); // Collected (300 + 200)
-    expect(stats.getByText('$250.00')).toBeTruthy(); // Outstanding (150 + 100)
+    expect(stats.getByText('$150.00')).toBeTruthy(); // Outstanding: 120 + 30 owed now
+    expect(stats.queryByText('$250.00')).toBeNull(); // not the pending charges
   });
 
-  it('excludes failed payments from both totals AND from the collectionRate denominator', () => {
-    // 2 succeeded ($100 + $100 = $200), 1 pending ($50), 5 failed.
-    // Failed should not appear anywhere. Rate: 2 / (2+1) = 67%.
+  it('excludes failed payments from Collected and from the collectionRate', () => {
+    // 2 succeeded ($100 + $100 = $200), 1 pending, 5 failed; residents owe $100.
+    // Rate: collected / (collected + outstanding) = 200 / 300 = 67%.
     mockPayments = [
       payment('p1', 'succeeded', 10000),
       payment('p2', 'succeeded', 10000),
@@ -118,11 +134,12 @@ describe('PaymentDashboard — stats aggregation', () => {
       payment('p7', 'failed', 99999),
       payment('p8', 'failed', 99999),
     ];
+    mockGuests = { a: { id: 'a', rentOwed: 10000, status: 'active' } };
 
     const stats = renderAndGetStats();
     expect(stats.getByText('$200.00')).toBeTruthy(); // Collected — failed excluded
-    expect(stats.getByText('$50.00')).toBeTruthy(); // Outstanding
-    expect(stats.getByText('67%')).toBeTruthy(); // 2/3 = 67% (failed not in denominator)
+    expect(stats.getByText('$100.00')).toBeTruthy(); // Outstanding
+    expect(stats.getByText('67%')).toBeTruthy(); // 200 / 300
   });
 
   it('returns 0% collectionRate when all actionable payments are absent (only failed)', () => {
@@ -147,7 +164,7 @@ describe('PaymentDashboard — stats aggregation', () => {
     expect(stats.getByText('0%')).toBeTruthy();
   });
 
-  it('returns 100% collectionRate when every actionable payment succeeded', () => {
+  it('returns 100% collectionRate when payments came in and nobody owes', () => {
     mockPayments = [
       payment('p1', 'succeeded', 10000),
       payment('p2', 'succeeded', 10000),

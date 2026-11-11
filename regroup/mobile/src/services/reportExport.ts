@@ -1,4 +1,5 @@
 import { Platform } from 'react-native';
+import { csvCell, recordAmountCsv } from '../util/paymentDisplay';
 import { format, parseISO } from 'date-fns';
 import { toDateSafe } from '../util/firestore';
 import { generatePDF } from 'react-native-html-to-pdf';
@@ -115,12 +116,8 @@ export async function exportWeeklyReportPDF(
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
 
-function escapeCsvField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
-  }
-  return value;
-}
+// Quotes and formula-guards every text cell (see csvCell).
+const escapeCsvField = csvCell;
 
 /**
  * A payment's `createdAt` as yyyy-MM-dd, or '' when it can't be read. Firestore
@@ -147,7 +144,7 @@ export function exportPaymentHistoryCSV(
   const rows = payments.map((p) => {
     const date = paymentDate(p.createdAt);
     const guest = escapeCsvField(guestNames[p.guestId] ?? p.guestId);
-    const amount = p.amount == null ? '' : (p.amount / 100).toFixed(2);
+    const amount = recordAmountCsv(p);
     const status = escapeCsvField(paymentDisplayStatus(p).label);
     const description = escapeCsvField(p.description ?? '');
     return [date, guest, amount, status, description].join(',');

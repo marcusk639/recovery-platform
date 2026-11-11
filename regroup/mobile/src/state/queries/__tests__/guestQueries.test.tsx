@@ -13,6 +13,7 @@ import {
   useUpdateGuest,
   useCreateGuest,
   useDeleteGuest,
+  guestKeys,
 } from '../guestQueries';
 import * as guestService from '../../../services/guest';
 import { Guest } from '../../../entities/Guest';
@@ -154,6 +155,39 @@ describe('guestQueries', () => {
   });
 
   describe('useUpdateGuest', () => {
+    it('keeps the cached balance while saving, and shows the typed one (review)', async () => {
+      queryClient.setQueryData(guestKeys.detail('g9'), {
+        id: 'g9',
+        houseId: 'h9',
+        firstName: 'Sam',
+        rentOwed: 30000,
+        choreFees: 500,
+      });
+      queryClient.setQueryData(guestKeys.list('h9'), {
+        g9: { id: 'g9', houseId: 'h9', rentOwed: 30000, choreFees: 500 },
+      });
+      (guestService.updateGuest as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+      const { result } = renderHook(() => useUpdateGuest(), { wrapper });
+      result.current.mutate({
+        guest: { id: 'g9' },
+        updatedGuest: { id: 'g9', houseId: 'h9', firstName: 'Sammy' },
+        moneyEdits: { rentOwed: { from: 30000, to: 25000 } },
+      });
+
+      await waitFor(() =>
+        expect(queryClient.getQueryData<any>(guestKeys.detail('g9'))?.firstName).toBe('Sammy'),
+      );
+      expect(queryClient.getQueryData<any>(guestKeys.detail('g9'))).toMatchObject({
+        rentOwed: 25000,
+        choreFees: 500,
+      });
+      expect(queryClient.getQueryData<any>(guestKeys.list('h9')).g9).toMatchObject({
+        rentOwed: 25000,
+        choreFees: 500,
+      });
+    });
+
     it('should update guest successfully', async () => {
       const updatedGuest = { ...mockGuest, firstName: 'Updated' };
       (guestService.updateGuest as jest.Mock).mockResolvedValue(updatedGuest);
@@ -172,6 +206,7 @@ describe('guestQueries', () => {
         updatedGuest,
         3,
         [], // authoritativeFields — none for an ordinary update
+        {}, // moneyEdits — no balance change
       );
     });
 

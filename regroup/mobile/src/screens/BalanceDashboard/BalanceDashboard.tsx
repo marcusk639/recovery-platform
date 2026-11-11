@@ -11,6 +11,7 @@ import {
   GuestBalance,
 } from "../../state/queries/paymentQueries";
 import { useGuests } from "../../state/queries/guestQueries";
+import { isCurrentResident } from "../../util/paymentDisplay";
 import BalanceAgingView, { AgingRow } from "./BalanceAgingView";
 import {
   color,
@@ -84,13 +85,20 @@ const BalanceRow: React.FC<BalanceRowProps> = ({ item }) => {
 const BalanceDashboard: React.FC = () => {
   const { currentHouse } = useData();
   // React Query is the source of truth for guests; see .full-review [A2].
-  const { data: guests = {} } = useGuests(currentHouse?.id ?? "");
-  const guestList = useMemo(() => Object.values(guests), [guests]);
-
-  const { data: balances = [], isLoading } = useGuestBalances(
-    currentHouse?.id ?? "",
-    guestList,
+  const guestsQuery = useGuests(currentHouse?.id ?? "");
+  // Current residents only, the same rule as the Payments tab's Outstanding.
+  const guestList = useMemo(
+    () => Object.values(guestsQuery.data ?? {}).filter(isCurrentResident),
+    [guestsQuery.data],
   );
+
+  const balancesQuery = useGuestBalances(currentHouse?.id ?? "", guestList);
+  const balances = useMemo(() => balancesQuery.data ?? [], [balancesQuery.data]);
+  // Never $0.00 while loading or after an error (review). The balances query
+  // only runs once there are residents, so wait on it only then.
+  const isLoading =
+    guestsQuery.isPending || (guestList.length > 0 && balancesQuery.isPending);
+  const isError = guestsQuery.isError || balancesQuery.isError;
 
   const sorted = useMemo(
     () => [...balances].sort((a, b) => b.totalBalance - a.totalBalance),
@@ -127,6 +135,10 @@ const BalanceDashboard: React.FC = () => {
       {isLoading ? (
         <View style={styles.centered} testID="balance-dashboard-loading">
           <ActivityIndicator size="large" color={color.main} />
+        </View>
+      ) : isError ? (
+        <View style={styles.centered} testID="balance-dashboard-error">
+          <RatsText translate={false} text="Couldn't load balances." />
         </View>
       ) : (
         <FlatList

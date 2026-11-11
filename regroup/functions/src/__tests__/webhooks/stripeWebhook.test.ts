@@ -62,6 +62,14 @@ const mockSubscriptionsRetrieve = jest.fn();
 // ---------------------------------------------------------------------------
 // firebase-admin mock
 // ---------------------------------------------------------------------------
+// The refund restore has its own suite (refundRestore.test.ts); here we only
+// check the handler calls it with the cumulative refunded amount (#198).
+const mockRestoreRefundedRent = jest.fn((..._args: any[]) => Promise.resolve(0));
+jest.mock("../../webhooks/refundRestore", () => ({
+  rentDecrementCents: jest.requireActual("../../webhooks/refundRestore").rentDecrementCents,
+  restoreRefundedRent: (...args: any[]) => mockRestoreRefundedRent(...args),
+}));
+
 jest.mock("firebase-admin", () => {
   const firestoreFn = jest.fn(() => ({
     collection: mockCollectionFn,
@@ -1076,6 +1084,12 @@ describe("stripeWebhook — charge.refunded", () => {
       expect.objectContaining({ refundedAmountCents: 15000 }),
       { merge: true },
     );
+    // ...and puts the refund back on the resident's balance (#198).
+    expect(mockRestoreRefundedRent).toHaveBeenCalledWith(
+      expect.anything(),
+      "pi_test_1",
+      15000,
+    );
   });
 
   it("resolves payment_intent from an expanded object form", async () => {
@@ -1253,6 +1267,18 @@ describe("stripeWebhook — transfer reversals", () => {
       expect.objectContaining({ amount: 48500 }),
       { idempotencyKey: "refund-reversal-re_1" },
     );
+  });
+
+  it("reverses the house's share even when putting the refund back on the balance fails", async () => {
+    mockRestoreRefundedRent.mockRejectedValueOnce(new Error("unavailable"));
+    await deliver("charge.refunded", {
+      id: "ch_rent",
+      payment_intent: "pi_rent",
+      amount: 50000,
+      amount_refunded: 50000,
+    });
+
+    expect(mockCreateReversal).toHaveBeenCalledTimes(1);
   });
 
   it("charge.refund.updated reverses a refund that has now settled", async () => {

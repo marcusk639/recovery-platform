@@ -202,3 +202,21 @@ export function parseDollarsInput(
   const result = parseDollarsField(raw);
   return result.ok ? result.cents : fallback;
 }
+
+/**
+ * What a payment record brought in, in cents: a succeeded payment less any
+ * refund. A record with no whole-cents amount, or in another currency, counts
+ * nothing: the webhook's unsupported-currency path writes amountMinorUnits
+ * instead, and one such record made the dashboard's Collected "$NaN".
+ */
+export function netPaidCents(payment: {
+  status: string;
+  amount?: number;
+  currency?: string;
+  refundedAmountCents?: number;
+}): number {
+  if (payment.status !== 'succeeded' || !Number.isInteger(payment.amount)) return 0;
+  if (payment.currency && payment.currency.toLowerCase() !== 'usd') return 0;
+  const refunded = Number(payment.refundedAmountCents ?? 0);
+  return (payment.amount as number) - (Number.isFinite(refunded) ? refunded : 0);
+}

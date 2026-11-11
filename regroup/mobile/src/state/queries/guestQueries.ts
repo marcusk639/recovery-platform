@@ -83,21 +83,24 @@ export const useUpdateGuest = () => {
       updatedGuest,
       retryCount = 3,
       authoritativeFields = [],
+      moneyEdits = {},
     }: {
       guest: Partial<Guest>;
       updatedGuest: Partial<Guest>;
       retryCount?: number;
       authoritativeFields?: ReadonlyArray<keyof Guest>;
+      moneyEdits?: guestService.MoneyEdits;
     }) =>
       guestService.updateGuest(
         guest,
         updatedGuest,
         retryCount,
         authoritativeFields,
+        moneyEdits,
       ),
 
     // Optimistic update
-    onMutate: async ({ updatedGuest }) => {
+    onMutate: async ({ updatedGuest, moneyEdits = {} }) => {
       if (!updatedGuest.id) return;
 
       // Cancel outgoing refetches
@@ -108,8 +111,20 @@ export const useUpdateGuest = () => {
         guestKeys.detail(updatedGuest.id),
       );
 
-      // Optimistically update
-      queryClient.setQueryData(guestKeys.detail(updatedGuest.id), updatedGuest);
+      // Optimistically update. Merge over the cached guest: the payload is often
+      // partial and never carries the balance, so replacing it showed $0 owed
+      // and re-seeded the balance form from 0 (review).
+      const withEdits = (cached: Partial<Guest> | undefined): Partial<Guest> => {
+        const next: Partial<Guest> = { ...(cached ?? {}), ...updatedGuest };
+        for (const [field, edit] of Object.entries(moneyEdits)) {
+          if (edit) (next as any)[field] = edit.to;
+        }
+        return next;
+      };
+      queryClient.setQueryData(
+        guestKeys.detail(updatedGuest.id),
+        withEdits(previousGuest as Partial<Guest> | undefined),
+      );
 
       // Also update in the list if it exists
       if (updatedGuest.houseId) {
@@ -119,7 +134,7 @@ export const useUpdateGuest = () => {
         if (previousGuests) {
           queryClient.setQueryData(guestKeys.list(updatedGuest.houseId), {
             ...previousGuests,
-            [updatedGuest.id]: updatedGuest,
+            [updatedGuest.id]: withEdits(previousGuests[updatedGuest.id]),
           });
         }
       }

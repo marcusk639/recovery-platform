@@ -10,6 +10,8 @@ import {
   guestToFormValues,
 } from './guestFormValues';
 import { Guests } from '../../types';
+import type { MoneyEdits } from '../../services/guest';
+import { Alert } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -19,6 +21,7 @@ export interface GuestUpdateProps {
   updateGuest: (
     guest: Partial<Guest>,
     authoritativeFields?: ReadonlyArray<keyof Guest>,
+    moneyEdits?: MoneyEdits,
   ) => any;
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
@@ -64,10 +67,22 @@ const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
         setSubmitting(false);
         return;
       }
-      await props.updateGuest(result.payload, result.authoritativeFields);
+      await props.updateGuest(
+        result.payload,
+        result.authoritativeFields,
+        result.moneyEdits,
+      );
       setStatus({ succeeded: true });
       setSubmitting(false);
     } catch (err) {
+      const changed = err as { kind?: string; field?: string; currentCents?: number };
+      if (changed?.kind === 'balance-changed' && typeof changed.currentCents === 'number') {
+        const label = changed.field === 'choreFees' ? 'Chore fees are' : 'Rent owed is';
+        Alert.alert(
+          'The balance changed',
+          `${label} now $${(changed.currentCents / 100).toFixed(2)}, probably from a payment. Check it and save again.`,
+        );
+      }
       setStatus({ failed: true });
       setSubmitting(false);
     }
@@ -97,19 +112,18 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
     async (
       updatedGuest: Partial<Guest>,
       authoritativeFields?: ReadonlyArray<keyof Guest>,
+      moneyEdits?: MoneyEdits,
     ) => {
       // The mutation expects a { guest, updatedGuest } pair — guest is the
       // pre-update snapshot used for rollback in onError.
       if (!guest) return;
-      // The operator editing this form is authoritative over the money fields,
-      // so they are exempted from the accumulator max-merge in mergeGuestStats.
-      // Without this an edit that LOWERS a balance (cash payment, write-off,
-      // correction, or zeroing a paid-off resident) is silently discarded while
-      // the form reports success.
+      // Balance edits carry the figure the form showed; the save is refused if
+      // the stored balance moved, so a payment made meanwhile stands.
       return updateGuestMutation({
         guest,
         updatedGuest,
         authoritativeFields,
+        moneyEdits,
       });
     },
     [guest, updateGuestMutation],

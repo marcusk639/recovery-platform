@@ -30,16 +30,22 @@ describe('guest update form money boundary', () => {
     expect(values.choreFees).toBe(25);
   });
 
-  it('converts the dollars the admin typed back into cents', () => {
+  it('turns the dollars the admin typed into an edit from the shown balance (#198)', () => {
     const guest = makeGuest();
-    const { payload: updated } = okPayload(guest, {
+    const { payload: updated, moneyEdits } = okPayload(guest, {
       ...guestToFormValues(guest),
       rentOwed: '750.50',
       choreFees: '10',
     });
 
-    expect(updated.rentOwed).toBe(75050);
-    expect(updated.choreFees).toBe(1000);
+    // From what the form showed to what was typed, so the save can be refused
+    // if a payment landed while the form was open.
+    expect(moneyEdits).toEqual({
+      rentOwed: { from: 50000, to: 75050 },
+      choreFees: { from: 2500, to: 1000 },
+    });
+    expect('rentOwed' in updated).toBe(false);
+    expect('choreFees' in updated).toBe(false);
   });
 
   it('omits an untouched money field so a concurrent payment is not reverted', () => {
@@ -58,14 +64,17 @@ describe('guest update form money boundary', () => {
     const guest = makeGuest();
     const values = guestToFormValues(guest);
 
-    expect(okPayload(guest, values).authoritativeFields).toEqual([]);
+    expect(okPayload(guest, values).moneyEdits).toEqual({});
     expect(
-      okPayload(guest, { ...values, rentOwed: '100' }).authoritativeFields,
-    ).toEqual(['rentOwed']);
+      okPayload(guest, { ...values, rentOwed: '100' }).moneyEdits,
+    ).toEqual({ rentOwed: { from: 50000, to: 10000 } });
     expect(
       okPayload(guest, { ...values, rentOwed: '100', choreFees: '1' })
-        .authoritativeFields,
-    ).toEqual(['rentOwed', 'choreFees']);
+        .moneyEdits,
+    ).toEqual({
+      rentOwed: { from: 50000, to: 10000 },
+      choreFees: { from: 2500, to: 100 },
+    });
   });
 
   it('does not treat a re-typed identical amount as a change', () => {
@@ -73,7 +82,7 @@ describe('guest update form money boundary', () => {
     // operator tabs through and retypes the same figure
     const values = { ...guestToFormValues(guest), rentOwed: '500.00' };
 
-    expect(okPayload(guest, values).authoritativeFields).toEqual([]);
+    expect(okPayload(guest, values).moneyEdits).toEqual({});
   });
 
   it('keeps the stored balance when the admin clears the field', () => {
@@ -90,22 +99,19 @@ describe('guest update form money boundary', () => {
     expect('rentOwed' in updated).toBe(false);
   });
 
-  // Scope note: these exercise the CONVERSION only. They say nothing about
-  // whether the converted value survives the write path — mergeGuestStats
-  // max-merges rentOwed/choreFees, so a lowered balance was silently discarded
-  // until the form started declaring those fields authoritative. The test that
-  // actually proves a lower value lands lives in
-  // src/services/__tests__/guest.test.ts ("lowers rentOwed when the caller
-  // declares the field authoritative"). Do not cite the test below as evidence
-  // that zeroing a balance works end to end.
-  it('converts an explicit zero to zero cents', () => {
+  // Scope note: these exercise the CONVERSION only. The test that proves a
+  // delta lands on the stored balance lives in
+  // src/services/__tests__/guest.test.ts ("writes the typed balance when the stored
+  // one is what the form showed"). Do not cite the test below as evidence that zeroing a balance
+  // works end to end.
+  it('turns an explicit zero into an edit to zero cents', () => {
     const guest = makeGuest();
-    const { payload: updated } = okPayload(guest, {
+    const { moneyEdits } = okPayload(guest, {
       ...guestToFormValues(guest),
       rentOwed: '0',
     });
 
-    expect(updated.rentOwed).toBe(0);
+    expect(moneyEdits.rentOwed).toEqual({ from: 50000, to: 0 });
   });
 
   it('leaves non-money fields untouched', () => {
@@ -158,12 +164,12 @@ describe('guestMoneyUpdate', () => {
   const guest = { id: 'g1', rentOwed: 50000, choreFees: 0 } as never as Guest;
   const seeded = () => guestToFormValues(guest);
 
-  it('converts a changed field to cents and marks it authoritative', () => {
+  it('converts a changed field to the change in cents, not a total (#198)', () => {
     const r = guestMoneyUpdate(guest, { ...seeded(), rentOwed: '400' });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.payload.rentOwed).toBe(40000);
-    expect(r.authoritativeFields).toContain('rentOwed');
+    expect(r.moneyEdits).toEqual({ rentOwed: { from: 50000, to: 40000 } });
+    expect('rentOwed' in r.payload).toBe(false);
   });
 
   it('omits an untouched field so a concurrent decrement is not undone', () => {
@@ -188,11 +194,11 @@ describe('guestMoneyUpdate', () => {
     expect(r.malformedFields).toEqual(['rentOwed']);
   });
 
-  it('submits an explicit zero as a real zero', () => {
+  it('submits an explicit zero as clearing the balance the form showed', () => {
     const r = guestMoneyUpdate(guest, { ...seeded(), rentOwed: '0' });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.payload.rentOwed).toBe(0);
+    expect(r.moneyEdits.rentOwed).toEqual({ from: 50000, to: 0 });
   });
 
   it('does not reject a seeded value the operator never touched', () => {

@@ -11,6 +11,7 @@ import {
   parseDollarsField,
   parseDollarsInput,
   subtractCents,
+  netPaidCents,
 } from '../money';
 
 describe('money units', () => {
@@ -180,5 +181,23 @@ describe('money units', () => {
     it('formats an already-dollar amount', () => {
       expect(formatDollars(asDollars(500))).toBe('$500.00');
     });
+  });
+});
+
+describe('netPaidCents', () => {
+  it('counts a succeeded payment less its refund', () => {
+    expect(netPaidCents({ status: 'succeeded', amount: 10000, refundedAmountCents: 4000 })).toBe(6000);
+  });
+
+  it('counts nothing for a payment that did not succeed', () => {
+    expect(netPaidCents({ status: 'failed', amount: 10000 })).toBe(0);
+  });
+
+  // The webhook's unsupported-currency path writes a succeeded record with
+  // amountMinorUnits and no amount; one such record made Collected "$NaN".
+  it('counts nothing for a record with no cents amount, or not in dollars', () => {
+    expect(netPaidCents({ status: 'succeeded', amountMinorUnits: 900 } as any)).toBe(0);
+    expect(netPaidCents({ status: 'succeeded', amount: 900, currency: 'eur' } as any)).toBe(0);
+    expect(netPaidCents({ status: 'succeeded', amount: 900, refundedAmountCents: 'x' } as any)).toBe(900);
   });
 });

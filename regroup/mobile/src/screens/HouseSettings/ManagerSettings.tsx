@@ -103,9 +103,11 @@ const ManagerSettings: React.FC<Props> = (props) => {
         // promote path, then sync local state.setup.guests for the UI.
         try {
           await removeAdminPrivilegesForGuests([guest]);
+          // Authoritative, or the merge ORs isAdmin back to true (#228).
           await updateGuestMutation.mutateAsync({
             guest,
             updatedGuest: { id: guest.id, isAdmin: false },
+            authoritativeFields: ['isAdmin'],
           });
           dispatch(setGuests({ ...allGuests, [guest.id]: guest }));
         } catch (error) {

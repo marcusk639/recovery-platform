@@ -91,7 +91,7 @@ describe('PaymentDashboard — CSV Export', () => {
       expect(Share.share).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining(
-            'Date,Guest Name,Amount,Status,Type',
+            'Date,Guest Name,Amount,Refunded,Status,Type',
           ),
         }),
       );
