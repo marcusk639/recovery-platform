@@ -16,8 +16,8 @@
 | P2  | Sign-in, permissions, subscription gate, idle sign-out, desktop shell: `2026-11-09-regroup-portal-p2-shell.md` | §6, §7, §8.2 | Written; P1 go given 2026-11-09         |
 | P3  | All houses, one house, resident list and record: `2026-11-09-regroup-portal-p3-houses-residents.md`            | §5, §8.3     | Done                              |
 | P4  | Resident actions, applications with intake, staff notes, activities: `2026-11-09-regroup-portal-p4-actions-applications-activities.md` | §5, §8.4     | Done                                        |
-| P5  | Payments, with the independent money review                                                                    | §7, §8.5     | Next                                    |
-| P6  | Disputes, against the rules tests                                                                              | §7, §8.6     | After P5                                |
+| P5  | Payments, with the independent money review: `2026-11-10-regroup-portal-p5-payments.md`                       | §7, §8.5     | Done; lands after #231, #232, #233      |
+| P6  | Disputes, against the rules tests                                                                              | §7, §8.6     | Next                                |
 | P7  | Production release of the core, after launch day                                                               | §6, §8.9     | When P6 is done and launch has finished |
 | P8  | Beds, drug tests, documents, issues, complaints, reports                                                       | §5, §8.7     | Before or after P7                      |
 | P9  | Desktop polish on the reused screens that need it most                                                         | §8.8         | Before or after P7                      |
@@ -41,3 +41,5 @@ P7 sits before P8 and P9 so the owner's "ship the core first if running late" de
 - P9: the reused ComplianceBreakdown on the resident record keeps phone-sized type.
 - P5: intake doesn't link the new resident to the approved application, so an approved applicant can be admitted twice by hand (phone behaviour); #217 is the double-submit case. Discharge copy is #221.
 - P9: intake's step indicator is sized from the window, so its last step runs past the right edge.
+- P5 ran on the launch-fix phone code (#231, #232, #233 merged locally), so #210 lands after them. Found and fixed during P5: managers refused by the payment callables (#232, isHouseMoneyStaff), $NaN for a non-dollar record and the payment screens disagreeing on what's owed (#233), and a ?guestId= query that skipped the role gate (portal). Filed: #238 (failed-payment banner), #239 (late payment_failed). Open for the owner: the payments read rule lets any admin claim, peer leaders included, read payment records.
+- P6: disputes never affect money (owner, 2026-11-10). The document-open journey can't sign links on the emulator; check real links on staging.
