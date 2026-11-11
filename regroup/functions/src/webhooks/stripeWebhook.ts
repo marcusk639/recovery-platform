@@ -39,6 +39,7 @@ import {
   reverseTransfersForRefunds,
 } from "./transferReversals";
 import { sendFcmToHouseAdmins } from "../util/notifications";
+import { syncOperatorTier } from "./syncOperatorTier";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
 import { Cents } from "../util/money";
@@ -1159,6 +1160,7 @@ async function handleSubscriptionUpdated(
       operatorUid,
       newStatus as HouseSubscriptionStatus,
     );
+    await syncOperatorTier(operatorUid, subscription);
   } else {
     logger.warn(
       "customer.subscription.updated: could not resolve operator uid for house update",

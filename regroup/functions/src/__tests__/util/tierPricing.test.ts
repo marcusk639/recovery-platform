@@ -4,6 +4,7 @@ import {
   resolveTierPriceId,
   tierAllows,
   isTierAvailableForSale,
+  tierForPriceId,
 } from "../../util/tierPricing";
 
 describe("tierPricing", () => {
@@ -104,5 +105,47 @@ describe("tierPricing", () => {
       expect(isTierAvailableForSale("oxford", "standard")).toBe(true);
       expect(isTierAvailableForSale("oxford", "plus")).toBe(true);
     });
+  });
+});
+
+describe("tierForPriceId", () => {
+  beforeEach(() => {
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_pro_month";
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL_ANNUAL = "price_pro_year";
+    process.env.STRIPE_PRICE_OXFORD_PLUS = "price_plus_month";
+  });
+  afterEach(() => {
+    delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
+    delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL_ANNUAL;
+    delete process.env.STRIPE_PRICE_OXFORD_PLUS;
+  });
+
+  it("finds the house type, tier and interval a monthly price belongs to", () => {
+    expect(tierForPriceId("price_pro_month")).toEqual({
+      houseType: "traditional",
+      tier: "professional",
+      billingInterval: "month",
+    });
+    expect(tierForPriceId("price_plus_month")).toEqual({
+      houseType: "oxford",
+      tier: "plus",
+      billingInterval: "month",
+    });
+  });
+
+  it("finds an annual price as the year interval", () => {
+    expect(tierForPriceId("price_pro_year")).toEqual({
+      houseType: "traditional",
+      tier: "professional",
+      billingInterval: "year",
+    });
+  });
+
+  it("is null for a price that is no tier's, such as a legacy item", () => {
+    expect(tierForPriceId("price_legacy_house")).toBeNull();
+  });
+
+  it("never matches an empty price id to an unset env var", () => {
+    expect(tierForPriceId("")).toBeNull();
   });
 });
