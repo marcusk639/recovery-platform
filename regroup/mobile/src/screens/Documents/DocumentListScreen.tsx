@@ -36,6 +36,7 @@ import {
   useUploadDocument,
   useDeleteDocument,
 } from '../../state/queries/documentQueries';
+import { getDocumentLink } from '../../services/documents';
 import {
   HouseDocument,
   DOCUMENT_CATEGORY_LABELS,
@@ -71,11 +72,14 @@ const DocumentRow: React.FC<DocumentRowProps> = ({ doc, onDelete }) => {
   const expired =
     doc.expiresAt != null && new Date(doc.expiresAt).getTime() < Date.now();
 
-  const handleOpen = () => {
-    Linking.openURL(doc.storageUrl).catch(err => {
+  const handleOpen = async () => {
+    try {
+      // A fresh short-lived link each time; nothing permanent is stored.
+      await Linking.openURL(await getDocumentLink(doc.id));
+    } catch (err) {
       logException(err);
-      Alert.alert('Error', 'Could not open this document.');
-    });
+      Alert.alert('Error', "Couldn't open the document. Try again.");
+    }
   };
 
   const expiryLabel = (() => {

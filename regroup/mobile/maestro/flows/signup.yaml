@@ -7,6 +7,9 @@
 # them on iOS too), ticks the terms box, and requires landing on NewAccount or
 # OrgSetup. Before 2026-11-06 the flow filled two fields by label, never ticked
 # the terms box, and made the landing optional, so it never proved signup.
+# The new account's password is E2E_TEST_PASSWORD, so it must meet the app's
+# password rules (8+ characters, upper and lower case, a number;
+# services/password.ts). With a weaker one SIGN UP stays disabled.
 appId: ${APP_ID}
 tags:
   - auth
@@ -78,15 +81,34 @@ tags:
 - waitForAnimationToEnd
 - inputText: "Emma"
 - waitForAnimationToEnd
+# Close the keyboard (iOS toolbar Done): with First Name focused, Last Name sits
+# under the keyboard, and Maestro doesn't count the keyboard as covering it, so
+# the tap typed into First Name instead.
+- tapOn:
+    text: "Done"
+    optional: true
+- waitForAnimationToEnd
 - scrollUntilVisible:
     element:
       id: "signup-last-name-input"
     direction: DOWN
     timeout: 5000
+# The retry covers a first tap lost while the keyboard settles (Android typed
+# both names into First Name), as in login.yaml.
 - tapOn:
     id: "signup-last-name-input"
+    retryTapIfNoChange: true
 - waitForAnimationToEnd
 - inputText: "Tester"
+- waitForAnimationToEnd
+# Close the keyboard before the checkbox: with the checkbox already on screen,
+# scrollUntilVisible doesn't drag (the drag is what dismisses the keyboard), so
+# the tap landed on the iOS keyboard and typed into Last Name. iOS's keyboard
+# toolbar has Done. Not hideKeyboard: on Android, with the keyboard already
+# closed, it pressed back and left signup.
+- tapOn:
+    text: "Done"
+    optional: true
 - waitForAnimationToEnd
 - scrollUntilVisible:
     element:

@@ -31,6 +31,13 @@ FUNCTIONS_DIR="${REPO_ROOT}/regroup/functions"
 SEED="${REPO_ROOT}/regroup/mobile/maestro/scripts/reset-and-seed.sh"
 UI_URL="http://127.0.0.1:4000"
 PROJECT="demo-regroup-e2e"
+# The meeting finder's directory: a local recovery-api emulator with fake meetings
+# (maestro/scripts/seed/directory.js), never the real one. Both emulators read this
+# made-up key; launch-config.json points regroup's emulator at this one.
+RECOVERY_API_DIR="${REPO_ROOT}/recovery-api"
+RECOVERY_API_PROJECT="demo-recovery-api"
+DIRECTORY_SEED="${REPO_ROOT}/regroup/mobile/maestro/scripts/seed/directory.js"
+export RECOVERY_PLATFORM_API_KEY="local-emulator-directory-key"
 
 # firebase-tools >= 15 requires JDK 21+. The system default may be older, so
 # select a 21+ runtime for this process if needed (prefer the Homebrew keg).
@@ -70,6 +77,7 @@ if curl -fsS --max-time 2 "${UI_URL}" >/dev/null 2>&1; then
   echo "▶ Emulator already running at ${UI_URL} — seeding only."
   echo "  (It must be the demo-regroup-e2e suite from this script; the seed refuses others.)"
   "${SEED}"
+  nc -z 127.0.0.1 8082 >/dev/null 2>&1 && node "${DIRECTORY_SEED}"
   echo "✅ Seeded. Existing emulators left running."
   exit 0
 fi
@@ -78,11 +86,15 @@ ensure_jdk21
 
 echo "▶ Building functions (the emulator loads ${FUNCTIONS_DIR}/lib) ..."
 npm --prefix "${FUNCTIONS_DIR}" run build
+npm --prefix "${RECOVERY_API_DIR}" run build
 
 echo "▶ Starting Firebase emulators (auth, firestore, storage, functions) from ${EMU_CONFIG} ..."
 firebase emulators:start --config "${EMU_CONFIG}" --only auth,firestore,storage,functions --project "${PROJECT}" &
 EMU_PID=$!
-trap 'echo; echo "▶ Stopping emulators..."; kill "${EMU_PID}" 2>/dev/null || true' INT TERM EXIT
+echo "▶ Starting the recovery-api emulator (functions :5002, firestore :8082) ..."
+(cd "${RECOVERY_API_DIR}" && exec firebase emulators:start --project "${RECOVERY_API_PROJECT}" --only functions,firestore) &
+DIRECTORY_PID=$!
+trap 'echo; echo "▶ Stopping emulators..."; kill "${EMU_PID}" "${DIRECTORY_PID}" 2>/dev/null || true' INT TERM EXIT
 
 echo "▶ Waiting for emulator UI at ${UI_URL} ..."
 if ! wait_for_ui; then
@@ -95,7 +107,7 @@ echo "✓ Emulators up."
 # binding; probe them so the seed never races an unbound port (a half-seeded run
 # can otherwise look green). The seed targets the emulator hosts unconditionally,
 # so this only affects timing, never where data lands.
-for probe in "Firestore:8080" "Auth:9099" "Functions:5001"; do
+for probe in "Firestore:8080" "Auth:9099" "Functions:5001" "Directory:8082" "Directory functions:5002"; do
   label="${probe%%:*}"
   port="${probe##*:}"
   ok=0
@@ -110,6 +122,7 @@ for probe in "Firestore:8080" "Auth:9099" "Functions:5001"; do
 done
 
 "${SEED}"
+node "${DIRECTORY_SEED}"
 
 echo
 echo "✅ Emulators running + seeded."

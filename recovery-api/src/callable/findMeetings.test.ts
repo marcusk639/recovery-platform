@@ -45,7 +45,7 @@ function meeting(over: Partial<DirectoryMeeting> = {}): DirectoryMeeting {
     provider: 'AA',
     name: 'Sunrise Group',
     type: 'AA',
-    day: 2,
+    day: 'tuesday',
     time: '07:00',
     location: { lat: 40.001, lng: -100.001, geohash: 'aaa1' },
     lastRefreshedAt: {} as never,
@@ -68,11 +68,12 @@ function makeDb(seed: DirectoryMeeting[] = []) {
     orderBy: jest.fn().mockReturnThis(),
     startAt: jest.fn().mockReturnThis(),
     endAt: jest.fn().mockReturnThis(),
-    // Each geohash bound is read with a .limit() cap so a wide-radius search
-    // cannot read the whole collection before in-memory filtering.
+    // Each geohash bound is read a page at a time. Real paging behavior is
+    // covered in findMeetings.paging.test.ts.
     limit: jest.fn().mockReturnThis(),
     get: jest.fn().mockResolvedValue({
-      docs: seed.map((m) => ({ id: m.id, data: () => m })),
+      // The id is the document's key. Every writer strips it from the stored fields.
+      docs: seed.map(({ id, ...stored }) => ({ id, data: () => stored })),
     }),
   };
 
@@ -93,6 +94,12 @@ function makeDb(seed: DirectoryMeeting[] = []) {
 
   return { db, addedDocs, requestsCollection, directoryMeetingsQuery };
 }
+
+test('returns each meeting with its document id', async () => {
+  const { db } = makeDb([meeting({ id: 'abc123' })]);
+  const result = await handleFindMeetings({ location: CENTER }, ctx, { db });
+  expect(result.meetings[0].id).toBe('abc123');
+});
 
 describe('handleFindMeetings (auth via wrapper)', () => {
   const OLD_ENV = process.env;
@@ -133,18 +140,11 @@ describe('handleFindMeetings (auth via wrapper)', () => {
 });
 
 describe('handleFindMeetings (handler)', () => {
-it('caps each geohash bound and reports truncation when a bound fills up', async () => {
-    // Geohash order is not distance order, so a bound that hits the read cap can
-    // omit meetings genuinely inside the radius. The caller has to be able to
-    // tell, otherwise incomplete results look complete.
-    const full = Array.from({ length: 500 }, (_v, n) =>
-      meeting({ id: `m${n}` }),
-    );
-    const { db } = makeDb(full);
+  it('reads each geohash bound in pages rather than one unbounded request', async () => {
+    const { db } = makeDb([meeting()]);
 
-    const result = await handleFindMeetings({ location: CENTER }, ctx, { db });
+    await handleFindMeetings({ location: CENTER }, ctx, { db });
 
-    expect(result.truncated).toBe(true);
     expect(db.collection('directoryMeetings').limit).toHaveBeenCalledWith(500);
   });
 
@@ -174,9 +174,45 @@ it('caps each geohash bound and reports truncation when a bound fills up', async
   });
 
   it('respects the day filter', async () => {
-    const { db } = makeDb([meeting({ id: 'tue', day: 2 }), meeting({ id: 'wed', day: 3 })]);
+    const { db } = makeDb([
+      meeting({ id: 'tue', day: 'tuesday' }),
+      meeting({ id: 'wed', day: 'wednesday' }),
+    ]);
     const result = await handleFindMeetings({ location: CENTER, day: 2 }, ctx, { db });
     expect(result.meetings.map((m) => m.id)).toEqual(['tue']);
+  });
+
+  it('accepts a day name, in any case', async () => {
+    const { db } = makeDb([
+      meeting({ id: 'tue', day: 'tuesday' }),
+      meeting({ id: 'wed', day: 'wednesday' }),
+    ]);
+    const result = await handleFindMeetings({ location: CENTER, day: 'Tuesday' }, ctx, { db });
+    expect(result.meetings.map((m) => m.id)).toEqual(['tue']);
+  });
+
+  it('still matches rows stored with a number until they are migrated', async () => {
+    const legacy = { ...meeting({ id: 'old' }), day: 2 } as unknown as DirectoryMeeting;
+    const { db } = makeDb([legacy, meeting({ id: 'new', day: 'tuesday' })]);
+    const result = await handleFindMeetings({ location: CENTER, day: 'tuesday' }, ctx, { db });
+    expect(result.meetings.map((m) => m.id).sort()).toEqual(['new', 'old']);
+  });
+
+  // Deployed product code reads only an integer, so rewriting it here would strip the
+  // day from every unmigrated row until both products are redeployed.
+  it('returns each day exactly as stored, so older products keep reading integers', async () => {
+    const legacy = { ...meeting({ id: 'old' }), day: 0 } as unknown as DirectoryMeeting;
+    const { db } = makeDb([legacy, meeting({ id: 'new', day: 'tuesday' })]);
+    const result = await handleFindMeetings({ location: CENTER }, ctx, { db });
+    const days = Object.fromEntries(result.meetings.map((m) => [m.id, m.day]));
+    expect(days).toEqual({ old: 0, new: 'tuesday' });
+  });
+
+  it.each([['someday'], [7], [-1], ['']])('rejects day %j as invalid input', async (day) => {
+    const { db } = makeDb([]);
+    await expect(
+      handleFindMeetings({ location: CENTER, day } as never, ctx, { db }),
+    ).rejects.toMatchObject({ code: 'invalid-argument' });
   });
 
   it('respects the type filter', async () => {
@@ -201,7 +237,7 @@ describe('findMeetings audit row', () => {
 
     // Attribution-only fields.
     expect(row.appId).toBe('homegroups');
-    expect(row.day).toBe(2);
+    expect(row.day).toBe('tuesday');
     expect(row.type).toBe('AA');
     expect(row.at).toBe(SERVER_TS);
 

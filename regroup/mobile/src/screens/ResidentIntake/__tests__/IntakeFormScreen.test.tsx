@@ -1,4 +1,5 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { keyboardAncestor } from '../../../components/rats-keyboard/__tests__/keyboardAncestor';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -8,6 +9,11 @@ const mockGoBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: mockGoBack }),
   useRoute: () => ({ params: { houseId: 'house-1' } }),
+}));
+
+const mockCreateGuest = jest.fn().mockResolvedValue(undefined);
+jest.mock('../../../state/queries/guestQueries', () => ({
+  useCreateGuest: () => ({ mutateAsync: mockCreateGuest, isPending: false }),
 }));
 
 jest.mock('../../../context/DataContext', () => ({
@@ -69,6 +75,29 @@ describe('IntakeFormScreen', () => {
     fireEvent.changeText(getByPlaceholderText('Email'), 'john@test.com');
     fireEvent.press(getByText('Continue'));
     expect(getByText('Emergency Contact')).toBeTruthy();
+  });
+
+  // The server carries a manager-set rent rate onto the resident's own
+  // record only when createdBy names who made the intake record (the rules
+  // bind it to the caller).
+  it('records the staff member who made the intake record as createdBy', async () => {
+    jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    const { getByPlaceholderText, getByTestId } = render(<IntakeFormScreen />, {
+      wrapper,
+    });
+    fireEvent.changeText(getByPlaceholderText('First Name'), 'John');
+    fireEvent.changeText(getByPlaceholderText('Last Name'), 'Doe');
+    fireEvent.changeText(getByPlaceholderText('Email'), 'john@test.com');
+    for (let i = 0; i < 3; i++) {
+      fireEvent.press(getByTestId('intake-continue-button'));
+    }
+    fireEvent.press(getByTestId('intake-submit-button'));
+
+    await waitFor(() => expect(mockCreateGuest).toHaveBeenCalledTimes(1));
+    const guest = mockCreateGuest.mock.calls[0][0];
+    expect(guest.createdBy).toBe('admin-1');
+    expect(guest.intakeCompletedBy).toBe('admin-1');
+    expect(guest.userId).toBeFalsy();
   });
 });
 

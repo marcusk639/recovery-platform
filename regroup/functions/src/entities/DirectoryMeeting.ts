@@ -29,8 +29,12 @@ export interface DirectoryMeeting {
   name: string;
   /** Free-form meeting type/category as surfaced by the source. */
   type?: string;
-  /** Canonical day-of-week: integer 0–6 (0 = Sunday). */
-  day: number;
+  /**
+   * Day of the week as a lowercase name, e.g. "tuesday". Rows written
+   * before 2026-11-09 may still hold an integer 0–6 (0 = Sunday) until
+   * migrated, so read it through directoryDayName().
+   */
+  day: string | number;
   /** Canonical local start time: "HH:mm" (24-hour). */
   time: string;
   format?: string;
@@ -39,4 +43,6 @@ export interface DirectoryMeeting {
   link?: string;
   onlineNotes?: string;
   timezone?: string;
+  /** "YYYY-MM-DD" an imported listing dates from; empty once a live source confirms it. */
+  dataAsOf?: string | null;
 }

@@ -18,6 +18,7 @@ export * from './callable/subscriptions';
 
 // Callable functions — Oxford House management
 export * from './callable/oxford';
+export * from './callable/documentLinks';
 
 // Callable functions — public tier pricing catalog (no auth — see file
 // comment in getTierCatalog.ts for why this callable is deliberately public)

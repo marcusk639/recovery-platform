@@ -1,0 +1,241 @@
+# Device pass (#160) row 5: opens ONE text field, chosen by FIELD, focuses it and
+# types, leaving the keyboard open, so maestro/scripts/keyboard.sh can check the
+# field sits above the keyboard (maestro/scripts/check-keyboard.js). The fields
+# are the riskiest in decision record §5.3 and the keyboard audit: chat
+# composers, a fullscreen modal, number pads, a sheet, a dialog with no avoiding
+# view, long forms. Not a standalone scenario: run it through the driver.
+# FIELD: signup-last-name, dispute-reason, chat-composer, payment-amount,
+#        profile-phone, staff-note, intake-phone, manual-payment-amount,
+#        discharge-notes
+# Nothing is submitted.
+# Run: maestro/scripts/keyboard.sh --platform ios --device <udid>
+appId: ${APP_ID}
+tags:
+  - device
+  - keyboard
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+# Signup, signed out.
+- runFlow:
+    when:
+      true: ${FIELD === 'signup-last-name'}
+    commands:
+      - launchApp:
+          clearState: true
+          arguments:
+            IS_E2E_TEST: "1"
+      - extendedWaitUntil:
+          visible:
+            id: "initial-landing-screen"
+          timeout: 30000
+      - tapOn:
+          id: "sign-in-button"
+      - tapOn:
+          id: "signup-link"
+      - extendedWaitUntil:
+          visible:
+            id: "signup-screen"
+          timeout: 15000
+      - scrollUntilVisible:
+          element:
+            id: "signup-last-name-input"
+          direction: DOWN
+          timeout: 10000
+      - tapOn:
+          id: "signup-last-name-input"
+          retryTapIfNoChange: true
+      - inputText: "Tester"
+# Resident fields: guest-a.
+- runFlow:
+    when:
+      true: ${['dispute-reason', 'chat-composer', 'payment-amount', 'profile-phone'].includes(FIELD)}
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- runFlow:
+    when:
+      true: ${FIELD === 'dispute-reason'}
+    commands:
+      - tapOn:
+          id: "activities-tab"
+      - scrollUntilVisible:
+          element:
+            id: "dispute-activity-button-test-activity-b1"
+          direction: DOWN
+          timeout: 20000
+      - tapOn:
+          id: "dispute-activity-button-test-activity-b1"
+      - extendedWaitUntil:
+          visible:
+            id: "dispute-message-input"
+          timeout: 15000
+      - tapOn:
+          id: "dispute-message-input"
+      - inputText: "E2E reason"
+- runFlow:
+    when:
+      true: ${FIELD === 'chat-composer'}
+    commands:
+      - tapOn:
+          id: "chat-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "chat-composer"
+          timeout: 30000
+      - tapOn:
+          id: "chat-composer"
+      - inputText: "E2E draft"
+- runFlow:
+    when:
+      true: ${FIELD === 'payment-amount'}
+    commands:
+      - tapOn:
+          id: "guest-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "guest-overview-screen"
+          timeout: 30000
+      - scrollUntilVisible:
+          element:
+            id: "make-payment-button"
+          direction: DOWN
+          centerElement: true
+          timeout: 20000
+      - tapOn:
+          id: "make-payment-button"
+      - extendedWaitUntil:
+          visible:
+            id: "preset-custom"
+          timeout: 30000
+      - tapOn:
+          id: "preset-custom"
+      - tapOn:
+          id: "payment-amount-input"
+      - inputText: "12"
+- runFlow:
+    when:
+      true: ${FIELD === 'profile-phone'}
+    commands:
+      - tapOn:
+          id: "profile-tab"
+      - tapOn: ".*My Profile.*"
+      - extendedWaitUntil:
+          visible:
+            id: "phone-input"
+          timeout: 20000
+      - tapOn:
+          id: "phone-input"
+      - inputText: "5125550100"
+# Operator fields: the manager.
+- runFlow:
+    when:
+      true: ${['staff-note', 'intake-phone', 'manual-payment-amount', 'discharge-notes'].includes(FIELD)}
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- runFlow:
+    when:
+      true: ${FIELD === 'staff-note' || FIELD === 'discharge-notes'}
+    commands:
+      - tapOn:
+          id: "guest-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "guest-overview-screen"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${FIELD === 'staff-note'}
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: "staff-notes-section"
+          direction: DOWN
+          centerElement: true
+          timeout: 20000
+      - tapOn:
+          id: "staff-notes-section"
+      - extendedWaitUntil:
+          visible:
+            id: "staff-note-input"
+          timeout: 20000
+      - tapOn:
+          id: "staff-note-input"
+      - inputText: "E2E note"
+- runFlow:
+    when:
+      true: ${FIELD === 'discharge-notes'}
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: "discharge-resident-card"
+          direction: DOWN
+          centerElement: true
+          timeout: 20000
+      - tapOn:
+          id: "discharge-resident-card"
+      - extendedWaitUntil:
+          visible:
+            id: "cancel-discharge-button"
+          timeout: 15000
+      - tapOn: "Notes \\(optional\\)|.*optional.*"
+      - inputText: "E2E note"
+- runFlow:
+    when:
+      true: ${FIELD === 'intake-phone'}
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: "main-app-screen"
+          timeout: 30000
+      - scrollUntilVisible:
+          element:
+            text: ".*Resident Intake.*"
+          direction: DOWN
+          centerElement: true
+          timeout: 20000
+      - tapOn: ".*Resident Intake.*"
+      - scrollUntilVisible:
+          element:
+            id: "intake-phone-input"
+          direction: DOWN
+          timeout: 20000
+      - tapOn:
+          id: "intake-phone-input"
+      - inputText: "5125550100"
+- runFlow:
+    when:
+      true: ${FIELD === 'manual-payment-amount'}
+    commands:
+      - tapOn:
+          id: "house-settings-button"
+      - extendedWaitUntil:
+          visible:
+            id: "house-settings-screen"
+          timeout: 30000
+      - scrollUntilVisible:
+          element:
+            text: ".*Payment Dashboard.*"
+          direction: DOWN
+          centerElement: true
+          timeout: 20000
+      - tapOn:
+          text: ".*Payment Dashboard.*"
+      - extendedWaitUntil:
+          visible:
+            id: "manual-payment-fab"
+          timeout: 60000
+      - tapOn:
+          id: "manual-payment-fab"
+      - extendedWaitUntil:
+          visible:
+            id: "guest-pill-guest-a"
+          timeout: 15000
+      - tapOn:
+          id: "guest-pill-guest-a"
+      - tapOn:
+          text: "Amount ($)"
+      - inputText: "33.33"
+- waitForAnimationToEnd

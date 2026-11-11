@@ -6,7 +6,7 @@ import {
   swapSubscriptionItemPrice,
   getSubscriptionItemInterval,
 } from "../api/stripe";
-import { resolveTierPriceId } from "../util/tierPricing";
+import { resolveTierPriceId, tierInCatalog } from "../util/tierPricing";
 import { enforceHouseEntitlement } from "../util/entitlement";
 import {
   getHouse,
@@ -86,6 +86,16 @@ export const setOxfordEnabled = onCall(
     // a price swap on that item, resolved for the tier the operator is actually on.
     const subscriptionItemId = meta.subscriptionItemId;
     const tier = meta.tier as TierKey;
+    // Owner decision (2026-11-10, #225): the plan chosen at checkout sets the
+    // house type, and no tier maps across catalogs (starter/professional/
+    // enterprise vs standard/plus/network). Changing it means a new
+    // subscription. Refused before Stripe is touched.
+    if (!tierInCatalog(enabled ? "oxford" : "traditional", tier)) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Your plan sets whether your houses are traditional or Oxford. To change it, cancel and subscribe to the other plan, or contact support.",
+      );
+    }
     const billingInterval = await getSubscriptionItemInterval(
       subscriptionItemId,
     );
@@ -117,6 +127,8 @@ export const setOxfordEnabled = onCall(
       });
       batch.update(userCollection.doc(operatorId), {
         "subscriptionMetadata.oxfordEnabled": enabled,
+        // syncOperatorTier reads the operator's catalog from this field.
+        "subscriptionMetadata.houseType": enabled ? "oxford" : "traditional",
         "subscriptionMetadata.lastUpdatedAt": new Date().toISOString(),
       });
       await batch.commit();

@@ -54,16 +54,31 @@ export interface RentPayment {
   refundedAmountCents?: number;
   /** Set when a dispute opens. `status` stays "succeeded". */
   disputed?: boolean;
+  /** Lower-case ISO code; usd unless the webhook quarantined the record. */
+  currency?: string;
 }
 
 /** Result returned by the 'createPaymentIntent' Cloud Function. */
-export interface CreatePaymentIntentResult {
-  clientSecret: string;
-  /** @deprecated Server does not return this field. Kept for PaymentWebView compat. */
-  paymentUrl?: string;
-  /** @deprecated Server does not return this field. */
-  paymentIntentId?: string;
-}
+export type CreatePaymentIntentResult =
+  | {
+      alreadyPaid?: false;
+      clientSecret: string;
+      /** @deprecated Server does not return this field. Kept for PaymentWebView compat. */
+      paymentUrl?: string;
+      /** @deprecated Server does not return this field. */
+      paymentIntentId?: string;
+    }
+  | {
+      /**
+       * The day's key for this amount belongs to an intent that has already
+       * succeeded (a second tap, or the balance hadn't refreshed yet). There is
+       * no client secret, so there is nothing to confirm and nothing to record.
+       */
+      alreadyPaid: true;
+      clientSecret?: undefined;
+      paymentUrl?: undefined;
+      paymentIntentId?: undefined;
+    };
 
 /** CF-backed payment record used by the payments dashboard. */
 export interface PaymentRecord {
@@ -86,6 +101,11 @@ export interface HousePaymentRecord extends PaymentRecord {
 // ─── Firestore collection ─────────────────────────────────────────────────────
 
 export const paymentsCollection = collection(firestore, "payments");
+
+/** A new payment doc id, made before the write so a retry can reuse it. */
+export function createPaymentId(): string {
+  return doc(paymentsCollection).id;
+}
 
 // ─── Legacy Firestore-backed service functions ────────────────────────────────
 
@@ -326,6 +346,26 @@ export async function getGuestPayments({
   return snapshot.docs.map(toRentPayment).sort((a, b) => createdMs(b) - createdMs(a));
 }
 
+/**
+ * Every payment record for a house, newest first, for the Payment Dashboard and
+ * the balance views. These include manual payments, which the Stripe-backed
+ * listHousePayments callable never sees (#191). Admins only, by the rules.
+ *
+ * Sorted here because sorting on the server needs a (houseId, createdAt) index.
+ */
+export async function getHousePaymentRecords(
+  houseId: string,
+): Promise<RentPayment[]> {
+  if (!houseId) {
+    throw new Error('getHousePaymentRecords: houseId is required');
+  }
+  const snapshot = await getDocs(
+    query(paymentsCollection, where('houseId', '==', houseId)),
+  );
+  const createdMs = (payment: RentPayment) => toDateSafe(payment.createdAt)?.getTime() ?? 0;
+  return snapshot.docs.map(toRentPayment).sort((a, b) => createdMs(b) - createdMs(a));
+}
+
 // ─── CF-backed service functions ──────────────────────────────────────────────
 
 /**
@@ -387,6 +427,9 @@ export async function listHousePayments(
  *   Callers must convert from dollars before calling this function.
  * @param guestUserId - The resident's Firebase uid (guests/{guestId}.userId).
  *   Without it the resident cannot read this record (see RentPayment.guestUserId).
+ * @param paymentId - The doc id to write, from createPaymentId. A retry with the
+ *   same id can't record the payment twice: the rules refuse updating a
+ *   payment doc, so a second write to an id that already exists fails.
  */
 export async function recordManualPayment(
   guestId: string,
@@ -395,13 +438,21 @@ export async function recordManualPayment(
   method: "Cash" | "Check" | "Venmo" | "Zelle",
   notes: string = '',
   guestUserId?: string,
+  paymentId?: string,
 ): Promise<HousePaymentRecord> {
   if (!Number.isInteger(amountInCents) || amountInCents <= 0) {
     throw new Error(
       `Invalid payment amount: ${amountInCents}. Must be a positive integer (cents).`
     );
   }
-  const docRef = doc(paymentsCollection);
+  if (amountInCents > MAX_PAYMENT_CENTS) {
+    throw new Error(
+      `Payment amount ${amountInCents} exceeds maximum (${MAX_PAYMENT_CENTS} cents / $100,000).`
+    );
+  }
+  const docRef = paymentId
+    ? doc(paymentsCollection, paymentId)
+    : doc(paymentsCollection);
   const now = new Date();
   const record: HousePaymentRecord = {
     id: docRef.id,

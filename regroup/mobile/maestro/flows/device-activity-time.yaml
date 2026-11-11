@@ -1,0 +1,43 @@
+# Device pass (#160) row 8: dates under Hermes Intl. The activity feed shows
+# each activity's time as "EEEE, MMMM do yyyy hh:mm a" in the device's
+# zone (util/display.tsx getDateAndTime, date-fns-tz). The expected text is
+# computed on the host from the seeded timestamp in the Firestore emulator, so
+# iOS and Android must both show exactly it. The simulator and the emulator use
+# the host's zone, as does Maestro's script engine.
+# Persona: guest-a; guest B's seeded activity test-activity-b1 is in their feed.
+# Run: maestro/scripts/run-flows.sh device-activity-time
+appId: ${APP_ID}
+tags:
+  - device
+  - dates
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- runScript:
+    file: ../scripts/maestro-js/activity-time.js
+    env:
+      ACTIVITY_ID: test-activity-b1
+- assertTrue:
+    condition: ${output.expectedTime.length > 0}
+    label: the seeded activity has a timestamp
+- tapOn:
+    id: "activities-tab"
+- extendedWaitUntil:
+    visible:
+      id: "activity-screen"
+    timeout: 30000
+# The feed shows each activity's full time (the same getDateAndTime format as
+# the dispute screen's header). On Android the dispute screen sits under a
+# "Loading..." overlay (#174), so the feed is the one place both platforms show it.
+# iOS merges the row's labels, so match the time inside the row's label.
+- scrollUntilVisible:
+    element:
+      text: ".*${output.expectedTime}.*"
+    direction: DOWN
+    timeout: 20000
+- runFlow:
+    file: ../subflows/logout.yaml

@@ -1,5 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
+import { logger } from "firebase-functions";
+import { readRoleTier } from "./houseRoleStore";
 
 /** Minimal house fields needed for admin/member authorization checks. */
 export interface HouseAdminFields {
@@ -30,6 +32,34 @@ export function assertHouseAdmin(
   message = "Only house admins can perform this action"
 ): void {
   if (!isHouseAdmin(uid, house)) {
+    throw new HttpsError("permission-denied", message);
+  }
+}
+
+/**
+ * Staff who may see and act on a house's money: the owner fields isHouseAdmin
+ * reads, or a live house-roles tier of owner or manager. adminIds holds admins
+ * doc ids and invitations add none, so isHouseAdmin alone refused every invited
+ * manager. Peer leaders hold the same admin claim and are refused (owner
+ * decision, 2026-11-10).
+ */
+export async function isHouseMoneyStaff(
+  uid: string,
+  houseId: string,
+  house: HouseAdminFields,
+): Promise<boolean> {
+  if (isHouseAdmin(uid, house)) return true;
+  const tier = await readRoleTier(houseId, uid);
+  return tier === "owner" || tier === "manager";
+}
+
+export async function assertHouseMoneyStaff(
+  uid: string,
+  houseId: string,
+  house: HouseAdminFields,
+  message = "Only house admins can perform this action",
+): Promise<void> {
+  if (!(await isHouseMoneyStaff(uid, houseId, house))) {
     throw new HttpsError("permission-denied", message);
   }
 }
@@ -78,5 +108,37 @@ export function assertHouseMemberFromClaims(
       "permission-denied",
       "Caller is not a member of this house"
     );
+  }
+}
+
+/**
+ * Takes a removed staff member out of the house docs' adminIds (admin houses)
+ * and superAdminIds (super-admin houses). Those hold admins doc ids, not uids,
+ * so the user's own doc ids are looked up here by uid; ids from the client are
+ * never trusted. A house that no longer exists is skipped.
+ */
+export async function removeStaffFromHouses(
+  uid: string,
+  adminHouseIds: string[],
+  superAdminHouseIds: string[],
+): Promise<void> {
+  const { arrayRemove } = admin.firestore.FieldValue;
+  const adminDocs = await admin.firestore().collection("admins").where("userId", "==", uid).get();
+  const docIds = adminDocs.docs.map((d) => d.id);
+  if (docIds.length === 0) return;
+  for (const houseId of new Set([...adminHouseIds, ...superAdminHouseIds])) {
+    const update: Record<string, unknown> = {};
+    if (adminHouseIds.includes(houseId)) update.adminIds = arrayRemove(...docIds);
+    if (superAdminHouseIds.includes(houseId)) update.superAdminIds = arrayRemove(...docIds);
+    try {
+      await admin.firestore().collection("houses").doc(houseId).update(update);
+    } catch (err) {
+      const code = (err as { code?: unknown }).code;
+      if (code === 5 || code === "not-found") {
+        logger.warn("removeStaffFromHouses: house not found", { houseId });
+        continue;
+      }
+      throw err;
+    }
   }
 }

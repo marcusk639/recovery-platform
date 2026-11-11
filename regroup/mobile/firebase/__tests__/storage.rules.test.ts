@@ -33,8 +33,11 @@ import * as path from 'path';
 // ---------------------------------------------------------------------------
 
 const PROJECT_ID = 'rats-storage-rules-test';
-const STORAGE_HOST = '127.0.0.1';
-const STORAGE_PORT = 9199;
+// emulators:exec sets the address; 9199 is the default when run by hand.
+const [STORAGE_HOST, STORAGE_PORT_TEXT] = (
+  process.env.FIREBASE_STORAGE_EMULATOR_HOST ?? '127.0.0.1:9199'
+).split(':');
+const STORAGE_PORT = Number(STORAGE_PORT_TEXT);
 
 const RULES_PATH = path.resolve(__dirname, '../storage.rules');
 

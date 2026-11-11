@@ -183,6 +183,22 @@ describe('recordManualPayment', () => {
 
     expect(getOpLog()).toEqual([]);
   });
+
+  it('refuses more than MAX_PAYMENT_CENTS without touching Firestore (#189)', async () => {
+    await expect(recordManualPayment('g1', 'h1', 10000001, 'Cash')).rejects.toThrow(
+      'exceeds maximum',
+    );
+    expect(getOpLog()).toEqual([]);
+  });
+
+  it('writes to the payment id it is given, so a retry reuses the same doc (#190)', async () => {
+    seedDoc('guests/g1', { rentOwed: 120000 });
+
+    const result = await recordManualPayment('g1', 'h1', 50000, 'Cash', '', undefined, 'pay-1');
+
+    expect(result.id).toBe('pay-1');
+    expect(getOpLog().map(e => [e.op, e.path])).toContainEqual(['batch.set', 'payments/pay-1']);
+  });
 });
 
 describe('markPaymentResolvedOffline', () => {

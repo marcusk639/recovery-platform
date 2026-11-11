@@ -1,5 +1,7 @@
 # Speed-to-Market Execution Plan
 
+**Superseded in part (2026-11-09):** no scheduled job updates meetings, by owner decision. `refreshDirectory` is no longer deployed, and meetings sync manually through scripts. See `directory-seed-runbook.md`.
+
 **Date:** 2026-06-20
 **Goal:** Reach paying customers as fast as possible by shipping what is **already
 built**, and implementing only the code that **differentiates** us and **unlocks

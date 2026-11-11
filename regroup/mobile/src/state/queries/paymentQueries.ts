@@ -5,7 +5,12 @@
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as paymentService from '../../services/payments';
-import { RentPayment, listHousePayments } from '../../services/payments';
+import {
+  RentPayment,
+  listHousePayments,
+  getHousePaymentRecords,
+} from '../../services/payments';
+import { netPaidCents } from '../../util/money';
 import { logException } from '../../util/logging';
 import { Guest } from '../../entities/Guest';
 import { toDateSafe } from '../../util/firestore';
@@ -87,6 +92,8 @@ export const useCreateRentPayment = () => {
         amountInCents: amount,
         description,
       });
+      // Already paid today at this amount: nothing new to record (RENT-012).
+      if (intentResult.alreadyPaid) return intentResult;
       // Optimistically record the pending payment so history shows immediately
       try {
         await paymentService.recordRentPayment(
@@ -147,14 +154,14 @@ export function useGuestBalances(houseId: string, guests: Guest[]) {
   return useQuery({
     queryKey: [...paymentKeys.guestBalances(houseId), ...guests.map(g => g.id)],
     queryFn: async (): Promise<GuestBalance[]> => {
-      const payments = await listHousePayments(houseId, 500);
+      // Firestore records, so manual payments count (#191).
+      const payments = await getHousePaymentRecords(houseId);
       return guests.map(guest => {
-        const guestPayments = payments.filter(
-          (p: any) => p.guestId === guest.id,
+        const guestPayments = payments.filter(p => p.guestId === guest.id);
+        const totalPaid = guestPayments.reduce(
+          (sum, p) => sum + netPaidCents(p),
+          0,
         );
-        const totalPaid = guestPayments
-          .filter((p: any) => p.status === 'succeeded')
-          .reduce((sum: number, p: any) => sum + p.amount, 0);
         const sortedByDate = [...guestPayments].sort((a: any, b: any) => {
           const da = toDateSafe(a.createdAt)?.getTime() ?? 0;
           const db = toDateSafe(b.createdAt)?.getTime() ?? 0;
@@ -164,8 +171,11 @@ export function useGuestBalances(houseId: string, guests: Guest[]) {
           sortedByDate.length > 0
             ? toDateSafe(sortedByDate[0].createdAt)?.toISOString() ?? null
             : null;
+        // rentOwed already has every payment taken off it, so subtracting
+        // totalPaid again showed residents who owe as "$0.00, Current" (#192).
+        // A credit (below zero) shows as nothing owed.
         const owed = (guest.rentOwed || 0) + (guest.choreFees || 0);
-        const totalBalance = Math.max(0, owed - totalPaid);
+        const totalBalance = Math.max(0, owed);
         return {
           guestId: guest.id,
           guestName:

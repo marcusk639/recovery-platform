@@ -1,0 +1,61 @@
+# Device pass (#160) row 5: a swipeable modal closes on a swipe. The dispute
+# modal (RatsModal, swipeDirection "right") opens from an activity's DISPUTE
+# button; a right swipe closes it without submitting, so the activity stays
+# undisputed in the Firestore emulator.
+# Persona: guest-a, on guest B's seeded activity test-activity-b1.
+# Run: maestro/scripts/run-flows.sh device-modal-swipe
+appId: ${APP_ID}
+tags:
+  - device
+  - ui
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "activities-tab"
+- extendedWaitUntil:
+    visible:
+      id: "activity-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "dispute-activity-button-test-activity-b1"
+    direction: DOWN
+    timeout: 20000
+- tapOn:
+    id: "dispute-activity-button-test-activity-b1"
+- extendedWaitUntil:
+    visible:
+      id: "dispute-message-input"
+    timeout: 15000
+- waitForAnimationToEnd
+# The reason field takes focus and opens the keyboard; close it (iOS toolbar
+# Done) so the swipe starts on the modal, not in the text field.
+- tapOn:
+    text: "Done"
+    optional: true
+- waitForAnimationToEnd
+# Swipe right across the resident row near the top of the modal.
+- swipe:
+    start: 5%, 18%
+    end: 95%, 18%
+    duration: 400
+- extendedWaitUntil:
+    notVisible:
+      id: "dispute-message-input"
+    timeout: 10000
+- assertVisible:
+    id: "activity-screen"
+- runScript:
+    file: ../scripts/maestro-js/read-activity.js
+    env:
+      ACTIVITY_ID: test-activity-b1
+- assertTrue:
+    condition: ${output.activityStatus === 'active'}
+    label: the swipe closed the modal without disputing test-activity-b1
+- runFlow:
+    file: ../subflows/logout.yaml

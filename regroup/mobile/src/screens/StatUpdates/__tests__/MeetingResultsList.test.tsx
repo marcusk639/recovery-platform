@@ -31,11 +31,9 @@ jest.mock('@react-native-clipboard/clipboard', () => ({
   setString: jest.fn(),
 }));
 
-jest.mock(
-  '../../../assets',
-  () => ({ aaLogo: null, naLogo: null, crLogo: null }),
-  { virtual: true },
-);
+jest.mock('../../../assets', () => ({ aaLogo: null, naLogo: null, crLogo: null }), {
+  virtual: true,
+});
 
 import React from 'react';
 import { render } from '@testing-library/react-native';
@@ -92,5 +90,87 @@ describe('MeetingResultsList', () => {
       />,
     );
     expect(getByText('Serenity Group')).toBeTruthy();
+  });
+
+  describe('directory meetings', () => {
+    const renderList = (meeting: RatsMeeting) =>
+      render(
+        <MeetingResultsList
+          meetings={[meeting]}
+          filters={defaultFilters}
+          searchTerm=""
+          checkInto={jest.fn()}
+          guestAttendedMeeting={jest.fn(() => false)}
+          isMeetingDay={jest.fn(() => true)}
+          isMeetingTime={jest.fn(() => true)}
+          userAsGuest={null}
+        />,
+      );
+
+    it('shows the address of an in-person NA meeting from the directory', () => {
+      const { getByText } = renderList({
+        ...mockMeeting,
+        type: 'NA',
+        street: '2 Elm St',
+        Location: undefined,
+      } as RatsMeeting);
+
+      expect(getByText('2 Elm St')).toBeTruthy();
+      expect(getByText('Denver, CO 80201')).toBeTruthy();
+    });
+
+    it('still uses the Location lines of a legacy NA meeting', () => {
+      const { getByText, queryByText } = renderList({
+        ...mockMeeting,
+        type: 'NA',
+        street: '',
+        Location: ['ignored first line', 'Church Hall'],
+      } as RatsMeeting);
+
+      expect(getByText('Church Hall')).toBeTruthy();
+      expect(queryByText('Denver, CO 80201')).toBeNull();
+    });
+
+    it('never shows "undefined" for a row with no city, state or zip', () => {
+      const { queryByText, getByText } = renderList({
+        ...mockMeeting,
+        type: 'NA',
+        street: '2 Elm St',
+        city: undefined,
+        state: undefined,
+        zip: undefined,
+      } as RatsMeeting);
+
+      expect(getByText('2 Elm St')).toBeTruthy();
+      expect(queryByText(/undefined/)).toBeNull();
+    });
+
+    it('shows whichever of city, state and zip a row has', () => {
+      const { getByText } = renderList({
+        ...mockMeeting,
+        city: 'Denver',
+        state: undefined,
+        zip: '80201',
+      } as RatsMeeting);
+
+      expect(getByText('Denver, 80201')).toBeTruthy();
+    });
+
+    it('says how old an imported listing is', () => {
+      const { getByTestId } = renderList({
+        ...mockMeeting,
+        dataAsOf: '2025-09-17',
+      } as RatsMeeting);
+
+      expect(getByTestId('meeting-data-as-of').props.children).toBe(
+        'Listing data from Sep 2025',
+      );
+    });
+
+    it('says nothing for a listing a live source has confirmed', () => {
+      const { queryByTestId } = renderList(mockMeeting);
+
+      expect(queryByTestId('meeting-data-as-of')).toBeNull();
+    });
   });
 });

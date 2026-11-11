@@ -164,6 +164,7 @@ export const createHousesTx = async (
         ownerUid: uid,
         adminId,
         subscriptionStatus: status,
+        houseType: meta.houseType === 'oxford' ? 'oxford' : 'traditional',
         now: nowIso,
       }),
     );

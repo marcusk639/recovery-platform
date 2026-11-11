@@ -220,7 +220,7 @@ describe('e2e environments', () => {
 
   describe('analytics', () => {
     const stubFor = (providers: Provider[]) => findProvider(providers, AngularFireAnalytics);
-    const stagingFlags = { production: false, ...e2eFlags };
+    const stagingFlags = { production: true, ...e2eFlags };
 
     it('the e2e-emulator build provides the no-op AngularFireAnalytics and skips the module', () => {
       expect(emulatorEnvironment.useAnalytics).toBe(false);

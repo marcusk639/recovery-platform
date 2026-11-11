@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef, useEffect } from "react";
 import {
   View,
   ActivityIndicator,
@@ -50,11 +50,22 @@ import RatsButton from "../../components/rats-button/rats-button";
 
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { useGuests, guestKeys } from "../../state/queries/guestQueries";
+import { useMayEditRentMoney } from "../../state/queries/houseTierQueries";
 import {
-  listHousePayments,
+  getHousePaymentRecords,
   recordManualPayment,
-  HousePaymentRecord,
+  createPaymentId,
+  MAX_PAYMENT_CENTS,
 } from "../../services/payments";
+import { parseDollarsField, netPaidCents } from "../../util/money";
+import {
+  csvCell,
+  isCurrentResident,
+  owedNowCents,
+  recordAmountCsv,
+  recordAmountLabel,
+} from "../../util/paymentDisplay";
+import { paymentDisplayStatus } from "../../util/paymentStatus";
 import { Guest } from "../../entities/Guest";
 import {
   color,
@@ -77,6 +88,9 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
   const { data: guestsData = {} } = useGuests(house?.id ?? "");
   const guests = guestsData as Record<string, Guest>;
   const { data: failedPayments = [] } = useFailedPayments(house?.id ?? "");
+  // Peer leaders do not record payments at launch (owner decision 2026-11-10);
+  // the rules refuse it (payments create, guest rentOwed).
+  const canRecordPayments = useMayEditRentMoney(house?.id ?? "");
 
   const [dateFilter, setDateFilter] = useState<DateFilter>("month");
   const [showManualModal, setShowManualModal] = useState(false);
@@ -89,7 +103,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
     error,
   } = useQuery({
     queryKey: paymentKeys.housePayments(house?.id ?? ""),
-    queryFn: () => listHousePayments(house!.id),
+    // Firestore records, not Stripe charges, so manual payments count (#191).
+    queryFn: () => getHousePaymentRecords(house!.id),
     enabled: !!house?.id,
     staleTime: 60_000,
   });
@@ -131,11 +146,13 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
   // across unrelated PaymentDashboard re-renders.
   const guestList = useMemo(() => Object.values(guests) as Guest[], [guests]);
 
+  // The same residents and amounts as Outstanding: current residents, rent
+  // plus chore fees (review).
   const overdueGuests = useMemo(
     () =>
       guestList
-        .filter((g) => (g.rentOwed ?? 0) > 0)
-        .sort((a, b) => (b.rentOwed ?? 0) - (a.rentOwed ?? 0)),
+        .filter((g) => isCurrentResident(g) && owedNowCents(g) > 0)
+        .sort((a, b) => owedNowCents(b) - owedNowCents(a)),
     [guestList],
   );
 
@@ -178,19 +195,22 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
   );
 
   const generateCSV = useCallback((): string => {
-    const header = "Date,Guest Name,Amount,Status,Type";
+    const header = "Date,Guest Name,Amount,Refunded,Status,Type";
     const rows = filteredPayments.map((p) => {
       const date = (() => {
         const d = toDateSafe(p.createdAt);
         return d ? format(d, "yyyy-MM-dd") : "Unknown";
       })();
-      const name = `"${guestName(p.guestId)}"`;
-      const amount = (p.amount / 100).toFixed(2);
-      const status = p.status;
+      const name = csvCell(guestName(p.guestId));
+      const amount = recordAmountCsv(p);
+      const refunded = p.refundedAmountCents
+        ? recordAmountCsv({ amount: p.refundedAmountCents, currency: p.currency })
+        : "";
+      const status = csvCell(paymentDisplayStatus(p).label);
       const type = (p.description ?? "").includes("Manual")
         ? "Manual"
         : "Stripe";
-      return `${date},${name},${amount},${status},${type}`;
+      return `${date},${name},${amount},${refunded},${status},${type}`;
     });
     return [header, ...rows].join("\n");
   }, [filteredPayments, guestName]);
@@ -208,33 +228,26 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
     }
   }, [generateCSV]);
 
-  // Single-pass aggregation memoized on filteredPayments so unrelated re-renders
-  // (modal open/close, focus invalidation) don't recompute these every time.
+  // Collected is what the period's payments brought in, after refunds.
+  // Outstanding is what current residents owe now, from their balances; it used
+  // to be pending Stripe charges, so an overdue resident showed $0.00 (#183).
+  // A resident in credit adds nothing. The rate is collected over collected
+  // plus outstanding.
   const { totalCollected, totalOutstanding, collectionRate } = useMemo(() => {
-    let collected = 0;
-    let outstanding = 0;
-    let succeededCount = 0;
-    let actionableCount = 0;
-    for (const p of filteredPayments) {
-      if (p.status === "succeeded") {
-        collected += p.amount;
-        succeededCount += 1;
-        actionableCount += 1;
-      } else if (p.status === "pending") {
-        outstanding += p.amount;
-        actionableCount += 1;
-      }
-      // 'failed' is excluded from actionableCount, matching the prior logic
-    }
+    const collected = filteredPayments.reduce(
+      (sum, p) => sum + netPaidCents(p),
+      0,
+    );
+    const outstanding = guestList
+      .filter(isCurrentResident)
+      .reduce((sum, g) => sum + owedNowCents(g), 0);
+    const due = collected + outstanding;
     return {
       totalCollected: collected,
       totalOutstanding: outstanding,
-      collectionRate:
-        actionableCount > 0
-          ? Math.round((succeededCount / actionableCount) * 100)
-          : 0,
+      collectionRate: due > 0 ? Math.round((collected / due) * 100) : 0,
     };
-  }, [filteredPayments]);
+  }, [filteredPayments, guestList]);
 
   const weeklyData = useMemo(() => {
     const weeks: { week: string; total: number }[] = [];
@@ -250,7 +263,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
             isWithinInterval(createdAt, { start: weekStart, end: weekEnd })
           );
         })
-        .reduce((sum, p) => sum + p.amount, 0);
+        .reduce((sum, p) => sum + netPaidCents(p), 0);
       weeks.push({ week: format(weekStart, "M/d"), total: total / 100 });
     }
     return weeks;
@@ -346,7 +359,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                 />
                 <RatsText
                   translate={false}
-                  text={`$${((guest.rentOwed ?? 0) / 100).toFixed(2)} owed`}
+                  text={`$${(owedNowCents(guest) / 100).toFixed(2)} owed`}
                   style={styles.overdueAmount}
                 />
               </View>
@@ -449,10 +462,13 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
           </View>
         ) : (
           filteredPayments.map((item) => {
-            const succeeded = item.status === "succeeded";
+            // Refunds and disputes show as such, as in Payment history (review).
+            const display = paymentDisplayStatus(item);
+            const succeeded = display.tone === "good";
             return (
               <View
                 key={item.id}
+                testID={`payment-row-${item.id}`}
                 style={[
                   CARD_STYLE,
                   styles.paymentCard,
@@ -483,7 +499,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                   <View style={styles.rightColumn}>
                     <RatsText
                       translate={false}
-                      text={`$${(item.amount / 100).toFixed(2)}`}
+                      text={recordAmountLabel(item)}
                       style={styles.amount}
                     />
                     <View
@@ -496,7 +512,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                     >
                       <RatsText
                         translate={false}
-                        text={item.status.toUpperCase()}
+                        text={display.label.toUpperCase()}
                         style={styles.statusText}
                       />
                     </View>
@@ -509,17 +525,19 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
       </ScrollView>
 
       {/* FAB for manual payment */}
-      <TouchableOpacity
-        testID="manual-payment-fab"
-        style={[styles.fab, { marginBottom: insets.bottom }]}
-        onPress={() => setShowManualModal(true)}
-      >
-        <RatsText
-          translate={false}
-          text="+ Record Payment"
-          style={styles.fabText}
-        />
-      </TouchableOpacity>
+      {canRecordPayments && (
+        <TouchableOpacity
+          testID="manual-payment-fab"
+          style={[styles.fab, { marginBottom: insets.bottom }]}
+          onPress={() => setShowManualModal(true)}
+        >
+          <RatsText
+            translate={false}
+            text="+ Record Payment"
+            style={styles.fabText}
+          />
+        </TouchableOpacity>
+      )}
 
       <ManualPaymentModal
         visible={showManualModal}
@@ -552,13 +570,43 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
   );
   const [notes, setNotes] = useState("");
   const [selectedGuestId, setSelectedGuestId] = useState<string | null>(null);
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  // A ref as well as state: a second tap can land before the re-render that
+  // disables the button, and each save lowers the balance (#190).
+  const submittingRef = useRef(false);
+  // One payment id per opening, so retrying after an error can't record twice.
+  const paymentIdRef = useRef<string | undefined>(undefined);
   const queryClient = useQueryClient();
 
+  useEffect(() => {
+    if (visible) paymentIdRef.current = createPaymentId();
+  }, [visible]);
+
   const handleRecord = async () => {
-    if (!selectedGuestId || !houseId || !amount) return;
-    const parsed = parseFloat(amount);
-    if (isNaN(parsed) || parsed <= 0) return;
-    const amountInCents = Math.round(parsed * 100);
+    if (submittingRef.current || !selectedGuestId || !houseId) return;
+    // parseFloat read "1,500.00" as 1 and "1e3" as 1000 (#189).
+    const parsed = parseDollarsField(amount);
+    if (!parsed.ok) {
+      setAmountError(
+        parsed.reason === "blank"
+          ? "Enter an amount."
+          : "Enter the amount in dollars, like 150 or 1,500.00.",
+      );
+      return;
+    }
+    if (parsed.cents <= 0) {
+      setAmountError("Enter an amount more than $0.");
+      return;
+    }
+    if (parsed.cents > MAX_PAYMENT_CENTS) {
+      setAmountError("That's more than $100,000. Check the amount.");
+      return;
+    }
+    setAmountError(null);
+    const amountInCents = parsed.cents;
+    submittingRef.current = true;
+    setSubmitting(true);
     try {
       await recordManualPayment(
         selectedGuestId,
@@ -568,6 +616,7 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
         notes,
         // The resident's uid, so the record shows in their payment history.
         guests.find((g) => g.id === selectedGuestId)?.userId,
+        paymentIdRef.current,
       );
       // Refresh the parent dashboard list and any guest-balance views.
       queryClient.invalidateQueries({
@@ -586,6 +635,10 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
       queryClient.invalidateQueries({
         queryKey: guestKeys.list(houseId),
       });
+      // The resident's record reads the detail query (review).
+      queryClient.invalidateQueries({
+        queryKey: guestKeys.detail(selectedGuestId),
+      });
       setAmount("");
       setNotes("");
       setSelectedGuestId(null);
@@ -594,6 +647,9 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
     } catch (err) {
       logException(err);
       Alert.alert("Error", "Failed to record payment. Please try again.");
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -663,9 +719,21 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
             placeholder="Amount ($)"
             keyboardType="decimal-pad"
             value={amount}
-            onChangeText={setAmount}
+            onChangeText={(text) => {
+              setAmount(text);
+              setAmountError(null);
+            }}
             style={styles.input}
           />
+          {amountError && (
+            <View testID="manual-payment-amount-error">
+              <RatsText
+                translate={false}
+                text={amountError}
+                style={{ color: color.red, fontSize: fontSize.small }}
+              />
+            </View>
+          )}
           <View style={styles.methodRow}>
             {(["Cash", "Check", "Venmo", "Zelle"] as const).map((m) => (
               <TouchableOpacity
@@ -696,6 +764,7 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
           <RatsButton
             title="Record"
             onPress={handleRecord}
+            disabled={submitting}
             containerStyle={{ marginTop: normalize(16) }}
           />
           <RatsButton

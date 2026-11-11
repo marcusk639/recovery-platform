@@ -11,8 +11,11 @@ import {
 } from "../utils/meetings"; // Assuming meetings utils are one level up
 import { Meeting, MeetingSearchCriteria } from "../entities/Meeting";
 import { fetchDirectoryMeetings } from "../api/recoveryApi";
-import { mapDirectoryToSerialized } from "../utils/directoryMapping";
-import { daysOfWeek } from "../utils/date";
+import { mergeDirectoryMeetings } from "../utils/mergeDirectoryMeetings";
+import {
+  directoryDayName,
+  mapDirectoryToSerialized,
+} from "../utils/directoryMapping";
 import { requireAuth } from "../utils/callableWrapper";
 
 // recovery-api service key. The non-secret base URL is read from the
@@ -172,6 +175,8 @@ export interface SerializedMeeting {
   square?: string;
   paypal?: string;
   groupId?: string;
+  /** "YYYY-MM-DD" an imported directory listing dates from. */
+  dataAsOf?: string;
 }
 
 // Helper function to serialize Firestore data
@@ -244,18 +249,19 @@ function serializeMeeting(meeting: Meeting): SerializedMeeting {
 }
 
 /**
- * Resolve the client-supplied `day` filter (a lowercase weekday string like
- * "monday", or a numeric "0".."6" string) to the directory's integer day index
- * (0 = Sunday). Returns undefined when the day cannot be resolved so the
- * directory request omits `day` and searches all days.
+ * Resolve the client-supplied `day` filter (a weekday name like "monday", or a
+ * numeric "0".."6" string) to the directory's day name. Returns undefined when it
+ * isn't a day, so the directory request omits `day` and searches all days.
+ * @param {string} dayFilter the client's day filter
+ * @return {string | undefined} the day name to search, if any
  */
-function resolveDirectoryDay(dayFilter?: string): number | undefined {
-  if (!dayFilter) return undefined;
-  const index = daysOfWeek.indexOf(dayFilter);
-  if (index !== -1) return index;
-  if (/^[0-6]$/.test(dayFilter)) return Number(dayFilter);
-  return undefined;
+function resolveDirectoryDay(dayFilter?: string): string | undefined {
+  return dayFilter ? directoryDayName(dayFilter) : undefined;
 }
+
+const DEFAULT_MAX_DISTANCE_KM = 10;
+/** recovery-api rejects a larger radius. */
+const DIRECTORY_MAX_RADIUS_METERS = 100_000;
 
 export const findMeetings = onCall(
   { secrets: [RECOVERY_PLATFORM_API_KEY] },
@@ -284,9 +290,9 @@ export const findMeetings = onCall(
         criteria: meetingInput.criteria,
       });
 
-      // Firestore-backed (homegroups-owned) promises, keyed by source. AA and
-      // Custom remain native Firestore reads; NA and CR now route through the
-      // recovery-api shared directory.
+      // Firestore-backed (homegroups-owned) promises, keyed by source. AA reads both
+      // Homegroups' own meetings and the shared directory, and Custom stays native.
+      // NA and CR come only from the directory.
       const firestorePromises: Promise<Meeting[]>[] = [];
 
       // Provider set requested from the directory (single call, filtered client-side).
@@ -300,6 +306,7 @@ export const findMeetings = onCall(
             dayFilter,
           ),
         );
+        directoryProviders = ["AA"];
       } else if (type === "NA") {
         directoryProviders = ["NA"];
       } else if (type === "Custom") {
@@ -311,7 +318,7 @@ export const findMeetings = onCall(
       } else if (type === "Celebrate Recovery") {
         // Parity: standalone "Celebrate Recovery" type currently returns empty.
       } else {
-        // type === "all": Firestore AA + Custom, plus directory NA + CR.
+        // type === "all": Firestore AA + Custom, plus directory AA + NA + CR.
         firestorePromises.push(
           getAlcoholicsAnonymousMeetings(
             location,
@@ -320,7 +327,7 @@ export const findMeetings = onCall(
           ),
           getCustomMeetings(location, meetingInput.criteria, dayFilter),
         );
-        directoryProviders = ["NA", "CELEBRATE_RECOVERY"];
+        directoryProviders = ["AA", "NA", "CELEBRATE_RECOVERY"];
       }
 
       // Make at most ONE directory call (no type filter — filter by provider
@@ -330,6 +337,12 @@ export const findMeetings = onCall(
             {
               location: { lat: location.lat, lng: location.lng },
               ...(directoryDay !== undefined ? { day: directoryDay } : {}),
+              // Without this the directory searches 5 km, narrower than Homegroups' own.
+              radiusMeters: Math.min(
+                (meetingInput.criteria?.maxDistance ||
+                  DEFAULT_MAX_DISTANCE_KM) * 1000,
+                DIRECTORY_MAX_RADIUS_METERS,
+              ),
             },
             {
               uid,
@@ -344,24 +357,41 @@ export const findMeetings = onCall(
           `${directoryProviders ? " + directory" : ""}`,
       );
       const [firestoreResults, directoryResults] = await Promise.all([
-        Promise.all(firestorePromises),
+        Promise.allSettled(firestorePromises),
         directoryPromise,
       ]);
 
-      const serializedMeetings: SerializedMeeting[] = [];
-      for (const meetingSet of firestoreResults) {
-        for (const meeting of meetingSet) {
-          serializedMeetings.push(serializeMeeting(meeting));
+      const ownMeetings = firestoreResults
+        .flatMap((result) =>
+          result.status === "fulfilled" ? result.value : [],
+        )
+        .map(serializeMeeting);
+      // The directory call isn't filtered by type, so only these rows count as results.
+      const allowed = new Set(directoryProviders ?? []);
+      const directoryMeetings = directoryResults
+        .filter((dirMeeting) => allowed.has(dirMeeting.provider))
+        .map(mapDirectoryToSerialized);
+
+      // One source failing shouldn't cost a person the meetings another one found,
+      // but a failure with nothing to show must not look like "no meetings nearby".
+      const failedRead = firestoreResults.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === "rejected",
+      );
+      if (failedRead) {
+        if (ownMeetings.length === 0 && directoryMeetings.length === 0) {
+          throw failedRead.reason;
         }
+        logger.error(
+          "A Homegroups meeting read failed; returning what the other sources found",
+          { error: String(failedRead.reason) },
+        );
       }
-      if (directoryProviders) {
-        const allowed = new Set(directoryProviders);
-        for (const dirMeeting of directoryResults) {
-          if (allowed.has(dirMeeting.provider)) {
-            serializedMeetings.push(mapDirectoryToSerialized(dirMeeting));
-          }
-        }
-      }
+
+      const serializedMeetings = mergeDirectoryMeetings(
+        ownMeetings,
+        directoryMeetings,
+      );
 
       logger.info("Meetings fetched successfully", {
         totalMeetings: serializedMeetings.length,

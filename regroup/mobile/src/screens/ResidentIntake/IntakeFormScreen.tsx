@@ -150,6 +150,10 @@ const IntakeFormScreen = () => {
       guest.intakeNotes = values.intakeNotes.trim() || undefined;
       guest.intakeDate = new Date().toISOString();
       guest.intakeCompletedBy = currentUser?.uid;
+      // The rules bind createdBy to the caller. It is how the server knows
+      // staff made this record, so a manager-set rate can follow the
+      // resident when records link.
+      guest.createdBy = currentUser?.uid;
       guest.moveInDate = new Date().toISOString();
       guest.infoEntered = true;
 

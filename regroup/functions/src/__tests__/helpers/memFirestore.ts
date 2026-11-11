@@ -11,8 +11,10 @@
 // Every doc carries a server createTime (fixed at first write) and updateTime
 // (every write); batch.update honours a { lastUpdateTime } precondition and
 // throws FAILED_PRECONDITION when the doc changed since it was read.
-// mem.beforeCommit runs at the start of each batch commit, to simulate a
-// concurrent write landing between a read and the commit.
+// mem.beforeCommit runs (and is awaited) at the start of each batch commit,
+// and in a transaction before its read versions are checked, to simulate a
+// concurrent write landing between a read and the commit. It may be async, so a
+// test can run a whole competing transaction there.
 
 type Data = Record<string, unknown>;
 interface Stored {
@@ -39,6 +41,11 @@ export const mem = {
     clock += 1000;
     store.set(path, { data: clone(data), createTimeMs: clock, updateTimeMs: clock });
   },
+  /** Seed with a given server createTime (epoch ms), e.g. "created 10 minutes ago". */
+  seedAt(path: string, data: Data, createTimeMs: number, updateTimeMs?: number): void {
+    clock += 1000;
+    store.set(path, { data: clone(data), createTimeMs, updateTimeMs: updateTimeMs ?? clock });
+  },
   get(path: string): Data | undefined {
     const s = store.get(path);
     return s ? clone(s.data) : undefined;
@@ -47,11 +54,12 @@ export const mem = {
     return [...store.keys()].filter((p) => p.startsWith(prefix)).sort();
   },
   writes: [] as Array<{ op: string; path: string; data?: Data }>,
-  beforeCommit: null as null | (() => void),
+  beforeCommit: null as null | (() => void | Promise<void>),
 };
 
 export const fieldValue = {
   increment: (n: number) => ({ __op: 'increment', n }),
+  arrayRemove: (...values: unknown[]) => ({ __op: 'arrayRemove', values }),
   delete: () => ({ __op: 'delete' }),
   serverTimestamp: () => new Date(clock).toISOString(),
 };
@@ -66,8 +74,10 @@ function applyUpdate(data: Data, update: Data): Data {
       target = target[p] as Data;
     }
     const last = parts[parts.length - 1];
-    const op = value as { __op?: string; n?: number } | null;
+    const op = value as { __op?: string; n?: number; values?: unknown[] } | null;
     if (op && op.__op === 'increment') target[last] = ((target[last] as number) ?? 0) + (op.n ?? 0);
+    else if (op && op.__op === 'arrayRemove')
+      target[last] = ((target[last] as unknown[]) ?? []).filter((v) => !op.values?.includes(v));
     else if (op && op.__op === 'delete') delete target[last];
     else target[last] = clone(value);
   }
@@ -107,7 +117,8 @@ const ops = {
   },
   update(path: string, data: Data, pre?: Precondition) {
     const cur = store.get(path);
-    if (!cur) throw new Error(`NOT_FOUND: no document to update: ${path}`);
+    // code 5 is NOT_FOUND, as the Admin SDK sets it.
+    if (!cur) throw Object.assign(new Error(`NOT_FOUND: no document to update: ${path}`), { code: 5 });
     if (pre?.lastUpdateTime && pre.lastUpdateTime.toMillis() !== cur.updateTimeMs) {
       throw new Error(`FAILED_PRECONDITION: ${path} changed since it was read`);
     }
@@ -196,8 +207,8 @@ function batch() {
     delete: (r: { path: string }) => {
       pending.push(() => ops.delete(r.path));
     },
-    commit: async () => {
-      if (mem.beforeCommit) mem.beforeCommit();
+    commit: async (opts?: { skipHook?: boolean }) => {
+      if (mem.beforeCommit && !opts?.skipHook) await mem.beforeCommit();
       // Atomic, like Firestore: one failed write rolls back the whole batch.
       const backup = new Map(store);
       try {
@@ -251,12 +262,13 @@ async function runTransaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
       },
     };
     const result = await fn(tx);
+    if (mem.beforeCommit) await mem.beforeCommit();
     const conflicted = [...reads].some(([path, t]) => (store.get(path)?.updateTimeMs ?? -1) !== t);
     if (conflicted) {
       if (attempt >= 5) throw new Error('ABORTED: transaction contention');
       continue;
     }
-    await b.commit();
+    await b.commit({ skipHook: true });
     return result;
   }
 }
@@ -279,4 +291,9 @@ export const apiFirestore = {
   invitationCollection: collectionRef('invitations'),
   adminCollection: collectionRef('admins'),
   houseRolesCollection: collectionRef('house-roles'),
+  rentAccountCollection: collectionRef('rentAccounts'),
+  rentChargeCollection: collectionRef('rentCharges'),
+  rentHouseStateCollection: collectionRef('rentHouseStates'),
+  rentChargeReversalCollection: collectionRef('rentChargeReversals'),
+  rentConfigRef: () => docRef('config/rentCharges'),
 };

@@ -113,6 +113,12 @@ from, not open issues. Finding `class` numbers in `findings.json` use the number
 - **Look for:** a new `initializeApp` with another product's `projectId` or credentials, another product's
   project id in a package, `.collection()` on another product's collection names, relative imports that leave
   the package, service-account JSON under `src/`, and referrals or identity flows that skip recovery-api. The
-  allowed exception is the non-exported `recovery-api/src/scripts/migrateNaMeetings.ts`.
+  allowed exceptions are two non-exported recovery-api scripts that are run by hand:
+  `recovery-api/src/scripts/migrateNaMeetings.ts` (superseded; its `main` only throws) and
+  `recovery-api/src/scripts/importMeetingSnapshot.ts`, which the owner approved after the #199 review. The
+  snapshot import reads the whole Homegroups `meetings` collection, but copies only rows with `addedBy` `system`
+  and type `AA`, and only the public fields that `recovery-api/src/lib/meetings/sources/meetingSnapshot.ts`
+  maps. Its `addedBy` filter stays tested in `recovery-api/src/lib/meetings/sources/meetingSnapshot.test.ts`.
+  Exporting either script, reading any other collection, or widening what the import copies, is a finding.
 - **Trigger paths:** every PR. Highest signal in `*/functions/src/**`, `recovery-api/src/**`, `detox-recovery/app/**`.
 - **Evidence:** #12, #13 (app-id registry made the single source of truth).

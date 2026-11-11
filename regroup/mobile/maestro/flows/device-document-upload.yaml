@@ -1,0 +1,118 @@
+# Device pass (#160) row 4: document upload through the system picker
+# (@react-native-documents/picker, then RNFirebase Storage putFile against the
+# Storage emulator). Cancelling the picker uploads nothing and leaves the screen
+# usable; picking the staged PDF and a category uploads it, it is listed, and its
+# Firestore record exists.
+# There is no cancel for an upload once it has started (DocumentListScreen keeps
+# no upload task and shows no cancel control), so "cancel" here is the picker's.
+# Persona: the manager, on the resident the guest tab opens on.
+# Needs the documents rules in storage.rules (#195, fixed by #232); without them
+# every upload fails with "Upload Failed".
+# Before running: maestro/scripts/stage-picker-files.sh --platform <ios|android> --device <id>
+# Run: maestro/scripts/run-flows.sh device-document-upload
+appId: ${APP_ID}
+tags:
+  - device
+  - files
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "documents-card"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    id: "documents-card"
+- extendedWaitUntil:
+    visible:
+      id: "upload-document-button"
+    timeout: 20000
+# 1. Open the picker and cancel it: nothing uploads, the button works again.
+- tapOn:
+    id: "upload-document-button"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: "Browse"
+          timeout: 15000
+      - tapOn:
+          text: "Cancel|Close"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible: "e2e-upload.pdf"
+          timeout: 15000
+      - pressKey: back
+- extendedWaitUntil:
+    visible:
+      id: "upload-document-button"
+    timeout: 15000
+- assertNotVisible: "Choose Category"
+- runScript:
+    file: ../scripts/maestro-js/count-documents.js
+    env:
+      FILE_NAME: e2e-upload.pdf
+- assertTrue:
+    condition: ${output.documentCount === 0}
+    label: a cancelled picker uploads nothing
+# 2. Pick the staged PDF, file it as a lease, and it uploads. Lease Agreement is
+# one of the three categories Android shows: an Android alert holds at most three
+# buttons, so the other categories and Cancel never appear there (same on main).
+- tapOn:
+    id: "upload-document-button"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: "Browse"
+          timeout: 15000
+      - tapOn: "Browse"
+      - tapOn:
+          text: "On My iPhone"
+          optional: true
+      - extendedWaitUntil:
+          visible: "e2e-upload"
+          timeout: 15000
+      # The file's name label doesn't take the tap; its thumbnail, first in the
+      # grid, does.
+      - tapOn:
+          point: "18%,29%"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: "e2e-upload.pdf"
+- extendedWaitUntil:
+    visible: "Choose Category"
+    timeout: 15000
+- tapOn: "Lease Agreement"
+- extendedWaitUntil:
+    visible: ".*e2e-upload.*"
+    timeout: 60000
+- assertNotVisible: "Upload Failed"
+- runScript:
+    file: ../scripts/maestro-js/count-documents.js
+    env:
+      FILE_NAME: e2e-upload.pdf
+- assertTrue:
+    condition: ${output.documentCount === 1}
+    label: the picked PDF is uploaded and recorded once
+- runFlow:
+    file: ../subflows/logout.yaml

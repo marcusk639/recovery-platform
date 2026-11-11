@@ -1,5 +1,7 @@
 # Plan: Make Meeting Functionality Work Across Apps
 
+**Superseded in part (2026-11-09):** no scheduled job updates meetings, by owner decision. `refreshDirectory` is no longer deployed, and meetings sync manually through scripts. See `directory-seed-runbook.md`.
+
 **Status:** Execution plan (phased, resumable in fresh contexts)
 **Date:** 2026-06-21
 **Scope:** Everything required for the shared meeting directory (recovery-api) to

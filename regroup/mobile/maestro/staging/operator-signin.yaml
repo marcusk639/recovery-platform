@@ -1,0 +1,66 @@
+# Staging only: a new operator from `npm run e2e:staging-operator` signs in on
+# the E2EStaging build (com.rats.dev.e2e.stg, Firebase project regroup-e2e) and
+# lands on OrgSetup with the wizard, not the plan-required panel.
+#
+# Kept out of maestro/flows/ so the emulator suite never runs it. Run it with
+# maestro/scripts/staging-operator-signin.sh, which makes the operator, checks
+# the installed build and passes EMAIL and PASSWORD.
+appId: ${APP_ID}
+tags:
+  - staging
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- assertTrue:
+    condition: ${APP_ID.endsWith('.e2e.stg')}
+    label: APP_ID must be the E2EStaging build (.e2e.stg); the operator exists only on regroup-e2e
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "sign-in-button"
+# Wait out the screen transition first: typed into too early, the email is lost.
+- extendedWaitUntil:
+    visible:
+      id: "login-screen"
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: "email-input"
+    timeout: 15000
+- tapOn:
+    id: "email-input"
+- inputText: ${EMAIL}
+# Settle the keyboard before the password tap (see subflows/login.yaml).
+- hideKeyboard
+- tapOn:
+    id: "password-input"
+- inputText: ${PASSWORD}
+- tapOn:
+    id: "login-button"
+- tapOn:
+    text: "Not Now"
+    optional: true
+- extendedWaitUntil:
+    visible:
+      id: "org-setup-screen"
+    timeout: 60000
+# OrgSetup reads the user doc on focus and swaps in PlanRequiredPanel if the plan
+# can't create houses. Give that read time to land before asserting it didn't.
+- extendedWaitUntil:
+    visible:
+      id: "plan-required-panel"
+    timeout: 10000
+    optional: true
+- assertNotVisible:
+    id: "plan-required-panel"
+- assertNotVisible:
+    id: "setup-recovery-panel"
+- assertVisible:
+    id: "org-setup-screen"
+- assertVisible:
+    id: "add-house-button"

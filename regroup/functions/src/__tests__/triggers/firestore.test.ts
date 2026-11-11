@@ -89,6 +89,14 @@ jest.mock("firebase-functions/v2/firestore", () => ({
   ),
 }));
 
+// ─── rent/guestWriteRent ──────────────────────────────────────────────────────
+// onGuestWrite's rent step has its own suites (rent/guestWriteRent.test.ts,
+// triggers/guestWriteRentWiring.test.ts); this file's api/firestore mock has no
+// rent collections.
+jest.mock("../../rent/guestWriteRent", () => ({
+  rentOnGuestWrite: jest.fn().mockResolvedValue("none"),
+}));
+
 // ─── util/notifications ───────────────────────────────────────────────────────
 const mockSendNotification = jest.fn().mockResolvedValue(undefined);
 jest.mock("../../util/notifications", () => ({

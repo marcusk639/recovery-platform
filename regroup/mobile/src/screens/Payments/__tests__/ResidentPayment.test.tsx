@@ -405,6 +405,29 @@ describe('ResidentPayment', () => {
     expect(getByText('$75.50 has been processed.')).toBeTruthy();
   });
 
+  // ── 5b. Same amount again the same day (RENT-012) ─────────────────────────
+  it('says the payment already went through, without opening the sheet, when the server reports it paid', async () => {
+    // The server answers { alreadyPaid: true } with no client secret when the
+    // day's key for this amount belongs to an intent that already succeeded.
+    mockCreatePaymentIntent.mockResolvedValueOnce({ alreadyPaid: true });
+    const { getByTestId, getByText, queryByText } = renderScreen();
+
+    fireEvent.changeText(getByTestId('payment-amount-input'), '75.50');
+
+    await act(async () => {
+      fireEvent.press(getByTestId('submit-payment-button'));
+    });
+
+    await waitFor(() => {
+      expect(getByTestId('success-container')).toBeTruthy();
+    });
+
+    expect(mockInitPaymentSheet).not.toHaveBeenCalled();
+    expect(mockPresentPaymentSheet).not.toHaveBeenCalled();
+    expect(getByText(/already went through/i)).toBeTruthy();
+    expect(queryByText('$75.50 has been processed.')).toBeNull();
+  });
+
   // ── 6. Shows error message when createPaymentIntent fails ─────────────────
   it('shows an error message when createPaymentIntent rejects', async () => {
     mockCreatePaymentIntent.mockRejectedValueOnce(

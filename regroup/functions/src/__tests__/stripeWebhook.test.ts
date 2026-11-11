@@ -1376,6 +1376,21 @@ describe("payment_intent.succeeded", () => {
 
 describe("payment_intent.payment_failed", () => {
   function setupForPaymentFailed(): void {
+    // The failure is recorded inside a transaction, so it can't overwrite a paid
+    // payment. Delegate to the doc-level mock, so assertions keep checking the write.
+    mockRunTransaction.mockImplementation(
+      async (fn: (txn: unknown) => Promise<unknown>) =>
+        fn({
+          get: jest.fn().mockResolvedValue({
+            exists: false,
+            get: (_field: string) => undefined,
+          }),
+          set: (_ref: unknown, data: unknown, options: unknown) =>
+            mockSet(data, options),
+          update: (_ref: unknown, data: unknown) => mockUpdate(data),
+        }),
+    );
+
     const guestDoc = {
       exists: true,
       data: () => ({

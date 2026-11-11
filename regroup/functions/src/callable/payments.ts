@@ -24,9 +24,10 @@ import {
 } from "../util/connectAccountLifecycle";
 import {
   assertHouseAdmin,
+  assertHouseMoneyStaff,
   assertHouseMemberFromClaims,
   checkIsMember,
-  isHouseAdmin,
+  isHouseMoneyStaff,
   HouseAdminFields,
 } from "../util/houseAuth";
 import { parseInput, safeReturnUrlSchema } from "../validation";
@@ -168,6 +169,8 @@ export const createPaymentIntent = onCall(
     const guestData = guestSnap.data() as {
       userId?: string;
       houseId?: string;
+      rentOwed?: number;
+      choreFees?: number;
     };
     if (guestData.houseId !== houseId) {
       throw new HttpsError(
@@ -176,12 +179,41 @@ export const createPaymentIntent = onCall(
       );
     }
     if (
-      !isHouseAdmin(request.auth.uid, house) &&
-      guestData.userId !== request.auth.uid
+      guestData.userId !== request.auth.uid &&
+      !(await isHouseMoneyStaff(request.auth.uid, houseId, house))
     ) {
       throw new HttpsError(
         "permission-denied",
         "Only the resident or a house admin can initiate this payment",
+      );
+    }
+
+    // ── 3c. Amount against the balance ────────────────────────────────────────
+    // Refuse overpayment here, before any charge: the webhook subtracts whatever
+    // was paid, so it would leave a credit the ledger never asked for. Checked
+    // after authorization so only someone entitled to see the balance is told it.
+    // Nothing guarantees these types on old documents, and a bad value must not
+    // widen the cap (amount > NaN is false; "5000" + 0 is "50000"), so it refuses.
+    const owedParts = [guestData.rentOwed ?? 0, guestData.choreFees ?? 0];
+    if (!owedParts.every((part) => Number.isFinite(part) && typeof part === "number")) {
+      logger.error("createPaymentIntent: malformed balance", { guestId });
+      throw new HttpsError(
+        "failed-precondition",
+        "This balance can't be paid online right now. Please contact your house manager.",
+      );
+    }
+    // Rounded up because the app rounds a fractional legacy balance up to charge it.
+    const owedCents = Math.max(Math.ceil(owedParts[0] + owedParts[1]), 0);
+    if (owedCents === 0) {
+      throw new HttpsError(
+        "failed-precondition",
+        "Nothing is owed right now, so there is nothing to pay.",
+      );
+    }
+    if (amount > owedCents) {
+      throw new HttpsError(
+        "failed-precondition",
+        `This payment is more than the $${(owedCents / 100).toFixed(2)} owed. Please enter a smaller amount.`,
       );
     }
 
@@ -244,9 +276,42 @@ export const createPaymentIntent = onCall(
       throw mapStripeError(err);
     }
 
+    // ── 6. A replayed key whose intent is already paid (RENT-012) ─────────────
+    // On a replay Stripe returns its stored response for the original create,
+    // i.e. the intent as it was then, not as it is now. Its client secret would
+    // open a payment sheet for money that has already moved. Read the current
+    // status, and for a succeeded intent return no secret at all, so there is
+    // nothing the client can confirm.
+    if (isIdempotentReplay(paymentIntent)) {
+      let current: Stripe.PaymentIntent;
+      try {
+        current = await stripe.paymentIntents.retrieve(paymentIntent.id);
+      } catch (err) {
+        throw mapStripeError(err);
+      }
+      if (current.status === "succeeded") {
+        logger.info("createPaymentIntent: replayed key, intent already paid", {
+          paymentIntentId: current.id,
+        });
+        return { alreadyPaid: true };
+      }
+    }
+
     return { clientSecret: paymentIntent.client_secret };
   },
 );
+
+/**
+ * True when Stripe answered from its idempotency cache rather than creating a
+ * new object. Stripe marks those responses with `Idempotent-Replayed: true`
+ * (docs.stripe.com/error-low-level#idempotency), and Node lowercases header
+ * names.
+ */
+function isIdempotentReplay(response: object): boolean {
+  const headers = (response as Partial<Stripe.Response<object>>).lastResponse
+    ?.headers;
+  return headers?.["idempotent-replayed"] === "true";
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // listPayments
@@ -305,8 +370,8 @@ export const listPayments = onCall(
       );
     }
     if (
-      !isHouseAdmin(request.auth.uid, house) &&
-      guestData.userId !== request.auth.uid
+      guestData.userId !== request.auth.uid &&
+      !(await isHouseMoneyStaff(request.auth.uid, houseId, house))
     ) {
       throw new HttpsError(
         "permission-denied",
@@ -377,8 +442,9 @@ export const listHousePayments = onCall(
 
     // Ground truth from the house doc, not the token: custom claims only say
     // "member", and may be up to an hour stale after a role change.
-    assertHouseAdmin(
+    await assertHouseMoneyStaff(
       request.auth.uid,
+      houseId,
       house,
       "Only house admins can view house-wide payments",
     );
@@ -477,7 +543,11 @@ export const updatePaymentInfo = onCall(
           .get();
         authorized =
           houseSnap.exists &&
-          isHouseAdmin(request.auth.uid, houseSnap.data() as HouseAdminFields);
+          (await isHouseMoneyStaff(
+            request.auth.uid,
+            guestData.houseId,
+            houseSnap.data() as HouseAdminFields,
+          ));
       }
       if (!authorized) {
         throw new HttpsError(

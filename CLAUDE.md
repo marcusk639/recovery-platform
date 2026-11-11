@@ -4,7 +4,7 @@ Flat monorepo of independent recovery products plus a shared API. Each product h
 
 | Directory         | Product                     | Firebase project                                              |
 | ----------------- | --------------------------- | ------------------------------------------------------------- |
-| `recovery-api/`   | Cross-app API (Functions)   | `recovery-platform`                                           |
+| `recovery-api/`   | Cross-app API (Functions)   | `recovery-platform-e6cb3`                                     |
 | `homegroups/`     | Homegroups (12-step groups) | `recovery-connect-cad4b` (e2e alias `homegroups-e2e`)         |
 | `regroup/`        | Regroup (sober living)      | `phoenix-cleanhouse`                                          |
 | `detox-recovery/` | NextStep Recovery (Next.js) | `nextsteprecovery-1d5c2` (no `.firebaserc`: pass `--project`) |
@@ -13,10 +13,10 @@ Flat monorepo of independent recovery products plus a shared API. Each product h
 
 ## Cross-product rules
 
-- **Data isolation:** never query one product's Firestore from another. Cross-product flows (referrals, identity) go through recovery-api; see `recovery-api/CLAUDE.md`. Its app-id registry `recovery-api/src/config/apps.ts` is the source of truth.
+- **Data isolation:** never query one product's Firestore from another. Cross-product flows (referrals, identity) go through recovery-api; see `recovery-api/CLAUDE.md`. Its app-id registry `recovery-api/src/config/apps.ts` is the source of truth. The only exceptions are two recovery-api scripts run by hand, listed with their limits under class 14 in `.pr-review/checklist.md`.
 - **Vocabulary differs per product:** "meeting" always means a 12-step meeting, in every product, as in homegroups. A sober-living house meeting is a separate concept: call it "house meeting" (`regroup:house-meeting` when ambiguous), never bare "meeting". Regroup's `meetings` callable and meeting search/check-in code are 12-step meetings, correctly named; Regroup's house meetings are the Oxford business meetings (`oxford/BusinessMeeting`). Regroup's "guest" = resident. More in `docs/ecosystem/vocabulary.md`.
 - **Privacy:** never log PII (names, contact info, health or recovery status) anywhere. Log full error objects server-side; return only sanitized messages to clients.
-- **Secrets:** no `.env` or secret values in git; use env vars or Firebase Secret Manager.
+- **Secrets:** no `.env` or secret values in git; use env vars or Firebase Secret Manager. The one exception is committed `functions/.env.<projectId>` files holding non-secret Firebase params (e.g. `regroup/web/functions/`). Secrets never go in them: use `defineSecret`.
 - **Emulators:** ports differ per package; read that package's `firebase.json`. recovery-api is offset (functions 5002, firestore 8082, auth 9100) so it can run beside one product. Don't run two products' emulators at once.
 - **Coverage floors** (recovery-api, homegroups/functions, detox-recovery jest configs) are ratchets: raise them, never lower them.
 - **Mutation-kill counts** measure test coupling, not correctness. On money paths, get an independent reviewer reasoning from the domain model.
@@ -49,5 +49,5 @@ Serena is a project MCP server in `.mcp.json` (`serena-agent==1.7.0` via `uvx`, 
   `B=origin/<branch>; git diff origin/main..$B -- $(git diff --name-only $(git merge-base $B origin/main)..$B) | wc -l`
   `0` means merged. Non-zero is inconclusive, because later PRs may have edited the same paths. GitHub's PR state is the authority.
 - **Skip build output and vendor bundles** (`**/public/`, `*.min.js`, `dist/`, `build/`, `.next/`, and the compiled `recovery-api/lib/` and `*/functions/lib/`) when searching or counting. `regroup/web/public/` alone is about 1.15M lines. Other `lib/` directories are hand-written source (`detox-recovery/lib`, `recovery-api/src/lib`): search them.
-- **`homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`.** For JS-only work (Jest, ESLint) use `npm ci --ignore-scripts`.
+- **`homegroups/mobile` and `regroup/mobile` postinstall runs `pod install`.** For JS-only work (Jest, ESLint) use `npm ci --ignore-scripts && npx patch-package`: the postinstall also applies each package's `patches/`, and `--ignore-scripts` skips that, so tests run against unpatched packages (from #160 on, that fails regroup/mobile's `react-native-modal` tests).
 - **zsh:** `$var:r`, `:h` and `:t` are path modifiers. Write `"${c}:path"` in `git show` loops.

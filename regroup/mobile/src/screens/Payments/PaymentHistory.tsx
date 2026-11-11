@@ -9,6 +9,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format } from 'date-fns';
 import { toDateSafe } from '../../util/firestore';
+import { recordAmountLabel } from '../../util/paymentDisplay';
 
 import RatsScrollView from '../../components/rats-scroll-view';
 import ScreenHeader from '../../components/screen-header';
@@ -133,7 +134,7 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
           <View style={styles.rightColumn}>
             <RatsText
               translate={false}
-              text={`$${(item.amount / 100).toFixed(2)}`}
+              text={recordAmountLabel(item)}
               style={styles.amount}
             />
             {refundedCents > 0 && refundedCents < item.amount && (

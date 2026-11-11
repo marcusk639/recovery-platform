@@ -13,6 +13,7 @@ import {
   useUpdateGuest,
   useCreateGuest,
   useDeleteGuest,
+  guestKeys,
 } from '../guestQueries';
 import * as guestService from '../../../services/guest';
 import { Guest } from '../../../entities/Guest';
@@ -154,6 +155,39 @@ describe('guestQueries', () => {
   });
 
   describe('useUpdateGuest', () => {
+    it('keeps the cached balance while saving, and shows the typed one (review)', async () => {
+      queryClient.setQueryData(guestKeys.detail('g9'), {
+        id: 'g9',
+        houseId: 'h9',
+        firstName: 'Sam',
+        rentOwed: 30000,
+        choreFees: 500,
+      });
+      queryClient.setQueryData(guestKeys.list('h9'), {
+        g9: { id: 'g9', houseId: 'h9', rentOwed: 30000, choreFees: 500 },
+      });
+      (guestService.updateGuest as jest.Mock).mockReturnValue(new Promise(() => {}));
+
+      const { result } = renderHook(() => useUpdateGuest(), { wrapper });
+      result.current.mutate({
+        guest: { id: 'g9' },
+        updatedGuest: { id: 'g9', houseId: 'h9', firstName: 'Sammy' },
+        moneyEdits: { rentOwed: { from: 30000, to: 25000 } },
+      });
+
+      await waitFor(() =>
+        expect(queryClient.getQueryData<any>(guestKeys.detail('g9'))?.firstName).toBe('Sammy'),
+      );
+      expect(queryClient.getQueryData<any>(guestKeys.detail('g9'))).toMatchObject({
+        rentOwed: 25000,
+        choreFees: 500,
+      });
+      expect(queryClient.getQueryData<any>(guestKeys.list('h9')).g9).toMatchObject({
+        rentOwed: 25000,
+        choreFees: 500,
+      });
+    });
+
     it('should update guest successfully', async () => {
       const updatedGuest = { ...mockGuest, firstName: 'Updated' };
       (guestService.updateGuest as jest.Mock).mockResolvedValue(updatedGuest);
@@ -172,6 +206,7 @@ describe('guestQueries', () => {
         updatedGuest,
         3,
         [], // authoritativeFields — none for an ordinary update
+        {}, // moneyEdits — no balance change
       );
     });
 
@@ -217,6 +252,69 @@ describe('guestQueries', () => {
         ]);
         expect((cachedData as Guest).firstName).toBe('Optimistic');
       });
+    });
+
+    // The edit form, and other screens, send only the fields that changed. Written
+    // over the cached guest as a whole, that blanked every other field until the
+    // refetch, and the form re-read the blanked guest and crashed.
+    it('merges a partial update into the cached guest, in the detail and the list', async () => {
+      queryClient.setQueryData(['guests', 'detail', 'guest123'], mockGuest);
+      queryClient.setQueryData(['guests', 'list', 'house456'], mockGuests);
+      (guestService.updateGuest as jest.Mock).mockImplementation(() => new Promise(() => {}));
+
+      const { result } = renderHook(() => useUpdateGuest(), { wrapper });
+      const partial = { id: 'guest123', houseId: 'house456', firstName: 'Johnny' };
+      result.current.mutate({ guest: mockGuest, updatedGuest: partial });
+
+      await waitFor(() =>
+        expect(queryClient.getQueryData<Guest>(['guests', 'detail', 'guest123'])?.firstName).toBe('Johnny'),
+      );
+      expect(queryClient.getQueryData(['guests', 'detail', 'guest123'])).toEqual({ ...mockGuest, firstName: 'Johnny' });
+      expect(queryClient.getQueryData<Guests>(['guests', 'list', 'house456'])).toEqual({
+        ...mockGuests,
+        guest123: { ...mockGuest, firstName: 'Johnny' },
+      });
+    });
+
+    it("doesn't add a partial entry for a guest the cached list doesn't hold", async () => {
+      queryClient.setQueryData(['guests', 'list', 'house456'], { guest456: mockGuests.guest456 });
+      (guestService.updateGuest as jest.Mock).mockImplementation(() => new Promise(() => {}));
+
+      const { result } = renderHook(() => useUpdateGuest(), { wrapper });
+      result.current.mutate({
+        guest: mockGuest,
+        updatedGuest: { id: 'guest123', houseId: 'house456', firstName: 'Johnny' },
+      });
+
+      await waitFor(() =>
+        expect(queryClient.getQueryData<Guest>(['guests', 'detail', 'guest123'])?.firstName).toBe('Johnny'),
+      );
+      expect(queryClient.getQueryData(['guests', 'list', 'house456'])).toEqual({ guest456: mockGuests.guest456 });
+    });
+
+    it('rolls the list back as well as the detail when the update fails', async () => {
+      queryClient.setQueryData(['guests', 'detail', 'guest123'], mockGuest);
+      queryClient.setQueryData(['guests', 'list', 'house456'], mockGuests);
+      let fail: (err: Error) => void = () => {};
+      (guestService.updateGuest as jest.Mock).mockImplementation(
+        () => new Promise((_resolve, reject) => { fail = reject; }),
+      );
+      // Keep the rolled-back cache in place: the post-mutation refetch would hide whether it was restored.
+      jest.spyOn(queryClient, 'invalidateQueries').mockResolvedValue();
+
+      const { result } = renderHook(() => useUpdateGuest(), { wrapper });
+      result.current.mutate({
+        guest: mockGuest,
+        updatedGuest: { id: 'guest123', houseId: 'house456', firstName: 'Johnny' },
+      });
+      await waitFor(() =>
+        expect(queryClient.getQueryData<Guests>(['guests', 'list', 'house456'])?.guest123.firstName).toBe('Johnny'),
+      );
+      fail(new Error('denied'));
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(queryClient.getQueryData(['guests', 'detail', 'guest123'])).toEqual(mockGuest);
+      expect(queryClient.getQueryData(['guests', 'list', 'house456'])).toEqual(mockGuests);
     });
   });
 

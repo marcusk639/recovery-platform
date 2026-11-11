@@ -62,6 +62,14 @@ const mockSubscriptionsRetrieve = jest.fn();
 // ---------------------------------------------------------------------------
 // firebase-admin mock
 // ---------------------------------------------------------------------------
+// The refund restore has its own suite (refundRestore.test.ts); here we only
+// check the handler calls it with the cumulative refunded amount (#198).
+const mockRestoreRefundedRent = jest.fn((..._args: any[]) => Promise.resolve(0));
+jest.mock("../../webhooks/refundRestore", () => ({
+  rentDecrementCents: jest.requireActual("../../webhooks/refundRestore").rentDecrementCents,
+  restoreRefundedRent: (...args: any[]) => mockRestoreRefundedRent(...args),
+}));
+
 jest.mock("firebase-admin", () => {
   const firestoreFn = jest.fn(() => ({
     collection: mockCollectionFn,
@@ -278,6 +286,7 @@ beforeEach(() => {
         get: jest.fn().mockResolvedValue({
           exists: false,
           get: (_field: string) => undefined,
+          data: () => undefined,
         }),
         set: jest.fn(),
         // A real Firestore transaction has update(). Omitting it made the
@@ -311,6 +320,7 @@ beforeEach(() => {
   mockSubscriptionsRetrieve.mockResolvedValue({
     id: "sub_default",
     metadata: {},
+    items: { data: [] },
   });
 
   // A test-mode deployment with all four signing secrets bound — what both
@@ -502,6 +512,27 @@ describe("stripeWebhook — customer.subscription.updated", () => {
     },
   });
 
+  // The subscriptions collection returns the test doc; everything else is empty.
+  const wireSubscriptionDoc = (subDocRef: { update: jest.Mock; set: jest.Mock }) =>
+    mockCollectionFn.mockImplementation((col: string) => ({
+      where: jest.fn().mockReturnValue({
+        limit: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue(
+            col === "subscriptions"
+              ? { empty: false, docs: [{ id: firestoreSubDoc.id, data: () => firestoreSubDoc.data, ref: subDocRef }] }
+              : { empty: true, docs: [] },
+          ),
+        }),
+        where: jest.fn().mockReturnValue({ get: jest.fn().mockResolvedValue({ empty: true, docs: [] }) }),
+        get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+      }),
+      doc: jest.fn().mockReturnValue({
+        get: jest.fn().mockResolvedValue({ exists: false }),
+        update: jest.fn(),
+        set: jest.fn(),
+      }),
+    }));
+
   it("updates subscription status in Firestore on customer.subscription.updated", async () => {
     const mockUpdate = jest.fn().mockResolvedValue(undefined);
     const subDocRef = { update: mockUpdate, set: jest.fn() };
@@ -651,6 +682,39 @@ describe("stripeWebhook — customer.subscription.updated", () => {
     await (stripeWebhook as any)(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
+  });
+
+  it("stores the item's period end as currentPeriodEnd, not the cycle's start", async () => {
+    const mockUpdate = jest.fn().mockResolvedValue(undefined);
+    const subDocRef = { update: mockUpdate, set: jest.fn() };
+    const periodEnd = Math.floor(Date.now() / 1000) + 2592000;
+
+    mockConstructEvent.mockReturnValue(
+      makeSubscriptionEvent({
+        billing_cycle_anchor: Math.floor(Date.now() / 1000),
+        items: { data: [{ id: "si_1", price: { id: "price_new" }, current_period_end: periodEnd }] },
+      }),
+    );
+    wireSubscriptionDoc(subDocRef);
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ currentPeriodEnd: new Date(periodEnd * 1000).toISOString() }),
+    );
+  });
+
+  it("leaves currentPeriodEnd alone when the event carries no period end", async () => {
+    const mockUpdate = jest.fn().mockResolvedValue(undefined);
+    const subDocRef = { update: mockUpdate, set: jest.fn() };
+
+    mockConstructEvent.mockReturnValue(makeSubscriptionEvent());
+    wireSubscriptionDoc(subDocRef);
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockUpdate).toHaveBeenCalledWith(expect.objectContaining({ status: "active" }));
+    expect(mockUpdate.mock.calls[0][0]).not.toHaveProperty("currentPeriodEnd");
   });
 
   it("handles a single-item tier subscription (no houseItemId/guestItemId) without throwing", async () => {
@@ -1076,6 +1140,12 @@ describe("stripeWebhook — charge.refunded", () => {
       expect.objectContaining({ refundedAmountCents: 15000 }),
       { merge: true },
     );
+    // ...and puts the refund back on the resident's balance (#198).
+    expect(mockRestoreRefundedRent).toHaveBeenCalledWith(
+      expect.anything(),
+      "pi_test_1",
+      15000,
+    );
   });
 
   it("resolves payment_intent from an expanded object form", async () => {
@@ -1253,6 +1323,18 @@ describe("stripeWebhook — transfer reversals", () => {
       expect.objectContaining({ amount: 48500 }),
       { idempotencyKey: "refund-reversal-re_1" },
     );
+  });
+
+  it("reverses the house's share even when putting the refund back on the balance fails", async () => {
+    mockRestoreRefundedRent.mockRejectedValueOnce(new Error("unavailable"));
+    await deliver("charge.refunded", {
+      id: "ch_rent",
+      payment_intent: "pi_rent",
+      amount: 50000,
+      amount_refunded: 50000,
+    });
+
+    expect(mockCreateReversal).toHaveBeenCalledTimes(1);
   });
 
   it("charge.refund.updated reverses a refund that has now settled", async () => {
@@ -1861,33 +1943,48 @@ describe("handleStripeConnectWebhook", () => {
 // ===========================================================================
 
 // Builds a mockCollectionFn implementation that returns:
-//   - houses: one doc owned by operatorUid (matched by adminIds array-contains)
+//   - houses: one doc, found only by a query its fields really match
 //   - subscriptions: one doc linking stripeSubscriptionId → houseId + userId
 //   - everything else: empty
+// The house defaults to the shape createHouses writes: the operator's uid in
+// ownerId/superAdminId, and an admin-record id (not the uid) in adminIds.
+const createdHouse = (operatorUid: string) => ({
+  subscriptionStatus: "active",
+  ownerId: operatorUid,
+  superAdminId: operatorUid,
+  adminIds: ["admin_record_1"],
+  superAdminIds: ["admin_record_1"],
+});
+
 function wireHousesForOperator(
   operatorUid: string,
   houseId: string,
   houseDocRef: { update: jest.Mock; set: jest.Mock },
+  houseData: Record<string, unknown> = createdHouse(operatorUid),
+  operatorMeta?: Record<string, unknown>,
 ) {
-  const houseDoc = {
-    id: houseId,
-    data: () => ({ subscriptionStatus: "active", adminIds: [operatorUid] }),
-    ref: houseDocRef,
+  const houseDoc = { id: houseId, data: () => houseData, ref: houseDocRef };
+  const matches = (field: string, op: string, value: unknown) => {
+    const v = houseData[field];
+    if (op === "==") return v === value;
+    if (op === "array-contains") return Array.isArray(v) && v.includes(value);
+    throw new Error(`unexpected houses query operator ${op}`);
   };
 
   return (col: string) => {
     if (col === "houses") {
       return {
-        // where(field, op, value) — returns house doc for adminIds query, empty for adminId query
-        where: jest.fn().mockImplementation((field: string) => ({
-          get: jest
-            .fn()
-            .mockResolvedValue(
-              field === "adminIds"
-                ? { empty: false, docs: [houseDoc] }
-                : { empty: true, docs: [] },
-            ),
-        })),
+        where: jest
+          .fn()
+          .mockImplementation((field: string, op: string, value: unknown) => ({
+            get: jest
+              .fn()
+              .mockResolvedValue(
+                matches(field, op, value)
+                  ? { empty: false, docs: [houseDoc] }
+                  : { empty: true, docs: [] },
+              ),
+          })),
         doc: jest.fn().mockReturnValue({
           get: jest.fn().mockResolvedValue({ exists: false }),
           update: jest.fn(),
@@ -1922,6 +2019,16 @@ function wireHousesForOperator(
           get: mockDocGet,
           update: mockDocUpdate,
           set: mockDocSet,
+        }),
+      };
+    }
+    if (col === "users" && operatorMeta) {
+      const snap = { exists: true, data: () => ({ subscriptionMetadata: operatorMeta }) };
+      // isOperatorDoc lets a test's transaction mock answer for this doc only.
+      return {
+        doc: jest.fn().mockReturnValue({
+          isOperatorDoc: true,
+          get: jest.fn().mockResolvedValue(snap),
         }),
       };
     }
@@ -1981,6 +2088,55 @@ describe("B8 — house.subscriptionStatus propagation", () => {
 
     mockCollectionFn.mockImplementation(
       wireHousesForOperator(operatorUid, houseId, houseRef),
+    );
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "active" }),
+    );
+  });
+
+  it("a legacy house with the operator uid in adminIds is still updated", async () => {
+    const operatorUid = "uid_b8_legacy";
+    const houseId = "house_b8_legacy";
+    const houseRef = { update: jest.fn(), set: jest.fn() };
+
+    // resolveOperatorUid fast path: userId in Stripe subscription metadata
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_b8",
+      metadata: { userId: operatorUid },
+    });
+
+    mockConstructEvent.mockReturnValue({
+      id: "evt_b8_invoice_legacy",
+      type: "invoice.payment_succeeded",
+      account: undefined,
+      data: {
+        object: {
+          id: "in_b8_1",
+          attempt_count: 1,
+          next_payment_attempt: null,
+          parent: {
+            type: "subscription_details",
+            subscription_details: { subscription: "sub_b8" },
+          },
+          lines: {
+            data: [
+              { period: { end: Math.floor(Date.now() / 1000) + 2592000 } },
+            ],
+          },
+        },
+      },
+    });
+
+    mockCollectionFn.mockImplementation(
+      wireHousesForOperator(operatorUid, houseId, houseRef, {
+        subscriptionStatus: "active",
+        adminIds: [operatorUid],
+      }),
     );
 
     await (stripeWebhook as any)(makeReq(), makeRes());
@@ -2094,6 +2250,98 @@ describe("B8 — house.subscriptionStatus propagation", () => {
       expect.objectContaining({
         subscriptionStatus: "past_due",
         guestGraceEndsAt: expect.any(String),
+      }),
+    );
+  });
+
+  it("an event for a subscription the operator has since replaced leaves the houses alone", async () => {
+    const operatorUid = "uid_b8_stale";
+    const houseRef = { update: jest.fn(), set: jest.fn() };
+
+    mockConstructEvent.mockReturnValue({
+      id: "evt_b8_stale_deleted",
+      type: "customer.subscription.deleted",
+      account: undefined,
+      data: {
+        object: {
+          id: "sub_old",
+          canceled_at: Math.floor(Date.now() / 1000) - 100,
+          status: "canceled",
+          items: { data: [] },
+          metadata: { userId: operatorUid },
+        },
+      },
+    });
+
+    mockCollectionFn.mockImplementation(
+      wireHousesForOperator(operatorUid, "house_b8_stale", houseRef, undefined, {
+        subscriptionId: "sub_current",
+      }),
+    );
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
+  it("customer.subscription.updated moves the operator to the tier Stripe now has", async () => {
+    const operatorUid = "uid_b8_tier";
+    const houseRef = { update: jest.fn(), set: jest.fn() };
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_b8_pro";
+    const operatorMeta = {
+      subscriptionId: "sub_b8",
+      subscriptionItemId: "si_b8",
+      houseType: "traditional",
+      tier: "starter",
+    };
+    const txUpdate = jest.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: any) => any) =>
+      fn({
+        // The event claim reads its own doc and must find nothing.
+        get: jest.fn().mockImplementation(async (ref: any) =>
+          ref?.isOperatorDoc
+            ? ref.get()
+            : { exists: false, get: () => undefined, data: () => undefined },
+        ),
+        set: jest.fn(),
+        update: txUpdate,
+      }),
+    );
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_b8",
+      metadata: { userId: operatorUid },
+      items: { data: [{ id: "si_b8", price: { id: "price_b8_pro" } }] },
+    });
+    mockConstructEvent.mockReturnValue({
+      id: "evt_b8_tier",
+      type: "customer.subscription.updated",
+      account: undefined,
+      data: {
+        object: {
+          id: "sub_b8",
+          status: "active",
+          billing_cycle_anchor: Math.floor(Date.now() / 1000),
+          items: { data: [{ id: "si_b8", price: { id: "price_b8_pro" } }] },
+          metadata: { userId: operatorUid },
+        },
+      },
+    });
+    mockCollectionFn.mockImplementation(
+      wireHousesForOperator(operatorUid, "house_b8_tier", houseRef, undefined, operatorMeta),
+    );
+
+    try {
+      await (stripeWebhook as any)(makeReq(), makeRes());
+    } finally {
+      delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
+    }
+
+    expect(mockSubscriptionsRetrieve).toHaveBeenCalledWith("sub_b8");
+    expect(txUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        "subscriptionMetadata.tier": "professional",
+        "subscriptionMetadata.maxResidents": 20,
       }),
     );
   });

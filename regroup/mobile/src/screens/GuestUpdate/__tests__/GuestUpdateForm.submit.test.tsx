@@ -11,6 +11,8 @@
  */
 import React from 'react';
 import { act, fireEvent, render, waitFor, within } from '@testing-library/react-native';
+import { Alert } from 'react-native';
+import { logException } from '../../../util/logging';
 
 import GuestUpdateForm from '../GuestUpdateForm';
 import { Guest } from '../../../entities/Guest';
@@ -39,6 +41,13 @@ jest.mock('../../../state/queries/guestQueries', () => ({
   useGuests: () => ({ data: {} }),
   useUpdateGuest: () => ({ mutateAsync: mockMutateAsync }),
 }));
+// The money fields are shown only to a manager or above
+// (GuestUpdateForm.money.test.tsx); these tests edit them as one.
+jest.mock('../../../state/queries/houseTierQueries', () => ({
+  useMayEditRentMoney: () => true,
+}));
+
+jest.mock('../../../util/logging', () => ({ logException: jest.fn(), logDebug: jest.fn() }));
 
 const mockGuestRef: { current: Guest | undefined } = { current: guest };
 
@@ -97,7 +106,7 @@ describe('GuestUpdateForm submit guard', () => {
     ).toBeNull();
   });
 
-  it('still submits a readable edit, in cents, marked authoritative', async () => {
+  it('still submits a readable edit, from the shown balance to the typed one (#198)', async () => {
     const { getByTestId } = renderForm();
 
     fireEvent.changeText(getByTestId('guest-rentowed-input'), '400');
@@ -106,8 +115,62 @@ describe('GuestUpdateForm submit guard', () => {
     await waitFor(() => {
       expect(mockMutateAsync).toHaveBeenCalled();
     });
-    const { updatedGuest, authoritativeFields } = mockMutateAsync.mock.calls[0][0];
-    expect(updatedGuest.rentOwed).toBe(40000);
-    expect(authoritativeFields).toContain('rentOwed');
+    const { updatedGuest, moneyEdits } = mockMutateAsync.mock.calls[0][0];
+    // The form showed $500; the operator typed $400.
+    expect(moneyEdits).toEqual({ rentOwed: { from: 50000, to: 40000 } });
+    expect('rentOwed' in updatedGuest).toBe(false);
+  });
+
+  it('says the balance changed, and by how much, when the save is refused (review)', async () => {
+    const { Alert } = require('react-native');
+    jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockMutateAsync.mockRejectedValue(
+      Object.assign(new Error('changed'), {
+        kind: 'balance-changed',
+        field: 'rentOwed',
+        currentCents: 15000,
+      }),
+    );
+    const { getByTestId } = renderForm();
+
+    fireEvent.changeText(getByTestId('guest-rentowed-input'), '400');
+    fireEvent.press(getByTestId('create-guest-button'));
+
+    await waitFor(() =>
+      expect(Alert.alert).toHaveBeenCalledWith(
+        'The balance changed',
+        "Rent owed is now $150.00, probably from a payment. Check it and save again.",
+      ),
+    );
+  });
+});
+
+describe('GuestUpdateForm when the save fails', () => {
+  beforeEach(() => {
+    mockGuestRef.current = guest;
+    (logException as jest.Mock).mockReset();
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  async function saveWith(error: unknown) {
+    mockMutateAsync.mockReset().mockRejectedValue(error);
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    const { getByTestId } = renderForm();
+    fireEvent.changeText(getByTestId('guest-firstname-input'), 'Janet');
+    fireEvent.press(getByTestId('create-guest-button'));
+    await waitFor(() => expect(alert).toHaveBeenCalled());
+    return alert;
+  }
+
+  it('says so when the rules refuse it, rather than failing silently', async () => {
+    const alert = await saveWith(Object.assign(new Error('denied'), { code: 'firestore/permission-denied' }));
+    expect(alert.mock.calls[0][1]).toMatch(/permission/i);
+    expect(logException).toHaveBeenCalled();
+  });
+
+  it('says so, and logs it, for any other failure', async () => {
+    const alert = await saveWith(new Error('offline'));
+    expect(alert.mock.calls[0][1]).toMatch(/couldn.t save/i);
+    expect(logException).toHaveBeenCalled();
   });
 });

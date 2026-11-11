@@ -30,6 +30,13 @@ import { MeetingFilters } from './MeetingFilterForm';
 import { MEETING_DESCRIPTION_TEXT } from './MeetingSearch/types';
 import Clipboard from '@react-native-clipboard/clipboard';
 import { Guest } from '../../entities/Guest';
+import { formatDataAsOf } from '../../util/dataAsOf';
+
+/** Snapshot rows can lack any of these, so only show the parts a row has. */
+const cityStateZip = (meeting: RatsMeeting): string =>
+  [meeting.city, [meeting.state, meeting.zip].filter(Boolean).join(' ')]
+    .filter(Boolean)
+    .join(', ');
 
 export interface MeetingResultsListProps {
   meetings: RatsMeeting[];
@@ -136,10 +143,12 @@ const MeetingResultsList: React.FC<MeetingResultsListProps> = ({
           {!meeting.online && (
             <Fragment>
               <RatsText style={MEETING_DESCRIPTION_TEXT} text={meeting.street} />
-              <RatsText
-                style={MEETING_DESCRIPTION_TEXT}
-                text={`${meeting.city}, ${meeting.state} ${meeting.zip}`}
-              />
+              {!!cityStateZip(meeting) && (
+                <RatsText
+                  style={MEETING_DESCRIPTION_TEXT}
+                  text={cityStateZip(meeting)}
+                />
+              )}
             </Fragment>
           )}
           {meeting.online && (
@@ -250,6 +259,11 @@ const MeetingResultsList: React.FC<MeetingResultsListProps> = ({
   const renderMeeting = useCallback(
     (meeting: RatsMeeting, index: number) => {
       const width = Dimensions.get('screen').width;
+      // Directory NA meetings carry the same address fields as AA; only legacy
+      // NA records use the Location lines.
+      const usesLocationLines =
+        meeting.type === 'NA' && !!meeting.Location?.length;
+      const dataAsOf = formatDataAsOf(meeting.dataAsOf);
       return (
         <View
           key={index}
@@ -301,9 +315,21 @@ const MeetingResultsList: React.FC<MeetingResultsListProps> = ({
             }}>
             {(meeting.type === 'AA' ||
               meeting.type === 'Custom' ||
-              meeting.type === 'Celebrate Recovery') &&
+              meeting.type === 'Celebrate Recovery' ||
+              (meeting.type === 'NA' && !usesLocationLines)) &&
               renderAAMeetingDescription(meeting)}
-            {meeting.type === 'NA' && renderNAMeetingDescription(meeting)}
+            {usesLocationLines && renderNAMeetingDescription(meeting)}
+            {dataAsOf && (
+              <RatsText
+                testID="meeting-data-as-of"
+                translate={false}
+                style={[
+                  MEETING_DESCRIPTION_TEXT,
+                  { color: color.grey, fontSize: fontSize.regular },
+                ]}
+                text={dataAsOf}
+              />
+            )}
           </View>
           {userAsGuest && (
             <View style={{ paddingHorizontal: normalize(5) }}>

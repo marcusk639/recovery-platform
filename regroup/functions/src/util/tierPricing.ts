@@ -77,3 +77,29 @@ export const isTierAvailableForSale = (
   houseType: HouseType,
   tier: TierKey,
 ): boolean => getTier(houseType, tier).availableForSale !== false;
+
+/**
+ * The house type, tier and interval a Stripe price belongs to, or null when it
+ * is no tier's (a legacy two-item price, or one not configured here).
+ */
+export const tierForPriceId = (
+  priceId: string,
+): { houseType: HouseType; tier: TierKey; billingInterval: BillingInterval } | null => {
+  if (!priceId) return null;
+  for (const houseType of Object.keys(SUBSCRIPTION_TIERS) as HouseType[]) {
+    const map = SUBSCRIPTION_TIERS[houseType] as unknown as Record<string, TierConfig>;
+    for (const [tier, config] of Object.entries(map)) {
+      if (process.env[config.priceEnvVar] === priceId) {
+        return { houseType, tier: tier as TierKey, billingInterval: "month" };
+      }
+      if (config.annualPriceEnvVar && process.env[config.annualPriceEnvVar] === priceId) {
+        return { houseType, tier: tier as TierKey, billingInterval: "year" };
+      }
+    }
+  }
+  return null;
+};
+
+/** Whether a house type's catalog has this tier key (the two catalogs differ). */
+export const tierInCatalog = (houseType: HouseType, tier: TierKey): boolean =>
+  Object.prototype.hasOwnProperty.call(SUBSCRIPTION_TIERS[houseType] ?? {}, tier);

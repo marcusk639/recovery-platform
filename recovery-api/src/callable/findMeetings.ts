@@ -5,7 +5,7 @@ import { geohashQueryBounds, distanceBetween } from 'geofire-common';
 import { z } from 'zod';
 import { requireServiceAuth, ServiceAuthContext } from '../middleware/auth';
 import { RECOVERY_PLATFORM_API_KEY } from '../config';
-import { normalizeDay } from '../lib/meetings/identity';
+import { toDayName, type DayName } from '../lib/meetings/identity';
 import { hashUid } from '../lib/hash';
 import type { DirectoryMeeting } from '../entities/DirectoryMeeting';
 
@@ -29,39 +29,68 @@ const DEFAULT_RADIUS_METERS = 5000;
 const MAX_RADIUS_METERS = 100000;
 
 /**
- * Per-geohash-bound read cap.
- *
- * Without it, a max-radius search in a dense metro reads and bills every
- * directoryMeetings doc inside the geohash ranges before any distance, day or
- * type filtering happens — all of which is done in memory below. radiusMeters is
- * caller-controlled up to MAX_RADIUS_METERS, so the read volume is too.
- *
- * Geohash order is not distance order, so a bound that hits this cap can omit
- * meetings that were genuinely within the radius. That makes truncation a
- * correctness matter, not just a cost one, so it is reported to the caller
- * rather than hidden. The cap is set well above any plausible real bound.
+ * Rows read per request while paging through a geohash bound. It isn't a cap: every
+ * bound is read to its end, because geohash order is not distance order, so stopping
+ * early would drop meetings inside the radius. The radius limit above bounds the cost.
  */
-const PER_BOUND_READ_LIMIT = 500;
+const READ_PAGE_SIZE = 500;
 
 const FindMeetingsSchema = z.object({
   location: z.object({
     lat: z.number().min(-90).max(90),
     lng: z.number().min(-180).max(180),
   }),
-  day: z.number().int().min(0).max(6).optional(),
+  // A day name, or the older integer 0–6 (0 = Sunday) that deployed clients still send.
+  day: z
+    .union([z.number(), z.string()])
+    .optional()
+    .refine((day) => day === undefined || storedDay(day) !== null, 'Unrecognized day'),
   type: z.string().min(1).max(64).optional(),
   radiusMeters: z.number().positive().max(MAX_RADIUS_METERS).optional(),
 });
 
+/** A day in either stored form as a name, or null when it isn't a day at all. */
+function storedDay(day: unknown): DayName | null {
+  if (typeof day !== 'number' && typeof day !== 'string') return null;
+  try {
+    return toDayName(day);
+  } catch {
+    return null;
+  }
+}
+
 export interface FindMeetingsDeps {
   db: FirebaseFirestore.Firestore;
+}
+
+/**
+ * Reads one bound to its end. A page continues from the last document, not its geohash:
+ * meetings on one coordinate share a geohash, so a value cursor would skip the rest of them.
+ */
+async function readBound(
+  db: FirebaseFirestore.Firestore,
+  start: string,
+  end: string,
+): Promise<FirebaseFirestore.QueryDocumentSnapshot[]> {
+  const docs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+  let last: FirebaseFirestore.QueryDocumentSnapshot | undefined;
+  for (;;) {
+    const ordered = db.collection('directoryMeetings').orderBy('location.geohash');
+    const page = (last ? ordered.startAfter(last) : ordered.startAt(start))
+      .endAt(end)
+      .limit(READ_PAGE_SIZE);
+    const snap = await page.get();
+    docs.push(...snap.docs);
+    if (snap.docs.length < READ_PAGE_SIZE) return docs;
+    last = snap.docs[snap.docs.length - 1];
+  }
 }
 
 export async function handleFindMeetings(
   data: unknown,
   context: ServiceAuthContext,
   deps: FindMeetingsDeps,
-): Promise<{ meetings: DirectoryMeeting[]; truncated: boolean }> {
+): Promise<{ meetings: DirectoryMeeting[] }> {
   let parsed: z.infer<typeof FindMeetingsSchema>;
   try {
     parsed = FindMeetingsSchema.parse(data);
@@ -77,34 +106,25 @@ export async function handleFindMeetings(
   const { db } = deps;
   const center: [number, number] = [parsed.location.lat, parsed.location.lng];
   const radiusMeters = parsed.radiusMeters ?? DEFAULT_RADIUS_METERS;
-  const dayFilter = parsed.day !== undefined ? normalizeDay(parsed.day) : undefined;
+  const dayFilter = parsed.day !== undefined ? storedDay(parsed.day) : undefined;
 
   // geohashQueryBounds → one range query per bound on location.geohash. Mirrors
   // findMeetingsByLocation.ts' >= / <= geohash range, but using the canonical
   // geofire-common bounds (precise across cell edges) rather than a single cell.
   const bounds = geohashQueryBounds(center, radiusMeters);
-  const snapshots = await Promise.all(
-    bounds.map(([start, end]) =>
-      db
-        .collection('directoryMeetings')
-        .orderBy('location.geohash')
-        .startAt(start)
-        .endAt(end)
-        .limit(PER_BOUND_READ_LIMIT)
-        .get(),
-    ),
-  );
+  const pages = await Promise.all(bounds.map(([start, end]) => readBound(db, start, end)));
 
   // Collect, dedupe by doc id, then apply the true-distance filter (the geohash
   // bounds are a superset — distanceBetween prunes false positives).
   const seen = new Set<string>();
   const meetings: DirectoryMeeting[] = [];
-  for (const snap of snapshots) {
-    for (const doc of snap.docs) {
+  for (const docs of pages) {
+    for (const doc of docs) {
       if (seen.has(doc.id)) continue;
       seen.add(doc.id);
 
-      const meeting = doc.data() as DirectoryMeeting;
+      // Writers keep the id only as the document key, and clients need it to open a meeting.
+      const meeting = { ...doc.data(), id: doc.id } as DirectoryMeeting;
       const lat = meeting.location?.lat;
       const lng = meeting.location?.lng;
       if (typeof lat !== 'number' || typeof lng !== 'number') continue;
@@ -112,7 +132,9 @@ export async function handleFindMeetings(
       const distanceKm = distanceBetween([lat, lng], center);
       if (distanceKm * 1000 > radiusMeters) continue;
 
-      if (dayFilter !== undefined && meeting.day !== dayFilter) continue;
+      // Compared as names, but returned as stored: deployed product code reads only
+      // an integer, and rewriting it would strip the day from unmigrated rows.
+      if (dayFilter !== undefined && storedDay(meeting.day) !== dayFilter) continue;
       if (parsed.type !== undefined && meeting.type !== parsed.type) continue;
 
       meetings.push(meeting);
@@ -127,19 +149,7 @@ export async function handleFindMeetings(
     logger.warn('findMeetings: audit write failed', err),
   );
 
-  // True when any bound returned a full page, meaning results may be incomplete.
-  const truncated = snapshots.some(
-    (snap) => snap.docs.length >= PER_BOUND_READ_LIMIT,
-  );
-  if (truncated) {
-    logger.warn('findMeetings: a geohash bound hit the read limit', {
-      radiusMeters,
-      bounds: bounds.length,
-      limit: PER_BOUND_READ_LIMIT,
-    });
-  }
-
-  return { meetings, truncated };
+  return { meetings };
 }
 
 /** Coarsen a coordinate to ~2 decimals (~1km) so the audit row isn't a precise fix. */
@@ -157,7 +167,7 @@ async function writeAuditRow(
   await db.collection('directoryMeetingRequests').add({
     appId: context.appId,
     uidHash: hashUid(context.uid),
-    day: parsed.day ?? null,
+    day: parsed.day === undefined ? null : storedDay(parsed.day),
     type: parsed.type ?? null,
     lat: coarsen(parsed.location.lat),
     lng: coarsen(parsed.location.lng),
@@ -166,7 +176,8 @@ async function writeAuditRow(
 }
 
 export const findMeetings = onCall(
-  { secrets: [RECOVERY_PLATFORM_API_KEY] },
+  // A wide search in a dense city holds tens of thousands of documents before filtering.
+  { secrets: [RECOVERY_PLATFORM_API_KEY], memory: '1GiB' },
   async (request: CallableRequest) => {
     const context = requireServiceAuth(request);
     return handleFindMeetings(request.data, context, { db: getFirestore() });
