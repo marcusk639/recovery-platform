@@ -465,11 +465,20 @@ export const initializeTierCustomer = async (
     // not a retry of the old one.
     `tiersub-${userId}-${houseType}-${tier}-${billingInterval}-${day}`,
   );
+  const item = subscription.items.data[0];
+  // While trialing, the period the operator has is the trial. Otherwise it's the
+  // item's: API 2026-01-28.clover has no current_period_end on the subscription.
+  const periodEnd =
+    subscription.status === "trialing" && subscription.trial_end != null
+      ? subscription.trial_end
+      : item.current_period_end;
   return {
     customerId: customer.id,
     subscriptionId: subscription.id,
-    subscriptionItemId: subscription.items.data[0].id,
+    subscriptionItemId: item.id,
     status: subscription.status,
+    // 0, as on a new OperatorSubscription, if Stripe sent no period end.
+    currentPeriodEnd: periodEnd != null ? periodEnd * 1000 : 0,
     houseType,
     tier,
     billingInterval,
