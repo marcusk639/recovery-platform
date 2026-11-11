@@ -92,14 +92,20 @@ test('SUB-034: over the limit after a downgrade, existing residents stay and new
   expect((await docData(`guests/${second.guestId}`)).houseId).toBe(house.id);
 });
 
-test('SUB-036: Oxford on and off updates the operator’s house type', async () => {
+// Owner decision (2026-11-10, #225): the plan chosen at checkout sets the house type.
+test('SUB-036: an Oxford switch on a traditional plan is refused and changes nothing', async () => {
   const { op, house } = await lifecycle(stripe);
-  await adminDb().doc(`users/${op.uid}`).update({ 'subscriptionMetadata.status': 'active', 'subscriptionMetadata.oxfordEnabled': true });
+  await adminDb().doc(`users/${op.uid}`).update({ 'subscriptionMetadata.status': 'active' });
   await adminDb().doc(`houses/${house.id}`).update({ subscriptionStatus: 'active' });
-  expect((await callAs(op.uid, 'setOxfordEnabled', { houseId: house.id, enabled: true })).errorMessage).toBeUndefined();
-  expect((await operatorMeta(op.uid)).houseType).toBe('oxford');
-  expect((await callAs(op.uid, 'setOxfordEnabled', { houseId: house.id, enabled: false })).errorMessage).toBeUndefined();
-  expect((await operatorMeta(op.uid)).houseType).toBe('traditional');
+  const priceOf = async () => (await stripe.subscriptions.retrieve(op.subscriptionId)).items.data[0].price.id;
+  const before = await priceOf();
+
+  const res = await callAs(op.uid, 'setOxfordEnabled', { houseId: house.id, enabled: true });
+  expect(res.errorCode).toBe('failed-precondition');
+  expect(await priceOf()).toBe(before);
+  expect((await docData(`houses/${house.id}`)).houseType).not.toBe('oxford');
+  expect(await operatorMeta(op.uid)).toMatchObject({ houseType: 'traditional', tier: 'starter' });
+  expect((await operatorMeta(op.uid)).oxfordEnabled).not.toBe(true);
 });
 
 test('SUB-037: adding a resident at the limit is refused', async () => {

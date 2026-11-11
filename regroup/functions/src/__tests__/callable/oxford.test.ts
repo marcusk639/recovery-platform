@@ -231,6 +231,21 @@ describe("setOxfordEnabled — the operator's record follows the switch", () => 
 });
 
 describe("setOxfordEnabled — a tier the other catalog doesn't have", () => {
+  it("refuses a switch back to traditional from an Oxford plan too", async () => {
+    mockGetHouse.mockResolvedValue({ ...baseHouse, houseType: "oxford" });
+    mockGetUser.mockResolvedValue({
+      subscriptionMetadata: { subscriptionItemId: "si_abc123", tier: "plus", houseType: "oxford", oxfordEnabled: true },
+    });
+    mockTierInCatalog.mockReturnValue(false);
+
+    await expect(call({ houseId: "house-1", enabled: false })).rejects.toMatchObject({
+      code: "failed-precondition",
+    });
+    expect(mockTierInCatalog).toHaveBeenCalledWith("traditional", "plus");
+    expect(mockSwapSubscriptionItemPrice).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
   it("refuses with failed-precondition and changes nothing in Stripe or Firestore", async () => {
     mockGetHouse.mockResolvedValue(baseHouse);
     mockGetUser.mockResolvedValue(baseUser);
