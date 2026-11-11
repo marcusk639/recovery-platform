@@ -108,23 +108,29 @@ export const useUpdateGuest = () => {
         guestKeys.detail(updatedGuest.id),
       );
 
-      // Optimistically update
-      queryClient.setQueryData(guestKeys.detail(updatedGuest.id), updatedGuest);
+      // Optimistically update. Merged, not replaced: callers send only the fields that
+      // changed, and a partial guest in the cache blanks every other field until the
+      // refetch.
+      const id = updatedGuest.id;
+      queryClient.setQueryData<Partial<Guest>>(guestKeys.detail(id), (old) =>
+        old ? { ...old, ...updatedGuest } : updatedGuest,
+      );
 
       // Also update in the list if it exists
+      let previousGuests: Guests | undefined;
       if (updatedGuest.houseId) {
-        const previousGuests = queryClient.getQueryData<Guests>(
+        previousGuests = queryClient.getQueryData<Guests>(
           guestKeys.list(updatedGuest.houseId),
         );
         if (previousGuests) {
           queryClient.setQueryData(guestKeys.list(updatedGuest.houseId), {
             ...previousGuests,
-            [updatedGuest.id]: updatedGuest,
+            [id]: { ...previousGuests[id], ...updatedGuest } as Guest,
           });
         }
       }
 
-      return { previousGuest, previousGuests: previousGuest };
+      return { previousGuest, previousGuests };
     },
 
     // Rollback on error
@@ -134,6 +140,9 @@ export const useUpdateGuest = () => {
           guestKeys.detail(updatedGuest.id),
           context.previousGuest,
         );
+      }
+      if (context?.previousGuests && updatedGuest.houseId) {
+        queryClient.setQueryData(guestKeys.list(updatedGuest.houseId), context.previousGuests);
       }
     },
 
