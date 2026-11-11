@@ -80,30 +80,51 @@ describe('removeIssue', () => {
       { op: 'delete', path: 'issues/i1' },
     ]);
     expect(readDoc('issues/i1')).toBeUndefined();
-    expect(readDoc('houses/h1')).toEqual({ name: 'Oak', issues: { i2: { id: 'i2', status: 'open' } } });
+    expect(readDoc('houses/h1')).toEqual({
+      name: 'Oak',
+      issues: { i2: { id: 'i2', status: 'open' } },
+    });
     expect(logException).not.toHaveBeenCalled();
   });
 
   it('still removes the issue, and logs it, when the record delete fails some other way', async () => {
     seedDoc('houses/h1', { name: 'Oak' });
-    failNext('delete', Object.assign(new Error('unavailable'), { code: 'firestore/unavailable' }), 'issues/i1');
+    failNext(
+      'delete',
+      Object.assign(new Error('unavailable'), { code: 'firestore/unavailable' }),
+      'issues/i1',
+    );
 
     const result = await removeIssue(makeHouse(), issue({ id: 'i1' }));
 
     expect(result.issues).toEqual({ i2: { id: 'i2', status: 'open' } });
-    expect(readDoc('houses/h1')).toEqual({ name: 'Oak', issues: { i2: { id: 'i2', status: 'open' } } });
+    expect(readDoc('houses/h1')).toEqual({
+      name: 'Oak',
+      issues: { i2: { id: 'i2', status: 'open' } },
+    });
     expect(logException).toHaveBeenCalledTimes(1);
-    expect(logException).toHaveBeenCalledWith(expect.objectContaining({ code: 'firestore/unavailable' }), 'removeIssue: issues/{id} record');
+    expect(logException).toHaveBeenCalledWith(
+      expect.objectContaining({ code: 'firestore/unavailable' }),
+      'removeIssue: issues/{id} record',
+    );
   });
 
   it('still removes the issue when there is no record to delete', async () => {
     seedDoc('houses/h1', { name: 'Oak' });
-    failNext('delete', Object.assign(new Error('permission-denied'), { code: 'firestore/permission-denied' }), 'issues/i1');
+    failNext(
+      'delete',
+      Object.assign(new Error('permission-denied'), { code: 'firestore/permission-denied' }),
+      'issues/i1',
+    );
 
     const result = await removeIssue(makeHouse(), issue({ id: 'i1' }));
 
     expect(result.issues).toEqual({ i2: { id: 'i2', status: 'open' } });
-    expect(readDoc('houses/h1')).toEqual({ name: 'Oak', issues: { i2: { id: 'i2', status: 'open' } } });  expect(logException).not.toHaveBeenCalled();
+    expect(readDoc('houses/h1')).toEqual({
+      name: 'Oak',
+      issues: { i2: { id: 'i2', status: 'open' } },
+    });
+    expect(logException).not.toHaveBeenCalled();
   });
 
   it('rejects, and deletes nothing, when the house update fails', async () => {
@@ -111,7 +132,9 @@ describe('removeIssue', () => {
     seedDoc('issues/i1', { id: 'i1' });
     failNext('update', new Error('permission-denied'), 'houses/h1');
 
-    await expect(removeIssue(makeHouse(), issue({ id: 'i1' }))).rejects.toThrow('permission-denied');
+    await expect(removeIssue(makeHouse(), issue({ id: 'i1' }))).rejects.toThrow(
+      'permission-denied',
+    );
     expect(readDoc('issues/i1')).toEqual({ id: 'i1' });
   });
 });
