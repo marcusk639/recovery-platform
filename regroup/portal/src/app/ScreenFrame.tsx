@@ -25,13 +25,17 @@ export function ScreenFrame(props: { state: any; routeKey: string; navigation?: 
   const boundary = <ErrorBoundary key={routeKey}>{children}</ErrorBoundary>;
   const screen = (
     <div data-testid="screen-body" style={column}>
-      {houseId && guestId ? (
-        <ResidentGate houseId={houseId} guestId={guestId}>
-          {boundary}
-        </ResidentGate>
-      ) : houseId ? (
+      {/* The role gate always applies in a house. A guestId in the URL's query
+          used to choose the resident branch instead, which skipped it. */}
+      {houseId ? (
         <FullViewGate houseId={houseId} routeName={routeName}>
-          {boundary}
+          {guestId ? (
+            <ResidentGate houseId={houseId} guestId={guestId}>
+              {boundary}
+            </ResidentGate>
+          ) : (
+            boundary
+          )}
         </FullViewGate>
       ) : (
         boundary
