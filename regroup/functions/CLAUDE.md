@@ -189,7 +189,7 @@ The legacy `STRIPE_HOUSE_PRICE_ID` / `STRIPE_GUEST_PRICE_ID` / `STRIPE_OXFORD_PR
 
 **Stripe API `2026-01-28.clover`:** the period end is on the subscription item (`items.data[n].current_period_end`), not the subscription; `billing_cycle_anchor` is the cycle's start.
 
-**Tier keys differ per catalog:** traditional `starter`/`professional`/`enterprise`, Oxford `standard`/`plus`/`network`. No key is in both, so a tier can't carry across an Oxford switch until a mapping is decided (#225). `tierForPriceId` (`util/tierPricing.ts`) maps a Stripe price back to its tier.
+**Tier keys differ per catalog:** traditional `starter`/`professional`/`enterprise`, Oxford `standard`/`plus`/`network`. No key is in both. Owner decision (2026-11-10, #225): the plan chosen at checkout sets the house type, so `setOxfordEnabled` refuses a switch; changing it means a new subscription. `tierForPriceId` (`util/tierPricing.ts`) maps a Stripe price back to its tier.
 
 ### Firestore gotchas
 
