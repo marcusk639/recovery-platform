@@ -280,7 +280,8 @@ service cloud.firestore {
                        (isInvitedSelfCreate(request.resource.data) ||
                         (isAdmin([request.resource.data.houseId]) &&
                          request.resource.data.get('userId', '') != request.auth.uid &&
-                         callerRank(request.resource.data.houseId) > targetRank(request.resource.data)));
+                         callerRank(request.resource.data.houseId) > targetRank(request.resource.data) &&
+                         rentMoneyOnCreateByManager(request.resource.data)));
 
       // Update has two distinct branches:
       //
@@ -360,6 +361,23 @@ service cloud.firestore {
       // and house may change in the same write); a record ranked 0 (a
       // resident, or no record) any staff may change. Staff never change
       // these on their own record.
+      // Owes nothing and has no rate a manager set. Below a manager, only such a record can
+      // be deleted or moved to another house (owner decision 2026-11-10): either, then a
+      // re-create or a change made where the caller ranks higher, would clear a balance or
+      // a rate. Paying in full comes off rentOwed only, so rent -$50 with chore fees $50
+      // owes nothing; a credit is the house's to settle. A non-number balance counts as owed.
+      function settled(d) {
+        let rent = d.get('rentOwed', 0);
+        let fees = d.get('choreFees', 0);
+        return rent is number && fees is number && rent + fees == 0 && rent <= 0 &&
+          d.get('customRent', null) == null;
+      }
+
+      function houseMoveAllowed() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['houseId']) ||
+          callerRank(resource.data.houseId) >= 2 || settled(resource.data);
+      }
+
       function staffDepartureAllowed() {
         let own = resource.data.get('userId', '') == request.auth.uid;
         let changed = request.resource.data.diff(resource.data).affectedKeys()
@@ -373,13 +391,31 @@ service cloud.firestore {
 
       // No one, admin or not, changes the money fields of their own record:
       // a peer leader is an admin of the house and also a resident who owes
-      // rent. Another admin of the house sets them. moveInDate and importedAt
+      // rent. Someone else sets them, and rentOwed, choreFees, customRent and
+      // rentDueDate only from a manager up (rentMoneyByManager, owner decision
+      // 2026-11-10). moveInDate and importedAt
       // decide the first chargeable day, and rentDueDate when rent is overdue,
       // so they are money fields too.
       function ownMoneyUnchanged() {
         return !(resource.data.get('userId', '') == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys()
             .hasAny(['rentOwed', 'choreFees', 'customRent', 'moveInDate', 'importedAt', 'rentDueDate']));
+      }
+
+      // Only a manager or above changes anyone's rent rate, balance or due date: a
+      // peer leader also owes rent here (owner decision 2026-11-10), so peer leaders
+      // can't move each other's money either. The server's charges use the Admin SDK.
+      function rentMoneyByManager() {
+        return !request.resource.data.diff(resource.data).affectedKeys()
+            .hasAny(['rentOwed', 'choreFees', 'customRent', 'rentDueDate']) ||
+          callerRank(resource.data.houseId) >= 2;
+      }
+      // The same on create: a peer leader admits a resident with no balance, rate or
+      // due date, which is what the app sends.
+      function rentMoneyOnCreateByManager(d) {
+        return callerRank(d.houseId) >= 2 || (
+          d.get('rentOwed', 0) == 0 && d.get('choreFees', 0) == 0 &&
+          d.get('customRent', null) == null && d.get('rentDueDate', null) == null);
       }
 
       allow update: if
@@ -391,7 +427,7 @@ service cloud.firestore {
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedBy']) ||
          request.resource.data.updatedBy == request.auth.uid) && (
         (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId]) &&
-         staffDepartureAllowed() && ownMoneyUnchanged()) ||
+         staffDepartureAllowed() && houseMoveAllowed() && ownMoneyUnchanged() && rentMoneyByManager()) ||
         (isSameUser(request.resource.data.userId) &&
          request.resource.data.userId == resource.data.userId &&
          request.resource.data.houseId == resource.data.houseId &&
@@ -411,9 +447,12 @@ service cloud.firestore {
       // runs server-side with the Admin SDK.
       // Staff delete follows rank (staffDepartureAllowed above), never of
       // their own record.
+      // Below a manager, only a settled record (above): deleting one that owes rent or chore
+      // fees, then re-creating the resident without it, would clear what they owe.
       allow delete: if isAdmin([resource.data.houseId]) &&
         resource.data.get('userId', '') != request.auth.uid &&
-        callerRank(resource.data.houseId) > targetRank(resource.data);
+        callerRank(resource.data.houseId) > targetRank(resource.data) &&
+        (callerRank(resource.data.houseId) >= 2 || settled(resource.data));
     }
     
     match /guest-reports/{reportId} {
@@ -481,8 +520,8 @@ service cloud.firestore {
       // rentChargesStartDate / rentChargesStartedAtMs: reserved. When charging
       // turned on lives in server-only rentHouseStates/{houseId}; no client may
       // write these names here either.
-      // Rent settings: any house admin sets the schedule and price (owner
-      // decision 2026-11-09), so monthlyRent and weeklyRent are no longer
+      // Rent settings: a manager or above (rank >= 2) sets the schedule and price
+      // (owner decision 2026-11-10), so monthlyRent and weeklyRent are no longer
       // superAdmin-only. For every role, rentFrequency is one of the three
       // schedules ('both' means charging is off) and a price is a number of
       // DOLLARS (weekly 0 to 2500, monthly 0 to 10000): a value typed in cents or as a string
@@ -590,12 +629,18 @@ service cloud.firestore {
     }
     
     // Payments: only admins can read all house payments; guests read their own.
-    // Manual payment recording restricted to admins.
+    // Recording a payment (cash, check, Venmo, Zelle) takes a manager or above:
+    // peer leaders do not record payments at launch (owner decision 2026-11-10).
+    // A peer leader may still write the pending record the app keeps for their
+    // own card payment (recordRentPayment); the Stripe webhook writes the real one.
     // Cloud Functions handle Stripe-originated writes via Admin SDK.
     match /payments/{paymentId} {
       allow read: if isAdmin([resource.data.houseId]) ||
         (isGuest([resource.data.houseId]) && isSameUser(resource.data.guestUserId));
-      allow create: if isAdmin([request.resource.data.houseId]);
+      allow create: if isAdmin([request.resource.data.houseId]) && (
+        callerRank(request.resource.data.houseId) >= 2 || (
+          request.resource.data.get('status', '') == 'pending' &&
+          request.resource.data.get('guestUserId', '') == request.auth.uid));
       allow update, delete: if false; // Only Cloud Functions should modify payments
     }
 

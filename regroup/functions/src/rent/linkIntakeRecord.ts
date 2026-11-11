@@ -44,6 +44,16 @@ async function invitedEmailOf(userId: string, houseId: string): Promise<string> 
 }
 
 /**
+ * 'refused': a matching record was found but must not be linked (the person made it,
+ * or a balance isn't a number). 'ambiguous': more than one matches. Either way the two
+ * records are the same person, so callers must not charge the new one from scratch.
+ */
+export type LinkOutcome = 'linked' | 'none' | 'ambiguous' | 'refused';
+
+/** True when charging the new record would bill days a matching record is already charged for. */
+export const linkHeld = (outcome: LinkOutcome) => outcome === 'ambiguous' || outcome === 'refused';
+
+/**
  * Links in either order: a new invite record finds the intake record (no userId), or
  * a new intake record, made after the person already signed up, finds the invite
  * record (with a userId). The rent always moves onto the invite record.
@@ -52,7 +62,7 @@ async function invitedEmailOf(userId: string, houseId: string): Promise<string> 
 export async function linkIntakeRecord(
   newGuestId: string,
   newGuest?: Data,
-): Promise<'linked' | 'none' | 'ambiguous'> {
+): Promise<LinkOutcome> {
   const fresh = newGuest ?? ((await guestCollection.doc(newGuestId).get()).data() as Data);
   const email = normalEmail(fresh?.email);
   const houseId = typeof fresh?.houseId === 'string' ? fresh.houseId : '';
@@ -96,11 +106,17 @@ export async function linkIntakeRecord(
   if (matches.length === 0) {
     // An account record with the same email but no invitation: likely the same person,
     // charged on both records. Not linked by a resident-written email; a manager decides.
-    if (!newIsInvite && candidates.some((d) => normalEmail(((d.data() ?? {}) as Data).email) === email)) {
-      logger.warn('linkIntakeRecord: an account record has this email but no invitation; not linked', {
-        guestId: newGuestId,
-        houseId,
-      });
+    if (
+      !newIsInvite &&
+      candidates.some((d) => normalEmail(((d.data() ?? {}) as Data).email) === email)
+    ) {
+      logger.warn(
+        'linkIntakeRecord: an account record has this email but no invitation; not linked',
+        {
+          guestId: newGuestId,
+          houseId,
+        },
+      );
     }
     return 'none';
   }
@@ -123,7 +139,7 @@ async function linkRecords(
   newGuestId: string,
   userId: string,
   houseId: string,
-): Promise<'linked' | 'none'> {
+): Promise<'linked' | 'none' | 'refused'> {
   let selfMade = false;
   let badBalance = false;
   const linked = await ratsFirestore.runTransaction(async (txn) => {
@@ -139,6 +155,8 @@ async function linkRecords(
       oldAccountRef,
       newAccountRef,
     );
+    // Read here, with the records: a transaction does every read before any write.
+    const history = await txn.get(rentChargeCollection.where('guestId', '==', intakeId));
     const target = (newSnap.data() ?? {}) as Data;
     const source = (intakeSnap.data() ?? {}) as Data;
     if (
@@ -169,9 +187,16 @@ async function linkRecords(
     // manager to apply by hand, so no record can lower another's balance.
     const owed = Math.max(0, num(source.rentOwed));
     const fees = Math.max(0, num(source.choreFees));
-    const due = [target.rentDueDate, source.rentDueDate]
-      .filter((d): d is string => typeof d === 'string' && d !== '')
-      .sort()[0];
+    // The due date decides overdue notices, so the intake record's moves only from a
+    // record a known staff member made (not the person), and only as a real date.
+    const isDay = (d: unknown): d is string =>
+      typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d);
+    const sourceDue = creator && isDay(source.rentDueDate) ? source.rentDueDate : null;
+    const due = sourceDue
+      ? [isDay(target.rentDueDate) ? target.rentDueDate : null, sourceDue]
+          .filter((d): d is string => d !== null)
+          .sort()[0]
+      : null;
     // A manager's custom rate (a scholarship, say) follows the person, but only when
     // a known manager, not the person, made the intake record.
     const rate = creator && source.customRent && !target.customRent ? source.customRent : null;
@@ -189,6 +214,10 @@ async function linkRecords(
       choreFees: num(source.choreFees) - fees,
       rentLinkedTo: newGuestId,
     });
+    // So the resident sees the intake record's charges in their own history, and a
+    // reversal finds the record the balance moved to after staff delete the intake
+    // record. In the same commit as the link: once linked, nothing would retry it.
+    history.docs.forEach((d) => txn.update(d.ref, { guestUserId: userId, linkedTo: newGuestId }));
     if (oldAccount.exists) {
       if (!newAccount.exists) {
         txn.set(newAccountRef, { ...(oldAccount.data() ?? {}), guestId: newGuestId });
@@ -220,16 +249,9 @@ async function linkRecords(
         houseId,
       });
     }
-    return 'none';
+    return badBalance || selfMade ? 'refused' : 'none';
   }
 
-  // So the resident sees the intake record's charges in their own history.
-  const history = await rentChargeCollection.where('guestId', '==', intakeId).get();
-  if (!history.empty) {
-    const batch = ratsFirestore.batch();
-    history.docs.forEach((d) => batch.update(d.ref, { guestUserId: userId }));
-    await batch.commit();
-  }
   logger.info('linkIntakeRecord: linked', { guestId: newGuestId, intakeId, houseId });
   return 'linked';
 }

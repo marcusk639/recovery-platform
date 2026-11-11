@@ -110,7 +110,31 @@ describe('off and on, moves', () => {
     house({ rentChargesStartDate: '2026-12-09', rentChargesStartedAtMs: MAX });
     guest();
     // Charged at the house they lived in before.
-    account({ joinedOn: '2026-11-25', chargeFrom: '2026-09-01', chargedThrough: '2026-11-22', chargedHouseId: 'A' });
+    account({
+      joinedOn: '2026-11-25',
+      chargeFrom: '2026-09-01',
+      chargedThrough: '2026-11-22',
+      chargedHouseId: 'A',
+    });
+    await expect(chargeResident('g1', at('2026-12-09'))).resolves.toMatchObject({
+      reason: 'not-due',
+    });
+    expect(mem.get('rentAccounts/g1')).toMatchObject({ chargeFrom: '2026-12-14' });
+  });
+
+  // Charged in this house, but only in an earlier stay: they left Nov 25 and came back
+  // Dec 1 while charging was off. At turn-on they are a resident not yet charged this
+  // stay, so spec §2 applies: the next full period.
+  it('a resident who left and came back while charging was off starts at the next full period', async () => {
+    house({ rentChargesStartDate: '2026-12-09', rentChargesStartedAtMs: MAX });
+    guest();
+    account({
+      joinedOn: '2026-11-11',
+      chargeFrom: '2026-11-11',
+      chargedThrough: '2026-11-22',
+      inactiveSince: '2026-11-25',
+      reactivatedOn: '2026-12-01',
+    });
     await expect(chargeResident('g1', at('2026-12-09'))).resolves.toMatchObject({
       reason: 'not-due',
     });

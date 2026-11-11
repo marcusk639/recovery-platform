@@ -25,6 +25,8 @@ export async function syncRentChargeStart(
   processedAt: Date = new Date(),
   /** This event turned charging off: record the clear even if nothing was stamped yet. */
   turnedOff = false,
+  /** When that 'off' happened, if known. */
+  offAtMs: number | null = null,
 ): Promise<'stamped' | 'cleared' | 'unchanged'> {
   const houseRef = houseCollection.doc(houseId);
   const stateRef = rentHouseStateCollection.doc(houseId);
@@ -46,6 +48,23 @@ export async function syncRentChargeStart(
         startDate: localDateString(at, settings.timeZone),
         startedAtMs: at.getTime(),
         clearedAtMs,
+        updatedAtMs: processedAt.getTime(),
+      });
+      return 'stamped';
+    }
+    // An 'off' delivered after charging came back on: a stamp from before it would
+    // cover the time charging was off, so the start moves to now (late, never early).
+    if (
+      settings &&
+      state.startDate &&
+      offAtMs !== null &&
+      typeof state.startedAtMs === 'number' &&
+      state.startedAtMs <= offAtMs
+    ) {
+      txn.set(stateRef, {
+        startDate: localDateString(processedAt, settings.timeZone),
+        startedAtMs: processedAt.getTime(),
+        clearedAtMs: Math.max(clearedAtMs ?? 0, offAtMs),
         updatedAtMs: processedAt.getTime(),
       });
       return 'stamped';
@@ -84,7 +103,8 @@ export const onHouseRentSettingsWrite = onDocumentWritten(
     const turnedOn = !!rentSettingsOf(after) && !(before && rentSettingsOf(before));
     const turnedOff = !!before && !!rentSettingsOf(before) && !rentSettingsOf(after);
     const at = turnedOn && Number.isFinite(changedAt) ? new Date(changedAt) : new Date();
-    const result = await syncRentChargeStart(houseId, at, new Date(), turnedOff);
+    const offAtMs = turnedOff && Number.isFinite(changedAt) ? changedAt : null;
+    const result = await syncRentChargeStart(houseId, at, new Date(), turnedOff, offAtMs);
     if (result !== 'unchanged') logger.info('rent charging start', { houseId, result });
   },
 );

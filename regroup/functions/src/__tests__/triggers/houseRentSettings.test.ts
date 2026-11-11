@@ -170,6 +170,31 @@ it('events out of order converge', async () => {
   expect(state()).toMatchObject(stamp);
 });
 
+// On (stamped at 42), off at 14:00, back on; the "off" is delivered last. The stamp
+// predates the off, so it would cover the time charging was off: start now instead.
+it("a late 'off' replaces a stamp from before it with the current time", async () => {
+  mem.seed(`houses/${H}`, on);
+  seedStamp();
+  const offAt = '2026-11-09T20:00:00.000Z';
+  await run({ ...event(on, off), time: offAt });
+  expect(state()).toMatchObject({
+    startDate: '2026-11-09',
+    startedAtMs: NOW.getTime(),
+    clearedAtMs: Date.parse(offAt),
+  });
+});
+
+it("a late 'off' keeps a stamp made after it", async () => {
+  mem.seed(`houses/${H}`, on);
+  const laterStamp = {
+    startDate: '2026-11-09',
+    startedAtMs: Date.parse('2026-11-09T21:00:00.000Z'),
+  };
+  mem.seed(`rentHouseStates/${H}`, laterStamp);
+  await run({ ...event(on, off), time: '2026-11-09T20:00:00.000Z' });
+  expect(state()).toMatchObject(laterStamp);
+});
+
 it("'both' never stamps", async () => {
   mem.seed(`houses/${H}`, off);
   await run(event({ ...off, weeklyRent: 100 }, off));

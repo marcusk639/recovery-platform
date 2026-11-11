@@ -42,8 +42,12 @@ export interface ReverseOptions {
 export interface ReverseResult {
   charges: number;
   totalCents: Cents;
+  /** Charges left in place because no record exists to take the reversal (apply only). */
+  unresolved: string[];
   refused?: 'not-paused';
 }
+
+const nonEmpty = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null);
 
 async function chargingStopped(houseId: string): Promise<boolean> {
   const config = await rentConfigRef().get();
@@ -52,7 +56,8 @@ async function chargingStopped(houseId: string): Promise<boolean> {
   return !house.exists || rentSettingsOf((house.data() ?? {}) as Data) === null;
 }
 
-async function reverseOne(chargeId: string, nowMs: number): Promise<number> {
+/** The amount reversed, or null when no record exists to take it (nothing changed). */
+async function reverseOne(chargeId: string, nowMs: number): Promise<number | null> {
   return ratsFirestore.runTransaction(async (txn) => {
     const chargeRef = rentChargeCollection.doc(chargeId);
     const charge = await txn.get(chargeRef);
@@ -60,15 +65,18 @@ async function reverseOne(chargeId: string, nowMs: number): Promise<number> {
     const c = (charge.data() ?? {}) as Data;
     const amount = typeof c.amountCents === 'number' ? c.amountCents : 0;
     // A linked intake record's balance and account moved to its invite record
-    // (rent/linkIntakeRecord), so the reversal applies there.
+    // (rent/linkIntakeRecord), so the reversal applies there. The charge's own linkedTo
+    // still finds it after staff delete the intake record.
     const chargedId = String(c.guestId);
     const charged = await txn.get(guestCollection.doc(chargedId));
-    const linkedTo = charged.data()?.rentLinkedTo;
-    const guestId = typeof linkedTo === 'string' && linkedTo !== '' ? linkedTo : chargedId;
+    const guestId = nonEmpty(charged.data()?.rentLinkedTo) ?? nonEmpty(c.linkedTo) ?? chargedId;
     const guestRef = guestCollection.doc(guestId);
     const accountRef = rentAccountCollection.doc(guestId);
     const [guest, acct] = await txn.getAll(guestRef, accountRef);
-    if (guest.exists && amount !== 0) {
+    // Deleting the charge with no balance to take it off would count money as given
+    // back that never was.
+    if (!guest.exists) return null;
+    if (amount !== 0) {
       txn.update(guestRef, { rentOwed: FieldValue.increment(-amount) });
     }
     if (acct.exists && acct.data()?.chargedThrough === c.through && typeof c.from === 'string') {
@@ -86,7 +94,7 @@ async function reverseOne(chargeId: string, nowMs: number): Promise<number> {
 
 export async function reverseRentCharges(opts: ReverseOptions): Promise<ReverseResult> {
   if (opts.apply && !(await chargingStopped(opts.houseId))) {
-    return { charges: 0, totalCents: asCents(0), refused: 'not-paused' };
+    return { charges: 0, totalCents: asCents(0), unresolved: [], refused: 'not-paused' };
   }
   const snap = await rentChargeCollection.where('houseId', '==', opts.houseId).get();
   // A linked intake record's charges belong to the record its rent moved to.
@@ -96,7 +104,8 @@ export async function reverseRentCharges(opts: ReverseOptions): Promise<ReverseR
     const to = g.data()?.rentLinkedTo;
     if (typeof to === 'string' && to !== '') owner.set(g.id, to);
   });
-  const ownerOf = (d: Data) => owner.get(String(d.guestId)) ?? String(d.guestId);
+  const ownerOf = (d: Data) =>
+    owner.get(String(d.guestId)) ?? nonEmpty(d.linkedTo) ?? String(d.guestId);
   const selected = snap.docs
     .map((d) => ({ id: d.id, data: (d.data() ?? {}) as Data }))
     .filter((d) => !opts.since || String(d.data.from) >= opts.since)
@@ -108,15 +117,17 @@ export async function reverseRentCharges(opts: ReverseOptions): Promise<ReverseR
         : ownerOf(a.data).localeCompare(ownerOf(b.data)),
     );
   let total = asCents(0);
+  const unresolved: string[] = [];
   for (const d of selected) {
     const amount = opts.apply
       ? await reverseOne(d.id, Date.now())
       : typeof d.data.amountCents === 'number'
         ? d.data.amountCents
         : 0;
-    total = addCents(total, asCents(amount));
+    if (amount === null) unresolved.push(d.id);
+    else total = addCents(total, asCents(amount));
   }
-  return { charges: selected.length, totalCents: total };
+  return { charges: selected.length - unresolved.length, totalCents: total, unresolved };
 }
 
 function arg(argv: string[], name: string): string | undefined {
@@ -145,6 +156,13 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
   console.log(
     `${apply ? 'Reversed' : 'Would reverse'} ${result.charges} charge(s), ${formatCents(result.totalCents)} in total.`,
   );
+  if (result.unresolved.length > 0) {
+    console.log(
+      `Left in place: ${result.unresolved.length} charge(s) whose resident record is gone, ` +
+        `so no balance could take the reversal: ${result.unresolved.join(', ')}`,
+    );
+    process.exitCode = 3;
+  }
 }
 
 if (require.main === module) {
