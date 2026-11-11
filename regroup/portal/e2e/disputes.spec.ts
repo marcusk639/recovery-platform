@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { admin, expect, reseed, revokeClaimsAndRefresh, signInAs, test } from './helpers';
+import { moveOffUtcSunday } from './dispute-fixtures';
 
 const ID = 'test-activity-123';
 const data = async () => (await admin().doc(`activities/${ID}`).get()).data()!;
@@ -11,18 +12,9 @@ const decisions = async () =>
     .map((d) => d.id)
     .filter((id) => Number(id.split('_')[1]) >= startedAt - 1000);
 
-// useActivities drops activities from UTC Sunday until Monday (reported to the
-// owner as a phone bug), so use a time that is never a UTC Sunday.
-async function moveOffUtcSunday() {
-  const at = new Date();
-  at.setUTCDate(at.getUTCDate() - (at.getUTCDay() === 0 ? 1 : 0));
-  at.setUTCHours(0, 30, 0, 0);
-  await admin().doc(`activities/${ID}`).update({ timestamp: at, loggedAt: at });
-}
-
 test.beforeEach(async () => {
   reseed();
-  await moveOffUtcSunday();
+  await moveOffUtcSunday(ID);
   startedAt = Date.now();
 });
 
@@ -120,6 +112,7 @@ test('a decision the rules refuse shows an error and changes nothing', async ({ 
   await prompt(page).getByRole('button', { name: 'Approve' }).click();
   await expect(prompt(page)).toBeVisible();
   await expect(prompt(page)).not.toContainText('Approve dispute?');
+  await expect(prompt(page)).toContainText("Can't decide this dispute");
   expect((await data()).status).toBe('disputed');
   expect(await decisions()).toEqual([]);
 });
