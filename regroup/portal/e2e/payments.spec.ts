@@ -1,16 +1,30 @@
 import type { Page } from '@playwright/test';
+import { clearPayments } from './fixtures';
 import { admin, expect, reseed, revokeClaimsAndRefresh, signInAs, test } from './helpers';
 
 const rentOwed = async (guest: string) => (await admin().doc(`guests/${guest}`).get()).data()!.rentOwed;
 const paymentsOf = async (guest: string, amount: number) =>
   (await admin().collection('payments').where('guestId', '==', guest).where('amount', '==', amount).get()).size;
 
-test.beforeEach(() => {
-  // Without a real connected account the callable fails, and these tests would
-  // say nothing about the real payment data.
-  expect(process.env.E2E_STRIPE_ACCOUNT_ID, 'set E2E_STRIPE_ACCOUNT_ID; see regroup/mobile/maestro/README.md').toBeTruthy();
+// The dashboard reads the house's Firestore payment records (#191), so these
+// need no Stripe account; only the failed-payment banner calls Stripe.
+test.beforeEach(async () => {
   reseed({ E2E_RENT_CENTS: '15000' });
+  await clearPayments();
 });
+
+const HOUSE = 'test-house-123';
+async function addRecord(fields: Record<string, unknown> & { id: string; guestId: string }) {
+  const guest = (await admin().doc(`guests/${fields.guestId}`).get()).data()!;
+  await admin().doc(`payments/${fields.id}`).set({
+    houseId: HOUSE,
+    guestUserId: guest.userId ?? null,
+    currency: 'usd',
+    description: 'Rent',
+    createdAt: new Date().toISOString(),
+    ...fields,
+  });
+}
 
 async function open(page: Page) {
   await signInAs(page, 'manager');
@@ -34,23 +48,22 @@ async function record(page: Page, guest: string, amount: string) {
   await expect(page.getByText('Record Manual Payment')).toHaveCount(0);
 }
 
-test('the real callable loads with no error', async ({ page }) => {
+test('the dashboard loads with no error', async ({ page }) => {
   await open(page);
   await expect(page.getByText('Failed to load payment data.')).toHaveCount(0);
   await expect(page.getByTestId('overdue-residents-card')).toContainText('$150.00 owed');
 });
 
-test('Collected shows the real callable\'s dollars, not cents or dollars twice converted', async ({ page }) => {
+test("Collected is the house's payment records, net of refunds", async ({ page }) => {
+  await addRecord({ id: 'pay-c1', guestId: 'guest-a', amount: 20000, status: 'succeeded', description: 'Manual Payment — Cash' });
+  await addRecord({ id: 'pay-c2', guestId: 'guest-a', amount: 10000, status: 'succeeded', refundedAmountCents: 4000 });
+  await addRecord({ id: 'pay-c3', guestId: 'guest-a', amount: 50000, status: 'failed' });
+  // The webhook's unsupported-currency path: no cents amount.
+  await addRecord({ id: 'pay-c4', guestId: 'guest-a', amountMinorUnits: 900, currency: 'eur', status: 'succeeded' });
   await open(page);
   await page.getByText('All Time', { exact: true }).click();
-  const { data } = await page.evaluate(() =>
-    (window as any).__portalTest.callable('listHousePayments', { houseId: 'test-house-123', limit: 100 }),
-  );
-  const dollars = data.payments
-    .filter((p: { status: string }) => p.status === 'succeeded')
-    .reduce((sum: number, p: { amount: number }) => sum + p.amount, 0);
-  expect(dollars, 'the sandbox account needs at least one charge').toBeGreaterThan(0);
-  await expect(page.getByTestId('payment-stats-card')).toContainText(`$${dollars.toFixed(2)}`);
+  await expect(page.getByTestId('payment-stats-card')).toContainText('$260.00');
+  await expect(page.locator('body')).not.toContainText('NaN');
 });
 
 test('recording $50 writes 5000 cents and lowers the balance in one batch', async ({ page }) => {
@@ -76,26 +89,27 @@ test('a batch that cannot finish writes nothing', async ({ page }) => {
   expect(await paymentsOf('guest-a', 5000)).toBe(0);
 });
 
-// Finding, reported to the owner: parseFloat reads "1,500.00" as 1, and a desktop
-// keyboard can type what the phone's decimal pad mostly blocks.
-for (const typed of ['1,500.00', '1e3', '5OO']) {
+// #189: a desktop keyboard can type what the phone's decimal pad mostly blocks.
+test('an amount typed as 1,500.00 records $1,500.00, not $1.00', async ({ page }) => {
+  await record(page, 'guest-a', '1,500.00');
+  expect(await paymentsOf('guest-a', 150000)).toBe(1);
+  expect(await rentOwed('guest-a')).toBe(15000 - 150000);
+});
+
+for (const typed of ['1e3', '5OO', '12,34']) {
   test(`an amount typed as ${typed} is refused, not misread`, async ({ page }) => {
     await open(page);
     await fillForm(page, 'guest-a', typed);
-    test.fail();
     await recordButton(page).click();
-    await page.waitForTimeout(800);
+    await expect(page.getByTestId('manual-payment-amount-error')).toBeVisible();
     expect(await rentOwed('guest-a')).toBe(15000);
   });
 }
 
-// Finding for P5: PaymentDashboard's handleRecord has no in-flight guard, so a
-// double-click records two payments and lowers the balance twice. Fixing it
-// means editing mobile code or guarding the portal's form, so it stays pinned.
+// #190: a double-click recorded two payments.
 test('double-clicking RECORD records one payment', async ({ page }) => {
   await open(page);
   await fillForm(page, 'guest-a', '50.00');
-  test.fail();
   await recordButton(page).dblclick();
   await expect(page.getByText('Record Manual Payment')).toHaveCount(0);
   await page.waitForTimeout(1000);
@@ -120,21 +134,68 @@ test('a refused write shows an error they can dismiss, and changes nothing', asy
   expect(await paymentsOf('guest-a', 5000)).toBe(0);
 });
 
-// Finding, reported to the owner: the phone does this too. Collected, the chart
-// and the history come only from Stripe charges (listHousePayments), so cash never
-// appears. These assert the behavior an operator would expect, and fail today.
+// #191: the dashboard read only Stripe charges, so cash never appeared.
 test('a manual payment appears in the dashboard', async ({ page }) => {
   await open(page);
   await fillForm(page, 'guest-a', '50.00');
   await recordButton(page).click();
   await expect(page.getByTestId('overdue-residents-card')).toContainText('$100.00 owed');
-  await page.waitForTimeout(1500);
-  test.fail();
-  await expect(page.getByText(/Manual Payment/).first()).toBeVisible({ timeout: 2000 });
+  await expect(page.getByText(/Manual Payment/).first()).toBeVisible();
 });
 
+// #183 item 6: Outstanding was pending Stripe charges.
 test('Outstanding counts rent that is overdue', async ({ page }) => {
   await open(page);
-  test.fail();
-  await expect(page.getByTestId('payment-stats-card')).toContainText('$150.00', { timeout: 2000 });
+  await expect(page.getByTestId('payment-stats-card')).toContainText('$150.00');
+});
+
+test('Outstanding is what current residents owe, not credits or residents who left', async ({ page }) => {
+  await admin().doc('guests/guest-b').update({ rentOwed: -5000, choreFees: 0 });
+  await admin().doc('guests/guest-c').set({
+    ...(await admin().doc('guests/guest-a').get()).data(),
+    id: 'guest-c', userId: 'nobody', status: 'discharged', rentOwed: 9000, choreFees: 0,
+  });
+  await open(page);
+  const stats = page.getByTestId('payment-stats-card');
+  await expect(stats).toContainText('$150.00');
+  await expect(stats).not.toContainText('100%');
+});
+
+test('a stale pending record shows the stale-payments banner', async ({ page }) => {
+  await addRecord({
+    id: 'pay-stale', guestId: 'guest-a', amount: 15000, status: 'pending',
+    createdAt: new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString(),
+  });
+  await open(page);
+  await expect(page.getByTestId('stale-pending-banner')).toBeVisible();
+});
+
+test("a payment recorded here reads the same on the resident's record and history", async ({ page }) => {
+  await record(page, 'guest-a', '50.00');
+  const snap = await admin().collection('payments').where('guestId', '==', 'guest-a').where('amount', '==', 5000).get();
+  const id = snap.docs[0].id;
+  expect(snap.docs[0].data().description).toBe('Manual Payment — Cash');
+  await expect(page.getByTestId(`payment-row-${id}`)).toContainText('Test GuestA');
+  await page.goto(`/houses/${HOUSE}/residents/guest-a`);
+  await expect(page.getByTestId('record-payments')).toContainText('$100.00');
+  await page.getByTestId('record-payments').getByText('Payment history').click();
+  await expect(page.getByText('$50.00').first()).toBeVisible();
+  await expect(page.getByText(/Manual Payment/).first()).toBeVisible();
+});
+
+test('a refused write, then a retry, records once with the same id', async ({ page }) => {
+  await open(page);
+  await fillForm(page, 'guest-a', '50.00');
+  const guest = (await admin().doc('guests/guest-a').get()).data()!;
+  // The batch's balance write fails while the resident doc is missing.
+  await admin().doc('guests/guest-a').delete();
+  await recordButton(page).click();
+  const dialog = page.getByRole('alertdialog');
+  await expect(dialog).toContainText('Failed to record payment');
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await admin().doc('guests/guest-a').set(guest);
+  await recordButton(page).click();
+  await expect(page.getByText('Record Manual Payment')).toHaveCount(0);
+  expect(await paymentsOf('guest-a', 5000)).toBe(1);
+  expect(await rentOwed('guest-a')).toBe(10000);
 });
