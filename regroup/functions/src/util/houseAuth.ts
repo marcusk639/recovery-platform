@@ -1,6 +1,7 @@
 import { HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { logger } from "firebase-functions";
+import { readRoleTier } from "./houseRoleStore";
 
 /** Minimal house fields needed for admin/member authorization checks. */
 export interface HouseAdminFields {
@@ -31,6 +32,34 @@ export function assertHouseAdmin(
   message = "Only house admins can perform this action"
 ): void {
   if (!isHouseAdmin(uid, house)) {
+    throw new HttpsError("permission-denied", message);
+  }
+}
+
+/**
+ * Staff who may see and act on a house's money: the owner fields isHouseAdmin
+ * reads, or a live house-roles tier of owner or manager. adminIds holds admins
+ * doc ids and invitations add none, so isHouseAdmin alone refused every invited
+ * manager. Peer leaders hold the same admin claim and are refused (owner
+ * decision, 2026-11-10).
+ */
+export async function isHouseMoneyStaff(
+  uid: string,
+  houseId: string,
+  house: HouseAdminFields,
+): Promise<boolean> {
+  if (isHouseAdmin(uid, house)) return true;
+  const tier = await readRoleTier(houseId, uid);
+  return tier === "owner" || tier === "manager";
+}
+
+export async function assertHouseMoneyStaff(
+  uid: string,
+  houseId: string,
+  house: HouseAdminFields,
+  message = "Only house admins can perform this action",
+): Promise<void> {
+  if (!(await isHouseMoneyStaff(uid, houseId, house))) {
     throw new HttpsError("permission-denied", message);
   }
 }

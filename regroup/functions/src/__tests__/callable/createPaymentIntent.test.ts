@@ -51,6 +51,12 @@ jest.mock("../../util/stripe", () => ({
 //   Second call → guest doc (only for non-admin paths)
 const mockGet = jest.fn();
 
+// No house-roles record for any caller here: only the resident or the house's
+// owner fields authorize, as before.
+jest.mock("../../util/houseRoleStore", () => ({
+  ...jest.requireActual("../../util/houseRoleStore"),
+  readRoleTier: jest.fn(() => Promise.resolve(null)),
+}));
 jest.mock("firebase-admin", () => ({
   firestore: Object.assign(
     jest.fn(() => ({
