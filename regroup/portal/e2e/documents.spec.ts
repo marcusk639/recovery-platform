@@ -1,5 +1,10 @@
 import type { Page } from '@playwright/test';
-import { admin, expect, reseed, signInAs, test } from './helpers';
+import { getStorage } from 'firebase-admin/storage';
+import { admin, expect, reseed, revokeClaimsAndRefresh, signInAs, test } from './helpers';
+
+process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:19199';
+const stored = async (path: string) =>
+  (await getStorage().bucket('demo-regroup-e2e.appspot.com').file(path).exists())[0];
 
 const documents = async () => admin().collection('documents').where('houseId', '==', 'test-house-123').get();
 
@@ -99,4 +104,47 @@ test('choosing no category uploads nothing', async ({ page }) => {
   await expect(page.getByRole('alertdialog')).toHaveCount(0);
   expect(uploads).toEqual([]);
   expect((await documents()).size).toBe(0);
+});
+
+// Uploads through the phone's flow and returns the record it made.
+async function uploadLease(page: Page): Promise<{ id: string; storagePath: string }> {
+  await open(page);
+  await pickLease(page);
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Lease Agreement' }).click();
+  await expect.poll(async () => (await documents()).size, { timeout: 15_000 }).toBe(1);
+  const record = (await documents()).docs[0];
+  const uploaded = { id: record.id, storagePath: record.data().storagePath as string };
+  expect(await stored(uploaded.storagePath)).toBe(true);
+  await expect(page.getByTestId(`document-row-${uploaded.id}`)).toBeVisible({ timeout: 15_000 });
+  return uploaded;
+}
+
+const askToDelete = (page: Page, id: string) => page.getByTestId(`document-delete-${id}`).click();
+
+test('deleting a document removes its record and its file', async ({ page }) => {
+  const { id, storagePath } = await uploadLease(page);
+  await askToDelete(page, id);
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  await expect.poll(async () => (await documents()).size, { timeout: 15_000 }).toBe(0);
+  await expect.poll(() => stored(storagePath), { timeout: 15_000 }).toBe(false);
+  await expect(page.getByTestId(`document-row-${id}`)).toHaveCount(0);
+});
+
+test('a refused delete removes neither', async ({ page }) => {
+  const { id, storagePath } = await uploadLease(page);
+  await revokeClaimsAndRefresh(page, 'manager');
+  await askToDelete(page, id);
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Delete' }).click();
+  await expect(page.getByRole('alertdialog')).toContainText('Could not delete the document.', { timeout: 15_000 });
+  expect((await documents()).size).toBe(1);
+  expect(await stored(storagePath)).toBe(true);
+});
+
+test('cancelling delete keeps it', async ({ page }) => {
+  const { id, storagePath } = await uploadLease(page);
+  await askToDelete(page, id);
+  await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  expect((await documents()).size).toBe(1);
+  expect(await stored(storagePath)).toBe(true);
 });
