@@ -116,7 +116,7 @@ test('home counts one fewer application waiting after a review', async ({ page }
   await expect(page.getByRole('row', { name: /E2E Test House/ }).getByRole('cell').nth(4)).toHaveText('0');
 });
 
-test.fail('double-submitting intake admits one resident (phone bug: no duplicate guard)', async ({ page }) => {
+test('double-submitting intake admits one resident (#217)', async ({ page }) => {
   await approveIntoIntake(page);
   await fillIntake(page, 'twice@rats-e2e.invalid');
   await page.getByTestId('intake-submit-button').dblclick();
