@@ -6,49 +6,43 @@ import { getTier, tierForPriceId } from "../util/tierPricing";
 /**
  * A plan change in Stripe's billing portal reaches the app only as
  * customer.subscription.updated, so the operator's tier and its limits follow
- * the subscription's price here. Only the operator's current subscription
- * counts: an event for an older one must not overwrite the plan they have now.
+ * the subscription's price here.
+ * - The subscription is read fresh from Stripe, so a late or retried older
+ *   event can't put back the plan the operator left.
+ * - Only the operator's current subscription counts.
+ * - A price in the other catalog (traditional vs Oxford) changes nothing: the
+ *   houses' houseType and oxfordEnabled must change with it, and only
+ *   setOxfordEnabled writes those together.
  */
 export async function syncOperatorTier(
+  stripe: Stripe,
   operatorUid: string,
-  subscription: Stripe.Subscription,
+  subscriptionId: string,
 ): Promise<void> {
-  const priceId = subscription.items.data[0]?.price?.id ?? "";
-  const plan = tierForPriceId(priceId);
-  if (!plan) {
-    logger.info("syncOperatorTier: price matches no tier; tier unchanged", {
-      subscriptionId: subscription.id,
-      priceId,
-    });
-    return;
-  }
-  const { maxResidents, maxProperties } = getTier(plan.houseType, plan.tier);
+  const fresh = await stripe.subscriptions.retrieve(subscriptionId);
   const db = admin.firestore();
   const ref = db.collection("users").doc(operatorUid);
-  const updated = await db.runTransaction(async (tx) => {
+  const outcome = await db.runTransaction(async (tx) => {
     const meta = (await tx.get(ref)).data()?.subscriptionMetadata;
-    if (meta?.subscriptionId !== subscription.id) return false;
+    if (meta?.subscriptionId !== subscriptionId) return "other subscription";
+    const item =
+      fresh.items.data.find((i) => i.id === meta.subscriptionItemId) ?? fresh.items.data[0];
+    const plan = tierForPriceId(item?.price?.id ?? "");
+    if (!plan) return "price matches no tier";
+    if (plan.houseType !== meta.houseType) return "price is in the other catalog";
+    const { maxResidents, maxProperties } = getTier(plan.houseType, plan.tier);
     tx.update(ref, {
-      "subscriptionMetadata.houseType": plan.houseType,
       "subscriptionMetadata.tier": plan.tier,
       "subscriptionMetadata.billingInterval": plan.billingInterval,
-      // As tier checkout sets it: a tier subscription is Oxford iff its catalog is.
-      "subscriptionMetadata.oxfordEnabled": plan.houseType === "oxford",
       "subscriptionMetadata.maxResidents": maxResidents,
       "subscriptionMetadata.maxProperties": maxProperties,
     });
-    return true;
+    return "updated";
   });
-  if (updated) {
-    logger.info("syncOperatorTier: operator tier follows the subscription", {
-      operatorUid,
-      subscriptionId: subscription.id,
-      tier: plan.tier,
-    });
+  const fields = { operatorUid, subscriptionId, outcome };
+  if (outcome === "updated" || outcome === "price matches no tier") {
+    logger.info("syncOperatorTier", fields);
   } else {
-    logger.warn("syncOperatorTier: event is not for the operator's current subscription", {
-      operatorUid,
-      subscriptionId: subscription.id,
-    });
+    logger.warn("syncOperatorTier: tier unchanged", fields);
   }
 }

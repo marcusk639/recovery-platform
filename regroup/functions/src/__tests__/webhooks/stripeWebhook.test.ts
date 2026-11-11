@@ -278,6 +278,7 @@ beforeEach(() => {
         get: jest.fn().mockResolvedValue({
           exists: false,
           get: (_field: string) => undefined,
+          data: () => undefined,
         }),
         set: jest.fn(),
         // A real Firestore transaction has update(). Omitting it made the
@@ -311,6 +312,7 @@ beforeEach(() => {
   mockSubscriptionsRetrieve.mockResolvedValue({
     id: "sub_default",
     metadata: {},
+    items: { data: [] },
   });
 
   // A test-mode deployment with all four signing secrets bound — what both
@@ -1879,6 +1881,7 @@ function wireHousesForOperator(
   houseId: string,
   houseDocRef: { update: jest.Mock; set: jest.Mock },
   houseData: Record<string, unknown> = createdHouse(operatorUid),
+  operatorMeta?: Record<string, unknown>,
 ) {
   const houseDoc = { id: houseId, data: () => houseData, ref: houseDocRef };
   const matches = (field: string, op: string, value: unknown) => {
@@ -1936,6 +1939,16 @@ function wireHousesForOperator(
           get: mockDocGet,
           update: mockDocUpdate,
           set: mockDocSet,
+        }),
+      };
+    }
+    if (col === "users" && operatorMeta) {
+      const snap = { exists: true, data: () => ({ subscriptionMetadata: operatorMeta }) };
+      // isOperatorDoc lets a test's transaction mock answer for this doc only.
+      return {
+        doc: jest.fn().mockReturnValue({
+          isOperatorDoc: true,
+          get: jest.fn().mockResolvedValue(snap),
         }),
       };
     }
@@ -2157,6 +2170,98 @@ describe("B8 — house.subscriptionStatus propagation", () => {
       expect.objectContaining({
         subscriptionStatus: "past_due",
         guestGraceEndsAt: expect.any(String),
+      }),
+    );
+  });
+
+  it("an event for a subscription the operator has since replaced leaves the houses alone", async () => {
+    const operatorUid = "uid_b8_stale";
+    const houseRef = { update: jest.fn(), set: jest.fn() };
+
+    mockConstructEvent.mockReturnValue({
+      id: "evt_b8_stale_deleted",
+      type: "customer.subscription.deleted",
+      account: undefined,
+      data: {
+        object: {
+          id: "sub_old",
+          canceled_at: Math.floor(Date.now() / 1000) - 100,
+          status: "canceled",
+          items: { data: [] },
+          metadata: { userId: operatorUid },
+        },
+      },
+    });
+
+    mockCollectionFn.mockImplementation(
+      wireHousesForOperator(operatorUid, "house_b8_stale", houseRef, undefined, {
+        subscriptionId: "sub_current",
+      }),
+    );
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+  });
+
+  it("customer.subscription.updated moves the operator to the tier Stripe now has", async () => {
+    const operatorUid = "uid_b8_tier";
+    const houseRef = { update: jest.fn(), set: jest.fn() };
+    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_b8_pro";
+    const operatorMeta = {
+      subscriptionId: "sub_b8",
+      subscriptionItemId: "si_b8",
+      houseType: "traditional",
+      tier: "starter",
+    };
+    const txUpdate = jest.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: any) => any) =>
+      fn({
+        // The event claim reads its own doc and must find nothing.
+        get: jest.fn().mockImplementation(async (ref: any) =>
+          ref?.isOperatorDoc
+            ? ref.get()
+            : { exists: false, get: () => undefined, data: () => undefined },
+        ),
+        set: jest.fn(),
+        update: txUpdate,
+      }),
+    );
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_b8",
+      metadata: { userId: operatorUid },
+      items: { data: [{ id: "si_b8", price: { id: "price_b8_pro" } }] },
+    });
+    mockConstructEvent.mockReturnValue({
+      id: "evt_b8_tier",
+      type: "customer.subscription.updated",
+      account: undefined,
+      data: {
+        object: {
+          id: "sub_b8",
+          status: "active",
+          billing_cycle_anchor: Math.floor(Date.now() / 1000),
+          items: { data: [{ id: "si_b8", price: { id: "price_b8_pro" } }] },
+          metadata: { userId: operatorUid },
+        },
+      },
+    });
+    mockCollectionFn.mockImplementation(
+      wireHousesForOperator(operatorUid, "house_b8_tier", houseRef, undefined, operatorMeta),
+    );
+
+    try {
+      await (stripeWebhook as any)(makeReq(), makeRes());
+    } finally {
+      delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
+    }
+
+    expect(mockSubscriptionsRetrieve).toHaveBeenCalledWith("sub_b8");
+    expect(txUpdate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        "subscriptionMetadata.tier": "professional",
+        "subscriptionMetadata.maxResidents": 20,
       }),
     );
   });

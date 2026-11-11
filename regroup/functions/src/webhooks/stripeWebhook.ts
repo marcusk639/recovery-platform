@@ -238,10 +238,26 @@ type HouseSubscriptionStatus =
 
 async function updateHouseSubscriptionStatus(
   operatorUid: string,
+  subscriptionId: string,
   status: HouseSubscriptionStatus,
   guestGraceEndsAt?: string | admin.firestore.FieldValue,
 ): Promise<void> {
   const db = admin.firestore();
+
+  // An older subscription (one replaced at re-subscribe, or an orphan from a
+  // retried checkout) must not set the status of the houses the current one pays for.
+  const operatorSnap = await db.collection("users").doc(operatorUid).get();
+  const currentId = operatorSnap.exists
+    ? operatorSnap.data()?.subscriptionMetadata?.subscriptionId
+    : undefined;
+  if (typeof currentId === "string" && currentId !== "" && currentId !== subscriptionId) {
+    logger.warn("updateHouseSubscriptionStatus: not the operator's current subscription; houses unchanged", {
+      operatorUid,
+      subscriptionId,
+      status,
+    });
+    return;
+  }
 
   // createHouses stores the operator's uid in ownerId; its adminIds hold an
   // admin-record id, not the uid. Older houses have the uid in adminIds or
@@ -944,6 +960,7 @@ async function handleInvoicePaymentSucceeded(
     if (operatorUid) {
       await updateHouseSubscriptionStatus(
         operatorUid,
+        stripeSubscriptionId,
         "active",
         admin.firestore.FieldValue.delete(),
       );
@@ -1028,6 +1045,7 @@ async function handleInvoicePaymentFailed(
     ).toISOString();
     await updateHouseSubscriptionStatus(
       subData.userId,
+      stripeSubscriptionId,
       newStatus as HouseSubscriptionStatus,
       graceEndsAt,
     );
@@ -1084,7 +1102,7 @@ async function handleSubscriptionDeleted(
   // B10: propagate canceled status to all operator houses.
   const operatorUid = await resolveOperatorUid(subscription);
   if (operatorUid) {
-    await updateHouseSubscriptionStatus(operatorUid, "canceled");
+    await updateHouseSubscriptionStatus(operatorUid, subscription.id, "canceled");
   } else {
     logger.warn(
       "customer.subscription.deleted: could not resolve operator uid for house update",
@@ -1103,6 +1121,7 @@ async function handleSubscriptionDeleted(
 
 async function handleSubscriptionUpdated(
   subscription: Stripe.Subscription,
+  stripeClient: Stripe,
 ): Promise<void> {
   const db = admin.firestore();
   const subSnap = await db
@@ -1158,9 +1177,10 @@ async function handleSubscriptionUpdated(
   if (operatorUid) {
     await updateHouseSubscriptionStatus(
       operatorUid,
+      subscription.id,
       newStatus as HouseSubscriptionStatus,
     );
-    await syncOperatorTier(operatorUid, subscription);
+    await syncOperatorTier(stripeClient, operatorUid, subscription.id);
   } else {
     logger.warn(
       "customer.subscription.updated: could not resolve operator uid for house update",
@@ -1660,6 +1680,7 @@ export const stripeWebhook = onRequest(
         case "customer.subscription.updated":
           await handleSubscriptionUpdated(
             event.data.object as Stripe.Subscription,
+            getStripe(),
           );
           break;
 
