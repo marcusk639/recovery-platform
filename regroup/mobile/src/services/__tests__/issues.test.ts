@@ -197,13 +197,15 @@ describe("issues service", () => {
   // ── removeIssue ───────────────────────────────────────────────────────────
 
   describe("removeIssue", () => {
-    it("commits the batch", async () => {
+    it("writes the house's issues without the removed one", async () => {
       const issue = makeIssue();
       const house = makeHouseWithIssue(issue);
 
       await removeIssue(house, issue);
 
-      expect(getBatch().commit).toHaveBeenCalledTimes(1);
+      expect(getHouseDocRef().update).toHaveBeenCalledWith({ issues: {} });
+      const [payload] = getHouseDocRef().update.mock.calls[0];
+      expect(payload).not.toHaveProperty("id");
     });
 
     it("removes the issue from house.issues in the returned house", async () => {
@@ -215,32 +217,24 @@ describe("issues service", () => {
       expect(result.issues).not.toHaveProperty("issue1");
     });
 
-    it("calls batch.delete on the issues collection doc instead of rewriting it", async () => {
-      // Hardened 2026-07-05: this previously called batch.set(ref, issue),
-      // which rewrote the same issue doc back instead of deleting it — the
-      // standalone collection doc persisted untouched (orphaned-record bug).
+    it("deletes an older build's issues/{id} record, never rewriting it", async () => {
       const issue = makeIssue();
       const house = makeHouseWithIssue(issue);
 
       await removeIssue(house, issue);
 
-      expect(getBatch().delete).toHaveBeenCalledWith(getIssueDocRef());
-      expect(getBatch().set).not.toHaveBeenCalled();
+      expect(getIssueDocRef().delete).toHaveBeenCalledTimes(1);
+      expect(getIssueDocRef().set).not.toHaveBeenCalled();
     });
 
-    it("calls batch.update on the houses collection doc scoped to just the issues field", async () => {
-      // Hardened 2026-07-05: this previously blind-wrote the entire client
-      // house snapshot, risking clobbering concurrent edits from other admins.
+    it("succeeds when the rules refuse deleting a record that doesn't exist", async () => {
+      getIssueDocRef().delete.mockRejectedValueOnce(
+        Object.assign(new Error("denied"), { code: "firestore/permission-denied" })
+      );
       const issue = makeIssue();
       const house = makeHouseWithIssue(issue);
 
-      await removeIssue(house, issue);
-
-      expect(getBatch().update).toHaveBeenCalledWith(getHouseDocRef(), {
-        issues: {},
-      });
-      const [, payload] = getBatch().update.mock.calls[0];
-      expect(payload).not.toHaveProperty("id");
+      await expect(removeIssue(house, issue)).resolves.toMatchObject({ id: "house1" });
     });
 
     it("returns the updated house object with correct id", async () => {
@@ -262,12 +256,13 @@ describe("issues service", () => {
       expect(house.issues).toEqual(originalIssues);
     });
 
-    it("propagates errors from batch.commit", async () => {
-      getBatch().commit.mockRejectedValue(new Error("Batch failed"));
+    it("propagates errors from the house update", async () => {
+      getHouseDocRef().update.mockRejectedValueOnce(new Error("Update failed"));
       const issue = makeIssue();
       const house = makeHouseWithIssue(issue);
 
-      await expect(removeIssue(house, issue)).rejects.toThrow("Batch failed");
+      await expect(removeIssue(house, issue)).rejects.toThrow("Update failed");
+      expect(getIssueDocRef().delete).not.toHaveBeenCalled();
     });
   });
 
@@ -384,6 +379,36 @@ describe("issues service", () => {
       await expect(
         updateIssueStatus(house, "issue1", IssueStatus.RESOLVED)
       ).rejects.toThrow("Update failed");
+    });
+  });
+
+  // ── updateIssueStatus touches only the house ─────────────────────────────
+  // Residents add issues only to the house map; issues/{id} usually doesn't
+  // exist, and the rules refuse reading a missing one.
+
+  describe("updateIssueStatus touches only the house", () => {
+    it("never reads issues/{id}", async () => {
+      await updateIssueStatus(makeHouseWithIssue(makeIssue()), "issue1", IssueStatus.RESOLVED, "Done");
+      expect(getIssueDocRef().get).not.toHaveBeenCalled();
+    });
+
+    it("never writes issues/{id}", async () => {
+      await updateIssueStatus(makeHouseWithIssue(makeIssue()), "issue1", IssueStatus.DISMISSED, "Dup");
+      expect(getIssueDocRef().update).not.toHaveBeenCalled();
+      expect(getIssueDocRef().set).not.toHaveBeenCalled();
+      expect(getBatch().commit).not.toHaveBeenCalled();
+    });
+
+    it("makes exactly one write, to the house", async () => {
+      await updateIssueStatus(makeHouseWithIssue(makeIssue()), "issue1", IssueStatus.RESOLVED);
+      expect(getHouseDocRef().update).toHaveBeenCalledTimes(1);
+    });
+
+    it("records a dismissal as invalid in the house entry", async () => {
+      await updateIssueStatus(makeHouseWithIssue(makeIssue()), "issue1", IssueStatus.DISMISSED, "Dup");
+      expect(getHouseDocRef().update).toHaveBeenCalledWith({
+        issues: { issue1: expect.objectContaining({ status: IssueStatus.DISMISSED, invalid: true, resolution: "Dup" }) },
+      });
     });
   });
 
