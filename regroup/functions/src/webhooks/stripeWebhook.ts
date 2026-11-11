@@ -242,20 +242,18 @@ async function updateHouseSubscriptionStatus(
 ): Promise<void> {
   const db = admin.firestore();
 
-  // Query houses by adminIds (preferred) — a single array-contains query.
-  // If the operator is only in the legacy adminId field, a second query picks them up.
-  const [byAdminIds, byAdminId] = await Promise.all([
-    db
-      .collection("houses")
-      .where("adminIds", "array-contains", operatorUid)
-      .get(),
-    db.collection("houses").where("adminId", "==", operatorUid).get(),
+  // createHouses stores the operator's uid in ownerId; its adminIds hold an
+  // admin-record id, not the uid. Older houses have the uid in adminIds or
+  // adminId instead, so those lookups stay.
+  const houses = db.collection("houses");
+  const snaps = await Promise.all([
+    houses.where("ownerId", "==", operatorUid).get(),
+    houses.where("adminIds", "array-contains", operatorUid).get(),
+    houses.where("adminId", "==", operatorUid).get(),
   ]);
 
-  // Deduplicate by document ID
   const docMap = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
-  byAdminIds.docs.forEach((d) => docMap.set(d.id, d));
-  byAdminId.docs.forEach((d) => docMap.set(d.id, d));
+  snaps.forEach((snap) => snap.docs.forEach((d) => docMap.set(d.id, d)));
 
   if (docMap.size === 0) {
     logger.warn("updateHouseSubscriptionStatus: no houses found for operator", {

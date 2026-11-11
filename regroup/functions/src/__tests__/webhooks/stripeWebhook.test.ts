@@ -1861,33 +1861,47 @@ describe("handleStripeConnectWebhook", () => {
 // ===========================================================================
 
 // Builds a mockCollectionFn implementation that returns:
-//   - houses: one doc owned by operatorUid (matched by adminIds array-contains)
+//   - houses: one doc, found only by a query its fields really match
 //   - subscriptions: one doc linking stripeSubscriptionId → houseId + userId
 //   - everything else: empty
+// The house defaults to the shape createHouses writes: the operator's uid in
+// ownerId/superAdminId, and an admin-record id (not the uid) in adminIds.
+const createdHouse = (operatorUid: string) => ({
+  subscriptionStatus: "active",
+  ownerId: operatorUid,
+  superAdminId: operatorUid,
+  adminIds: ["admin_record_1"],
+  superAdminIds: ["admin_record_1"],
+});
+
 function wireHousesForOperator(
   operatorUid: string,
   houseId: string,
   houseDocRef: { update: jest.Mock; set: jest.Mock },
+  houseData: Record<string, unknown> = createdHouse(operatorUid),
 ) {
-  const houseDoc = {
-    id: houseId,
-    data: () => ({ subscriptionStatus: "active", adminIds: [operatorUid] }),
-    ref: houseDocRef,
+  const houseDoc = { id: houseId, data: () => houseData, ref: houseDocRef };
+  const matches = (field: string, op: string, value: unknown) => {
+    const v = houseData[field];
+    if (op === "==") return v === value;
+    if (op === "array-contains") return Array.isArray(v) && v.includes(value);
+    throw new Error(`unexpected houses query operator ${op}`);
   };
 
   return (col: string) => {
     if (col === "houses") {
       return {
-        // where(field, op, value) — returns house doc for adminIds query, empty for adminId query
-        where: jest.fn().mockImplementation((field: string) => ({
-          get: jest
-            .fn()
-            .mockResolvedValue(
-              field === "adminIds"
-                ? { empty: false, docs: [houseDoc] }
-                : { empty: true, docs: [] },
-            ),
-        })),
+        where: jest
+          .fn()
+          .mockImplementation((field: string, op: string, value: unknown) => ({
+            get: jest
+              .fn()
+              .mockResolvedValue(
+                matches(field, op, value)
+                  ? { empty: false, docs: [houseDoc] }
+                  : { empty: true, docs: [] },
+              ),
+          })),
         doc: jest.fn().mockReturnValue({
           get: jest.fn().mockResolvedValue({ exists: false }),
           update: jest.fn(),
@@ -1981,6 +1995,55 @@ describe("B8 — house.subscriptionStatus propagation", () => {
 
     mockCollectionFn.mockImplementation(
       wireHousesForOperator(operatorUid, houseId, houseRef),
+    );
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchCommit).toHaveBeenCalledTimes(1);
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "active" }),
+    );
+  });
+
+  it("a legacy house with the operator uid in adminIds is still updated", async () => {
+    const operatorUid = "uid_b8_legacy";
+    const houseId = "house_b8_legacy";
+    const houseRef = { update: jest.fn(), set: jest.fn() };
+
+    // resolveOperatorUid fast path: userId in Stripe subscription metadata
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_b8",
+      metadata: { userId: operatorUid },
+    });
+
+    mockConstructEvent.mockReturnValue({
+      id: "evt_b8_invoice_legacy",
+      type: "invoice.payment_succeeded",
+      account: undefined,
+      data: {
+        object: {
+          id: "in_b8_1",
+          attempt_count: 1,
+          next_payment_attempt: null,
+          parent: {
+            type: "subscription_details",
+            subscription_details: { subscription: "sub_b8" },
+          },
+          lines: {
+            data: [
+              { period: { end: Math.floor(Date.now() / 1000) + 2592000 } },
+            ],
+          },
+        },
+      },
+    });
+
+    mockCollectionFn.mockImplementation(
+      wireHousesForOperator(operatorUid, houseId, houseRef, {
+        subscriptionStatus: "active",
+        adminIds: [operatorUid],
+      }),
     );
 
     await (stripeWebhook as any)(makeReq(), makeRes());
