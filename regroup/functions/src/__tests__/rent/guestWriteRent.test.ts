@@ -234,3 +234,15 @@ it.each([
   expect(charges()).toEqual([]);
   expect(owed()).toBe(0);
 });
+
+// Before the backfill: once a held pair is linked, the intake record's moveInDate carries
+// across only if the new record has none, and a backfilled one would anchor the resident
+// at the invite record's creation day, so the days between were never billed.
+it('a held new record is left without a backfilled moveInDate', async () => {
+  house();
+  invitedAs('u1', 'pat@example.com');
+  mem.seed('guests/gIntake0', { houseId: H, status: 'active', userId: '', email: 'pat@example.com', createdBy: 'u1' });
+  guest({ email: 'pat@example.com', moveInDate: undefined });
+  await expect(rentOnGuestWrite(created(at('2026-11-18')))).resolves.toBe('none');
+  expect(g().moveInDate).toBeUndefined();
+});

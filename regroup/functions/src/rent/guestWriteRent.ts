@@ -89,9 +89,8 @@ export async function rentOnGuestWrite(e: GuestRentEvent): Promise<'none' | Char
   if (isCreate) {
     // Before the backfill, so a linked intake record's moveInDate wins over createTime.
     const link = await linkIntakeRecord(guestId, after);
-    if (!after.moveInDate && typeof e.afterCreateTimeMs === 'number') {
-      await backfillMoveInDate(guestId, e.afterCreateTimeMs);
-    }
+    // Before the backfill: once the pair is linked, the intake record's moveInDate carries
+    // across only if this record has none.
     if (linkHeld(link)) {
       logger.error('rentOnGuestWrite: matches a record it could not link; not charged until a manager resolves it', {
         guestId,
@@ -99,6 +98,9 @@ export async function rentOnGuestWrite(e: GuestRentEvent): Promise<'none' | Char
         link,
       });
       return 'none';
+    }
+    if (!after.moveInDate && typeof e.afterCreateTimeMs === 'number') {
+      await backfillMoveInDate(guestId, e.afterCreateTimeMs);
     }
   } else if (houseId) {
     const at = new Date(e.eventTime);
