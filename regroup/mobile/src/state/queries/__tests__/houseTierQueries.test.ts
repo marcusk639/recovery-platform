@@ -5,9 +5,9 @@
  * an edit the rules will refuse.
  */
 import React from 'react';
-import { renderHook, waitFor } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useMayEditRentMoney } from '../houseTierQueries';
+import { houseTierKeys, useMayEditRentMoney } from '../houseTierQueries';
 import { getMyHouseTiers } from '../../../services/houseTiers';
 
 jest.mock('../../../services/houseTiers', () => ({
@@ -22,7 +22,16 @@ function renderFor(houseId: string) {
   });
   const wrapper = ({ children }: { children: React.ReactNode }) =>
     React.createElement(QueryClientProvider, { client: queryClient }, children);
-  return renderHook(() => useMayEditRentMoney(houseId), { wrapper });
+  const hook = renderHook(() => useMayEditRentMoney(houseId), { wrapper });
+  // Waits until the query has settled and the hook has re-rendered with its result, so
+  // a false can't just be the loading state's.
+  const settled = async () => {
+    await waitFor(() =>
+      expect(['success', 'error']).toContain(queryClient.getQueryState(houseTierKeys.mine)?.status),
+    );
+    await act(async () => {});
+  };
+  return { ...hook, settled };
 }
 
 describe('useMayEditRentMoney', () => {
@@ -43,8 +52,9 @@ describe('useMayEditRentMoney', () => {
 
   it('is false for a house the caller holds no staff claim in', async () => {
     mockGetMyHouseTiers.mockResolvedValue({ other: 'owner' });
-    const { result } = renderFor('h1');
+    const { result, settled } = renderFor('h1');
     await waitFor(() => expect(mockGetMyHouseTiers).toHaveBeenCalled());
+    await settled();
     expect(result.current).toBe(false);
   });
 
@@ -56,8 +66,9 @@ describe('useMayEditRentMoney', () => {
 
   it('is false when the tier lookup fails', async () => {
     mockGetMyHouseTiers.mockRejectedValue(new Error('offline'));
-    const { result } = renderFor('h1');
+    const { result, settled } = renderFor('h1');
     await waitFor(() => expect(mockGetMyHouseTiers).toHaveBeenCalled());
+    await settled();
     expect(result.current).toBe(false);
   });
 
