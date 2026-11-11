@@ -83,6 +83,14 @@ export const withSplash = <P extends object>(
     const authSubscriptionRef = useRef<(() => void) | null>(null);
     const onTokenRefreshListenerRef = useRef<(() => any) | null>(null);
     const linkSubscriptionRef = useRef<(() => void) | null>(null);
+    // The token handlers outlive the render that created them (the refresh
+    // listener is registered once at mount, before autoLogin sets the user),
+    // so they read the user and dispatch from here, never from a render's
+    // closure. That also keeps them stable, so the token is read once per user.
+    const latest = useRef({ userState, dispatch });
+    useEffect(() => {
+      latest.current = { userState, dispatch };
+    }, [userState, dispatch]);
 
     const initBackgroundMessageHandler = useCallback(() => {
       setBackgroundMessageHandler(getMessaging(), async (_message) => {
@@ -92,6 +100,41 @@ export const withSplash = <P extends object>(
         // (FCM data may contain PII).
       });
     }, []);
+
+    const updateTokenIfNecessary = useCallback(
+      async (fcmToken: string) => {
+        const { user, updating } = latest.current.userState;
+        const token = user?.messagingToken;
+        if (!user) {
+          return;
+        }
+        try {
+          // Hardened 2026-07-05: both branches were commented out with a
+          // stale "should be imported if available" note — updateUser was
+          // already a real, working thunk (used elsewhere in this file and
+          // across the app). No other write site for messagingToken exists
+          // anywhere, so push notifications could never reach any user.
+          if (!updating && (isNil(token) || !token.length)) {
+            await latest.current.dispatch(
+              updateUser({
+                user: user as User,
+                updates: { messagingToken: [fcmToken] },
+              }),
+            ).unwrap();
+          } else if (!updating && !token!.includes(fcmToken)) {
+            await latest.current.dispatch(
+              updateUser({
+                user: user as User,
+                updates: { messagingToken: [...token!, fcmToken] },
+              }),
+            ).unwrap();
+          }
+        } catch (error) {
+          logException(error, "Failed to persist messaging token");
+        }
+      },
+      [],
+    );
 
     const handleMessagingToken = useCallback(async () => {
       try {
@@ -111,11 +154,7 @@ export const withSplash = <P extends object>(
       } catch (error) {
         logException(error, "Splash - failed to request FCM permission");
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- matches the
-      // pre-existing pattern in this file (updateTokenIfNecessary is declared
-      // below and referencing it here would be a TDZ error at module-eval
-      // time); the callback body still calls the latest closed-over version.
-    }, []);
+    }, [updateTokenIfNecessary]);
 
     const listenToLink = useCallback(() => {
       linkSubscriptionRef.current = onLink((link: NativeDeepLink) => {
@@ -146,18 +185,18 @@ export const withSplash = <P extends object>(
     }, []);
 
     const registerMessageTokenListener = useCallback(() => {
-      const user = userState.user;
       onTokenRefreshListenerRef.current = onTokenRefresh(
         getMessaging(),
         async (fcmToken) => {
-          if (!user || userState.updating) {
+          const { user, updating } = latest.current.userState;
+          if (!user || updating) {
             return;
           }
           const _nextTokens = user.messagingToken
             ? [...user.messagingToken, fcmToken]
             : [fcmToken];
           try {
-            await dispatch(
+            await latest.current.dispatch(
               updateUser({
                 user: user as User,
                 updates: { messagingToken: _nextTokens },
@@ -168,7 +207,7 @@ export const withSplash = <P extends object>(
           }
         },
       );
-    }, [userState, dispatch]);
+    }, []);
 
     const anonymouslyLoginHandler = useCallback(async () => {
       try {
@@ -177,42 +216,6 @@ export const withSplash = <P extends object>(
         // do nothing
       }
     }, [dispatch]);
-
-    const updateTokenIfNecessary = useCallback(
-      async (fcmToken: string) => {
-        const user = userState.user;
-        const { updating } = userState;
-        const token = user?.messagingToken;
-        if (!user) {
-          return;
-        }
-        try {
-          // Hardened 2026-07-05: both branches were commented out with a
-          // stale "should be imported if available" note — updateUser was
-          // already a real, working thunk (used elsewhere in this file and
-          // across the app). No other write site for messagingToken exists
-          // anywhere, so push notifications could never reach any user.
-          if (!updating && (isNil(token) || !token.length)) {
-            await dispatch(
-              updateUser({
-                user: user as User,
-                updates: { messagingToken: [fcmToken] },
-              }),
-            ).unwrap();
-          } else if (!updating && !token!.includes(fcmToken)) {
-            await dispatch(
-              updateUser({
-                user: user as User,
-                updates: { messagingToken: [...token!, fcmToken] },
-              }),
-            ).unwrap();
-          }
-        } catch (error) {
-          logException(error, "Failed to persist messaging token");
-        }
-      },
-      [userState, dispatch],
-    );
 
     const checkSubscriptionStatus = useCallback(() => {
       const { user } = userState;
