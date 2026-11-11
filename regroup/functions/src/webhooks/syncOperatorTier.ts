@@ -11,8 +11,8 @@ import { getTier, tierForPriceId } from "../util/tierPricing";
  *   event can't put back the plan the operator left.
  * - Only the operator's current subscription counts.
  * - A price in the other catalog (traditional vs Oxford) changes nothing: the
- *   houses' houseType and oxfordEnabled must change with it, and only
- *   setOxfordEnabled writes those together.
+ *   houses' houseType and the operator's houseType and oxfordEnabled must
+ *   change with it, and only setOxfordEnabled writes those together.
  */
 export async function syncOperatorTier(
   stripe: Stripe,

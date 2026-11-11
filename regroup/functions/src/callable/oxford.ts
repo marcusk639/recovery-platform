@@ -128,6 +128,8 @@ export const setOxfordEnabled = onCall(
       });
       batch.update(userCollection.doc(operatorId), {
         "subscriptionMetadata.oxfordEnabled": enabled,
+        // syncOperatorTier reads the operator's catalog from this field.
+        "subscriptionMetadata.houseType": enabled ? "oxford" : "traditional",
         "subscriptionMetadata.lastUpdatedAt": new Date().toISOString(),
       });
       await batch.commit();

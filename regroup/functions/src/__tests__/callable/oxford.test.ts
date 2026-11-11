@@ -210,6 +210,26 @@ describe("setOxfordEnabled — happy paths", () => {
   });
 });
 
+describe("setOxfordEnabled — the operator's record follows the switch", () => {
+  it("writes the house type into subscriptionMetadata, as the house gets it", async () => {
+    mockGetHouse.mockResolvedValue(baseHouse);
+    mockGetUser.mockResolvedValue(baseUser);
+    mockSwapSubscriptionItemPrice.mockResolvedValue({});
+    mockBatchCommit.mockResolvedValue(undefined);
+
+    await call({ houseId: "house-1", enabled: true });
+
+    // syncOperatorTier compares the portal price's catalog with this field.
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      { id: "op-1" },
+      expect.objectContaining({
+        "subscriptionMetadata.oxfordEnabled": true,
+        "subscriptionMetadata.houseType": "oxford",
+      }),
+    );
+  });
+});
+
 describe("setOxfordEnabled — a tier the other catalog doesn't have", () => {
   it("refuses with failed-precondition and changes nothing in Stripe or Firestore", async () => {
     mockGetHouse.mockResolvedValue(baseHouse);
