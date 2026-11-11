@@ -526,4 +526,45 @@ describe('PaymentDashboard figures', () => {
     const row = await findByTestId('payment-row-p1');
     expect(within(row).getByText('Alice Smith')).toBeTruthy();
   });
+
+  it('marks a refunded payment as refunded, not succeeded (review)', async () => {
+    setupStore(residents);
+    mockGetHousePaymentRecords.mockResolvedValue([
+      { id: 'p7', guestId: 'g2', houseId: 'house1', amount: 10000, status: 'succeeded',
+        refundedAmountCents: 10000, createdAt: now, description: 'Rent' },
+    ]);
+    const { findByTestId } = renderDashboard();
+    const row = await findByTestId('payment-row-p7');
+    expect(within(row).getByText('REFUNDED')).toBeTruthy();
+    expect(within(row).queryByText('SUCCEEDED')).toBeNull();
+  });
+
+  it("lists the same residents as Outstanding in the Overdue card (review)", async () => {
+    setupStore({
+      ...residents,
+      g5: { id: 'g5', firstName: 'Eve', lastName: 'Fee', rentOwed: 0, choreFees: 2500, status: 'active' },
+    });
+    mockGetHousePaymentRecords.mockResolvedValue([]);
+    const { findByTestId } = renderDashboard();
+    const card = await findByTestId('overdue-residents-card');
+    expect(within(card).getByText(/Eve Fee/)).toBeTruthy();
+    expect(within(card).queryByText(/Dan Ray/)).toBeNull();
+  });
+
+  it("escapes names in the CSV so none can run as a formula (review)", async () => {
+    const { Share } = require('react-native');
+    const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
+    setupStore({ g1: { id: 'g1', firstName: '=HYPERLINK("x")', lastName: '', rentOwed: 0, status: 'active' } });
+    mockGetHousePaymentRecords.mockResolvedValue([
+      { id: 'p8', guestId: 'g1', houseId: 'house1', amount: 5000, status: 'succeeded',
+        refundedAmountCents: 2000, createdAt: now, description: 'Rent' },
+    ]);
+    const { findByTestId } = renderDashboard();
+    fireEvent.press(await findByTestId('csv-export-button'));
+    await waitFor(() => expect(share).toHaveBeenCalled());
+    const [header, row] = (share.mock.calls[0][0] as any).message.split('\n');
+    expect(header).toBe('Date,Guest Name,Amount,Refunded,Status,Type');
+    expect(row).toContain(`"'=HYPERLINK(""x"")"`);
+    expect(row).toContain(',50.00,20.00,');
+  });
 });

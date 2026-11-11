@@ -54,6 +54,8 @@ export interface RentPayment {
   refundedAmountCents?: number;
   /** Set when a dispute opens. `status` stays "succeeded". */
   disputed?: boolean;
+  /** Lower-case ISO code; usd unless the webhook quarantined the record. */
+  currency?: string;
 }
 
 /** Result returned by the 'createPaymentIntent' Cloud Function. */

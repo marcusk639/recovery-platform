@@ -110,3 +110,15 @@ describe('exportEESHistoryCSV', () => {
     expect(csv.trim().split('\n')).toHaveLength(1);
   });
 });
+
+describe('exportPaymentHistoryCSV safety (review)', () => {
+  it('stops a description from running as a formula', () => {
+    const csv = exportPaymentHistoryCSV([makePayment({ description: '=cmd' } as any)], {});
+    expect(csv.split('\n')[1]).toContain("'=cmd");
+  });
+
+  it('leaves the amount empty for a record with no dollar amount', () => {
+    const csv = exportPaymentHistoryCSV([makePayment({ amount: 900, currency: 'eur' } as any)], {});
+    expect(csv.split('\n')[1].split(',')[2]).toBe('');
+  });
+});

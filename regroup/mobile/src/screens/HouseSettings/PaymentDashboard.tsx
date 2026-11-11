@@ -57,7 +57,14 @@ import {
   MAX_PAYMENT_CENTS,
 } from "../../services/payments";
 import { parseDollarsField, netPaidCents } from "../../util/money";
-import { recordAmountCsv, recordAmountLabel } from "../../util/paymentDisplay";
+import {
+  csvCell,
+  isCurrentResident,
+  owedNowCents,
+  recordAmountCsv,
+  recordAmountLabel,
+} from "../../util/paymentDisplay";
+import { paymentDisplayStatus } from "../../util/paymentStatus";
 import { Guest } from "../../entities/Guest";
 import {
   color,
@@ -135,11 +142,13 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
   // across unrelated PaymentDashboard re-renders.
   const guestList = useMemo(() => Object.values(guests) as Guest[], [guests]);
 
+  // The same residents and amounts as Outstanding: current residents, rent
+  // plus chore fees (review).
   const overdueGuests = useMemo(
     () =>
       guestList
-        .filter((g) => (g.rentOwed ?? 0) > 0)
-        .sort((a, b) => (b.rentOwed ?? 0) - (a.rentOwed ?? 0)),
+        .filter((g) => isCurrentResident(g) && owedNowCents(g) > 0)
+        .sort((a, b) => owedNowCents(b) - owedNowCents(a)),
     [guestList],
   );
 
@@ -182,19 +191,22 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
   );
 
   const generateCSV = useCallback((): string => {
-    const header = "Date,Guest Name,Amount,Status,Type";
+    const header = "Date,Guest Name,Amount,Refunded,Status,Type";
     const rows = filteredPayments.map((p) => {
       const date = (() => {
         const d = toDateSafe(p.createdAt);
         return d ? format(d, "yyyy-MM-dd") : "Unknown";
       })();
-      const name = `"${guestName(p.guestId)}"`;
+      const name = csvCell(guestName(p.guestId));
       const amount = recordAmountCsv(p);
-      const status = p.status;
+      const refunded = p.refundedAmountCents
+        ? recordAmountCsv({ amount: p.refundedAmountCents, currency: p.currency })
+        : "";
+      const status = csvCell(paymentDisplayStatus(p).label);
       const type = (p.description ?? "").includes("Manual")
         ? "Manual"
         : "Stripe";
-      return `${date},${name},${amount},${status},${type}`;
+      return `${date},${name},${amount},${refunded},${status},${type}`;
     });
     return [header, ...rows].join("\n");
   }, [filteredPayments, guestName]);
@@ -223,11 +235,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
       0,
     );
     const outstanding = guestList
-      .filter((g) => g.status !== "discharged" && g.status !== "archived")
-      .reduce(
-        (sum, g) => sum + Math.max(0, (g.rentOwed ?? 0) + (g.choreFees ?? 0)),
-        0,
-      );
+      .filter(isCurrentResident)
+      .reduce((sum, g) => sum + owedNowCents(g), 0);
     const due = collected + outstanding;
     return {
       totalCollected: collected,
@@ -346,7 +355,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                 />
                 <RatsText
                   translate={false}
-                  text={`$${((guest.rentOwed ?? 0) / 100).toFixed(2)} owed`}
+                  text={`$${(owedNowCents(guest) / 100).toFixed(2)} owed`}
                   style={styles.overdueAmount}
                 />
               </View>
@@ -449,7 +458,9 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
           </View>
         ) : (
           filteredPayments.map((item) => {
-            const succeeded = item.status === "succeeded";
+            // Refunds and disputes show as such, as in Payment history (review).
+            const display = paymentDisplayStatus(item);
+            const succeeded = display.tone === "good";
             return (
               <View
                 key={item.id}
@@ -497,7 +508,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                     >
                       <RatsText
                         translate={false}
-                        text={item.status.toUpperCase()}
+                        text={display.label.toUpperCase()}
                         style={styles.statusText}
                       />
                     </View>
@@ -617,6 +628,10 @@ const ManualPaymentModal: React.FC<ManualPaymentModalProps> = ({
       // keeps showing as overdue until an unrelated refetch happens.
       queryClient.invalidateQueries({
         queryKey: guestKeys.list(houseId),
+      });
+      // The resident's record reads the detail query (review).
+      queryClient.invalidateQueries({
+        queryKey: guestKeys.detail(selectedGuestId),
       });
       setAmount("");
       setNotes("");

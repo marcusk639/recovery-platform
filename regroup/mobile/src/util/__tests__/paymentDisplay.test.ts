@@ -21,3 +21,36 @@ describe('recordAmountCsv', () => {
     expect(recordAmountCsv({ currency: 'eur' } as any)).toBe('');
   });
 });
+
+import { csvCell, isCurrentResident, owedNowCents } from '../paymentDisplay';
+
+// Residents set their own names, and staff open these files in Excel (review).
+describe('csvCell', () => {
+  it('leaves plain text alone', () => {
+    expect(csvCell('Test GuestA')).toBe('Test GuestA');
+  });
+
+  it('quotes commas, quotes and line breaks, doubling the quotes', () => {
+    expect(csvCell('Doe, Jane')).toBe('"Doe, Jane"');
+    expect(csvCell('Jane "JJ" Doe')).toBe('"Jane ""JJ"" Doe"');
+    expect(csvCell('a\nb')).toBe('"a\nb"');
+  });
+
+  it("stops a cell from running as a formula", () => {
+    expect(csvCell('=HYPERLINK("x")')).toBe(`"'=HYPERLINK(""x"")"`);
+    expect(csvCell('+1')).toBe("'+1");
+    expect(csvCell('-1')).toBe("'-1");
+    expect(csvCell('@SUM(A1)')).toBe("'@SUM(A1)");
+  });
+});
+
+describe('isCurrentResident and owedNowCents', () => {
+  it('leaves out residents who left, and adds chore fees to rent', () => {
+    expect(isCurrentResident({ status: 'active' })).toBe(true);
+    expect(isCurrentResident({})).toBe(true);
+    expect(isCurrentResident({ status: 'discharged' })).toBe(false);
+    expect(isCurrentResident({ status: 'archived' })).toBe(false);
+    expect(owedNowCents({ rentOwed: 15000, choreFees: 500 })).toBe(15500);
+    expect(owedNowCents({ rentOwed: -5000 })).toBe(0);
+  });
+});
