@@ -1,9 +1,12 @@
+import { EventEmitter } from 'events';
 import fs from 'fs';
 import path from 'path';
 import { MeetingGuideAccessError } from '../lib/meetings/meetingSync';
 import {
   ACCESS_EXIT_CODE,
+  UNFINISHED_EXIT_CODE,
   describeResult,
+  failIfUnfinished,
   parseSyncArgs,
   progressLine,
   readApiKey,
@@ -94,6 +97,52 @@ describe('reportFatal', () => {
     expect(code).toBe(1);
     expect(printed).toContain(boom);
     expect(printed.join('\n')).not.toMatch(/ACTION NEEDED/);
+  });
+});
+
+describe('failIfUnfinished', () => {
+  // Node exits with code 0 when nothing is left to wait on, even with the run unfinished. A
+  // run cut off while a Mac slept did exactly that: no summary, and an exit code saying success.
+  function setup(apply: boolean) {
+    const proc = Object.assign(new EventEmitter(), { exitCode: undefined as number | undefined });
+    const printed: unknown[] = [];
+    const finished = failIfUnfinished(proc, (...args) => printed.push(...args), apply);
+    return { proc, printed, finished };
+  }
+
+  it('turns an exit before the run finished into a failure', () => {
+    const { proc } = setup(false);
+    proc.emit('beforeExit', 0);
+    expect(proc.exitCode).toBe(UNFINISHED_EXIT_CODE);
+    expect(UNFINISHED_EXIT_CODE).not.toBe(0);
+    expect(UNFINISHED_EXIT_CODE).not.toBe(1);
+    expect(UNFINISHED_EXIT_CODE).not.toBe(ACCESS_EXIT_CODE);
+  });
+
+  it('says so in a dry run, and that nothing was written', () => {
+    const { proc, printed } = setup(false);
+    proc.emit('beforeExit', 0);
+    const output = printed.join('\n');
+    expect(output).toMatch(/MEETING GUIDE SYNC DID NOT FINISH/);
+    expect(output).toMatch(/Nothing was written/);
+  });
+
+  it('warns that an apply may have written part of its changes, and to run it again', () => {
+    const { proc, printed } = setup(true);
+    proc.emit('beforeExit', 0);
+    const output = printed.join('\n');
+    expect(output).toMatch(/MEETING GUIDE SYNC DID NOT FINISH/);
+    expect(output).toMatch(/may have written some of its changes/);
+    expect(output).toMatch(/Run it again/);
+    expect(output).not.toMatch(/Nothing was written/);
+  });
+
+  it('stays quiet once the run has finished', () => {
+    const { proc, printed, finished } = setup(true);
+    finished();
+    proc.emit('beforeExit', 0);
+    expect(proc.exitCode).toBeUndefined();
+    expect(printed).toEqual([]);
   });
 });
 
