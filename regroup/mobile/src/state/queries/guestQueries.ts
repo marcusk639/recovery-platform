@@ -122,7 +122,8 @@ export const useUpdateGuest = () => {
         previousGuests = queryClient.getQueryData<Guests>(
           guestKeys.list(updatedGuest.houseId),
         );
-        if (previousGuests) {
+        // Only a guest the list already holds: a partial entry would blank it there too.
+        if (previousGuests?.[id]) {
           queryClient.setQueryData(guestKeys.list(updatedGuest.houseId), {
             ...previousGuests,
             [id]: { ...previousGuests[id], ...updatedGuest } as Guest,

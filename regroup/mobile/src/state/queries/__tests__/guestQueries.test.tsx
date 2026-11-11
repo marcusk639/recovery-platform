@@ -241,6 +241,22 @@ describe('guestQueries', () => {
       });
     });
 
+    it("doesn't add a partial entry for a guest the cached list doesn't hold", async () => {
+      queryClient.setQueryData(['guests', 'list', 'house456'], { guest456: mockGuests.guest456 });
+      (guestService.updateGuest as jest.Mock).mockImplementation(() => new Promise(() => {}));
+
+      const { result } = renderHook(() => useUpdateGuest(), { wrapper });
+      result.current.mutate({
+        guest: mockGuest,
+        updatedGuest: { id: 'guest123', houseId: 'house456', firstName: 'Johnny' },
+      });
+
+      await waitFor(() =>
+        expect(queryClient.getQueryData<Guest>(['guests', 'detail', 'guest123'])?.firstName).toBe('Johnny'),
+      );
+      expect(queryClient.getQueryData(['guests', 'list', 'house456'])).toEqual({ guest456: mockGuests.guest456 });
+    });
+
     it('rolls the list back as well as the detail when the update fails', async () => {
       queryClient.setQueryData(['guests', 'detail', 'guest123'], mockGuest);
       queryClient.setQueryData(['guests', 'list', 'house456'], mockGuests);
