@@ -1,21 +1,10 @@
 import React from 'react';
-import {
-  View,
-  StyleSheet,
-  ViewStyle,
-  TextStyle,
-} from 'react-native';
+import { View, StyleSheet, ViewStyle, TextStyle } from 'react-native';
 import Modal, { ModalProps } from 'react-native-modal';
-import {
-  windowHeight,
-  normalize,
-  fontFamily,
-  fontSize,
-  color,
-} from '../../styles/theme';
+import { windowHeight, normalize, fontFamily, fontSize, color } from '../../styles/theme';
 import { RatsText } from '../rats-text';
 import { IOS } from '../../util/platform';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import IOSStatusBar from '../ios-status-bar';
 import { RatsKeyboardAvoidingView, RatsKeyboardToolbar } from '../rats-keyboard';
 
@@ -57,14 +46,17 @@ const RatsModal = (props: Props & ModalProps & ModalTitleProps) => {
     fullScreen,
   } = props;
   const VIEW_STYLE = [styles.modalContent, style];
+  const insets = useSafeAreaInsets();
   return (
     <Modal
       {...props}
       useNativeDriver={false}
       style={modalStyle}
       isVisible={isVisible}
-      onBackdropPress={onBackdropPress}>
-      {(fullScreen || showStatusBar) && IOS && (
+      onBackdropPress={onBackdropPress}
+    >
+      {/* Android too: edge-to-edge draws the Modal window under the status bar. */}
+      {(fullScreen || showStatusBar) && (
         <IOSStatusBar backgroundColor={color.black} barStyle="light-content" />
       )}
       {/* <SafeAreaView style={modalStyle} forceInset={{ top: 'never' }}> */}
@@ -72,9 +64,7 @@ const RatsModal = (props: Props & ModalProps & ModalTitleProps) => {
       {/* Both platforms: keyboard-controller sets every Modal window on
           Android to adjust-nothing, so adjustResize no longer lifts it. */}
       {useKeyboardView ? (
-        <RatsKeyboardAvoidingView
-          behavior={behavior || 'padding'}
-          style={VIEW_STYLE}>
+        <RatsKeyboardAvoidingView behavior={behavior || 'padding'} style={VIEW_STYLE}>
           {children}
         </RatsKeyboardAvoidingView>
       ) : (
@@ -82,9 +72,14 @@ const RatsModal = (props: Props & ModalProps & ModalTitleProps) => {
       )}
       {/* </SafeAreaView> */}
       {fullScreen && IOS && (
-        <SafeAreaView
-          edges={['top', 'bottom']}
-          style={{ backgroundColor: color.white }}
+        <SafeAreaView edges={['top', 'bottom']} style={{ backgroundColor: color.white }} />
+      )}
+      {/* Android: edge-to-edge also draws the window under the navigation bar.
+          The root inset, as IOSStatusBar uses: a SafeAreaView here measures 0. */}
+      {fullScreen && !IOS && (
+        <View
+          testID="rats-modal-bottom-inset"
+          style={{ height: insets.bottom, backgroundColor: color.white }}
         />
       )}
       {/* A native Modal covers the app-root toolbar. */}
@@ -113,7 +108,8 @@ export const RatsModalTitle = (props: ModalTitleProps) => {
           justifyContent: 'center',
         },
         containerStyle,
-      ]}>
+      ]}
+    >
       <RatsText
         text={title}
         style={[

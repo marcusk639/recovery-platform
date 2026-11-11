@@ -32,7 +32,7 @@ done
 [[ -n "$DEVICE" ]] || { echo "✗ --device <adb serial> is required" >&2; exit 2; }
 if [[ ${#SCREENS[@]} -eq 0 ]]; then
   SCREENS=(landing guest-home activities dispute-modal profile my-profile chat stat-summary
-    rent-payment manager-house house-settings payment-dashboard)
+    rent-payment manager-house house-settings payment-dashboard managers-modal)
 fi
 
 node maestro/scripts/e2e-build-guard.js --platform android --app-id "$APP_ID" --device "$DEVICE" || exit 2

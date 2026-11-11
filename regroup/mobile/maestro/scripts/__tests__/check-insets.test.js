@@ -81,4 +81,14 @@ describe('check-insets', () => {
     );
     expect(findOverlaps(tree, BARS)).toEqual([]);
   });
+
+  it("ignores a modal's full-window backdrop, but not a button inside the modal", () => {
+    const tree = screen(
+      node({ clickable: 'true', bounds: '[0,0][1080,2400]' }),
+      node({ text: 'SAVE', clickable: 'true', bounds: '[560,2201][1051,2344]' }),
+    );
+    expect(findOverlaps(tree, BARS)).toEqual([
+      expect.objectContaining({ bar: 'navigationBars', text: 'SAVE', px: 7 }),
+    ]);
+  });
 });

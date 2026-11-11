@@ -82,7 +82,6 @@ src/screens/DrugTesting/DrugTestHistory.tsx: TS2322: Type '{ renderBackButton: t
 src/screens/DrugTesting/DrugTestHistory.tsx: TS2322: Type '{ renderBackButton: true; title: string; }' is not assignable to type 'IntrinsicAttributes & Props & { children?: ReactNode; }'.
 src/screens/GuestImport/GuestImportScreen.tsx: TS2339: Property 'house' does not exist on type 'DataContextType'.
 src/screens/HouseConfig/HouseConfigFormView.tsx: TS2769: No overload matches this call.
-src/screens/HouseSettings/PaymentDashboard.tsx: TS2322: Type 'HousePaymentRecord[]' is not assignable to type 'RentPayment[]'.
 src/screens/HouseSettings/__tests__/ManagerSettings.test.tsx: TS2739: Type '{ houseIds: never[]; id: string; userId: string; firstName: string; lastName: string; superAdmin: string[]; }' is missing the following properties from type 'Admin': phoneNumber, uniqueAdminAttribute, email, createdAt, updatedAt
 src/screens/IntroHouseSummary/IntroHouseSummary.tsx: TS2305: Module '"../../../assets/index"' has no exported member 'houseImage'.
 src/screens/NewManager/NewManager.tsx: TS2322: Type 'AuthScreenNavigationProp' is not assignable to type 'CompositeNavigationProp<NativeStackNavigationProp<AuthStackParamList, Routes.Signup, undefined>, NativeStackNavigationProp<RootStackParamList, string, undefined>>'.

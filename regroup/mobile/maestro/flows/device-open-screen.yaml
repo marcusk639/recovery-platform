@@ -4,7 +4,8 @@
 # Not a standalone scenario: run it through a driver.
 # SCREEN: landing, guest-home, activities, dispute-modal, profile, my-profile,
 #         chat, stat-summary, rent-payment, manager-house, house-settings,
-#         payment-dashboard; guest-home-again (relaunch, still signed in, and
+#         payment-dashboard, managers-modal (House Settings > Managers: a
+#         full-screen form modal); guest-home-again (relaunch, still signed in, and
 #         open the guest tab: no sign-in)
 # Run: maestro/scripts/edge-to-edge.sh --device emulator-5554
 appId: ${APP_ID}
@@ -162,7 +163,7 @@ tags:
 # Operator screens: sign in as the manager.
 - runFlow:
     when:
-      true: ${['manager-house', 'house-settings', 'payment-dashboard'].includes(SCREEN)}
+      true: ${['manager-house', 'house-settings', 'payment-dashboard', 'managers-modal'].includes(SCREEN)}
     file: ../subflows/login.yaml
     env:
       EMAIL: test-manager@rats-e2e.com
@@ -177,13 +178,23 @@ tags:
           timeout: 30000
 - runFlow:
     when:
-      true: ${SCREEN === 'house-settings' || SCREEN === 'payment-dashboard'}
+      true: ${['house-settings', 'payment-dashboard', 'managers-modal'].includes(SCREEN)}
     commands:
       - tapOn:
           id: "house-settings-button"
       - extendedWaitUntil:
           visible:
             id: "house-settings-screen"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${SCREEN === 'managers-modal'}
+    commands:
+      - tapOn:
+          id: "managers-section"
+      - extendedWaitUntil:
+          visible:
+            id: "add-manager-button"
           timeout: 30000
 - runFlow:
     when:

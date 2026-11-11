@@ -55,10 +55,12 @@ function overlap(a, b) {
 /**
  * App views with text, or tappable, that overlap a bar by more than `slack` px.
  * Everything under a System UI view (the bars and their icons) is skipped; the
- * hierarchy carries no package name, so the subtree marks it.
+ * hierarchy carries no package name, so the subtree marks it. A text-less tap
+ * target covering every bar whole is a modal's backdrop, drawn there by design.
  */
 function findOverlaps(hierarchy, bars, slack = 4) {
   const out = [];
+  const coversAllBars = (b) => bars.every((bar) => overlap(b, bar) === bar.y2 - bar.y1);
   const walk = (n, inSystem) => {
     const a = (n && n.attributes) || {};
     const rid = a['resource-id'] || '';
@@ -66,11 +68,17 @@ function findOverlaps(hierarchy, bars, slack = 4) {
     const text = (a.text || a.accessibilityText || '').trim();
     const tappable = a.clickable === 'true' || a.clickable === true;
     const b = parseBounds(a.bounds);
-    if (!system && b && (text || tappable)) {
+    const backdrop = !text && tappable && b && coversAllBars(b);
+    if (!system && b && !backdrop && (text || tappable)) {
       for (const bar of bars) {
         const h = overlap(b, bar);
         if (h > slack) {
-          out.push({ bar: bar.type, text: text || `(${rid || 'tappable'})`, bounds: a.bounds, px: h });
+          out.push({
+            bar: bar.type,
+            text: text || `(${rid || 'tappable'})`,
+            bounds: a.bounds,
+            px: h,
+          });
         }
       }
     }
