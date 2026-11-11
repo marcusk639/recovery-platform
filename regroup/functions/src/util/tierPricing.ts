@@ -99,3 +99,7 @@ export const tierForPriceId = (
   }
   return null;
 };
+
+/** Whether a house type's catalog has this tier key (the two catalogs differ). */
+export const tierInCatalog = (houseType: HouseType, tier: TierKey): boolean =>
+  Object.prototype.hasOwnProperty.call(SUBSCRIPTION_TIERS[houseType] ?? {}, tier);

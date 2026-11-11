@@ -67,10 +67,15 @@ jest.mock("../../util/entitlement", () => ({
 }));
 
 const mockResolveTierPriceId = jest.fn();
+const mockTierInCatalog = jest.fn();
 
 jest.mock("../../util/tierPricing", () => {
   const actual = jest.requireActual("../../util/tierPricing");
-  return { ...actual, resolveTierPriceId: mockResolveTierPriceId };
+  return {
+    ...actual,
+    resolveTierPriceId: mockResolveTierPriceId,
+    tierInCatalog: mockTierInCatalog,
+  };
 });
 
 jest.mock("../../config", () => ({
@@ -109,6 +114,9 @@ beforeEach(() => {
     (houseType: string, tier: string, interval: string) =>
       `price_${houseType}_${tier}_${interval}`,
   );
+  // The swap below is for a tier both catalogs have. None does yet (#225); the
+  // refusal test and tierPricing.test.ts cover the real catalog.
+  mockTierInCatalog.mockReturnValue(true);
 });
 
 describe("setOxfordEnabled — auth guards", () => {
@@ -199,6 +207,21 @@ describe("setOxfordEnabled — happy paths", () => {
       "price_traditional_professional_month",
     );
     expect(result).toEqual({ success: true, changed: true });
+  });
+});
+
+describe("setOxfordEnabled — a tier the other catalog doesn't have", () => {
+  it("refuses with failed-precondition and changes nothing in Stripe or Firestore", async () => {
+    mockGetHouse.mockResolvedValue(baseHouse);
+    mockGetUser.mockResolvedValue(baseUser);
+    mockTierInCatalog.mockReturnValue(false);
+
+    await expect(call({ houseId: "house-1", enabled: true })).rejects.toMatchObject({
+      code: "failed-precondition",
+    });
+    expect(mockTierInCatalog).toHaveBeenCalledWith("oxford", "professional");
+    expect(mockSwapSubscriptionItemPrice).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
   });
 });
 

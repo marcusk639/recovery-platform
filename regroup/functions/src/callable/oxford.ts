@@ -6,7 +6,7 @@ import {
   swapSubscriptionItemPrice,
   getSubscriptionItemInterval,
 } from "../api/stripe";
-import { resolveTierPriceId } from "../util/tierPricing";
+import { resolveTierPriceId, tierInCatalog } from "../util/tierPricing";
 import { enforceHouseEntitlement } from "../util/entitlement";
 import {
   getHouse,
@@ -86,6 +86,17 @@ export const setOxfordEnabled = onCall(
     // a price swap on that item, resolved for the tier the operator is actually on.
     const subscriptionItemId = meta.subscriptionItemId;
     const tier = meta.tier as TierKey;
+    // The catalogs use different tier keys (starter/professional/enterprise vs
+    // standard/plus/network), and which tier maps to which isn't decided (#225).
+    // Refuse before Stripe is touched, rather than fail with internal.
+    if (!tierInCatalog(enabled ? "oxford" : "traditional", tier)) {
+      throw new HttpsError(
+        "failed-precondition",
+        enabled
+          ? "Switching this plan to Oxford isn't available yet. Contact support to change plans."
+          : "Switching this plan to traditional isn't available yet. Contact support to change plans.",
+      );
+    }
     const billingInterval = await getSubscriptionItemInterval(
       subscriptionItemId,
     );

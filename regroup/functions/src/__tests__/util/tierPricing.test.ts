@@ -5,6 +5,7 @@ import {
   tierAllows,
   isTierAvailableForSale,
   tierForPriceId,
+  tierInCatalog,
 } from "../../util/tierPricing";
 
 describe("tierPricing", () => {
@@ -147,5 +148,23 @@ describe("tierForPriceId", () => {
 
   it("never matches an empty price id to an unset env var", () => {
     expect(tierForPriceId("")).toBeNull();
+  });
+});
+
+describe("tierInCatalog", () => {
+  it("knows each catalog's own tiers", () => {
+    expect(tierInCatalog("traditional", "starter")).toBe(true);
+    expect(tierInCatalog("oxford", "plus")).toBe(true);
+  });
+
+  // The two catalogs share no tier key, so a tier can't carry across an Oxford
+  // switch until a mapping is decided (#225).
+  it("finds no traditional tier in the Oxford catalog, nor the reverse", () => {
+    for (const tier of ["starter", "professional", "enterprise"]) {
+      expect(tierInCatalog("oxford", tier as never)).toBe(false);
+    }
+    for (const tier of ["standard", "plus", "network"]) {
+      expect(tierInCatalog("traditional", tier as never)).toBe(false);
+    }
   });
 });
