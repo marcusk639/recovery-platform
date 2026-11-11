@@ -127,10 +127,10 @@ export const seedConnectedHouse = (operator: SeededOperator, extra: object = {})
 
 export async function seedResident(
   house: SeededHouse,
-  opts: { rentOwed?: number; choreFees?: number; guest?: object } = {},
+  opts: { rentOwed?: number; choreFees?: number; guest?: object; guestId?: string } = {},
 ): Promise<SeededResident> {
   const uid = uniqueId('res');
-  const guestId = uniqueId('guest');
+  const guestId = opts.guestId ?? uniqueId('guest');
   const email = emailOf(uid);
   await createAccount(uid, email, { guest: { [house.id]: true } });
   await adminDb().doc(`users/${uid}`).set({

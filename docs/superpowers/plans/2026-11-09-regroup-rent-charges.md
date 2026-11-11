@@ -1009,6 +1009,13 @@ The draft PR description lists the rulings in this plan. Ask for the domain-mode
 
 ### Task 11: Real-system proof in the payment suite
 
+**As built (2026-11-10):**
+
+- The rows are `CHARGE-001` to `CHARGE-008`, in the same order. `RENT-040` to `RENT-044` were already the payment suites plan's Connect rows.
+- `runRentJob()` calls the job over HTTP through the functions emulator's trigger route, which answers when the run ends. The emulator's Pub/Sub route drops messages for a v2 scheduled function. The Pub/Sub emulator, on port 8185 in `regroup/firebase.payments.json`, is still needed: without it the emulator doesn't load scheduled functions.
+- `seedResident` gains `guestId`, so a test can write the account first. The other fields go through its existing `guest` option.
+- Step 1 couldn't run on a checkout without Phase A, because #212 had merged. Instead, the rows fail with the job made a no-op (`CHARGE-003` to `CHARGE-008`) and with the price read as cents (every charging row).
+
 **Prerequisite:** `regroup/e2e/src/payments/` (harness, `seedConnectedHouse`, `seedResident`, `callAs`, `deliverType`, `confirmWithCard`) is on `main`. If it's not, stop and say so.
 
 **Files:**

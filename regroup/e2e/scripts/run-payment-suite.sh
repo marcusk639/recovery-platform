@@ -19,7 +19,7 @@ refuse() {
 }
 
 command -v lsof >/dev/null || refuse "lsof is needed to check the emulator ports are free"
-for port in 5101 8180 9160 9399 4410 4510 9310 9510; do
+for port in 5101 8180 9160 9399 4410 4510 9310 9510 8185; do
   if lsof -iTCP:"${port}" -sTCP:LISTEN -n -P >/dev/null 2>&1; then
     refuse "port ${port} is in use; another payment suite run may still be going"
   fi
@@ -43,6 +43,8 @@ export NODE_OPTIONS="--require ${E2E_DIR}/emulator/preserve-admin-statics.js ${N
 # Quoted per argument, so a -t filter with spaces reaches Jest as one argument.
 JEST_ARGS="$(printf '%q ' "$@")"
 cd "${REGROUP_DIR}"
+# Pub/Sub only so the functions emulator loads the scheduled functions; the rent rows
+# call the hourly job over HTTP (harness/rentJob.ts).
 exec firebase emulators:exec --project demo-regroup-payments --config firebase.payments.json \
-  --only auth,firestore,functions \
+  --only auth,firestore,functions,pubsub \
   "cd e2e && npx jest --config jest.payments.config.js ${JEST_ARGS}"
