@@ -2,12 +2,14 @@
 // on decisions older phone builds made, and with the counts that follow them.
 import type { Page } from '@playwright/test';
 import { admin, expect, fillSignIn, reseed, signInAs, test } from './helpers';
-import { addInvitedManager, makePeerLeader, makeResidentAManager } from './fixtures';
+import { addInvitedManager, addInvitedPeerLeader, makePeerLeader, makeResidentAManager } from './fixtures';
 import {
   DISPUTED,
+  OP_LOGGED,
   activityData,
   decisionIds,
   moveOffUtcSunday,
+  operatorLogged,
   probe,
   putActivity,
   settled,
@@ -64,6 +66,15 @@ test('a peer leader approves from the Disputes tab', async ({ page }) => {
   });
 });
 
+// Invited peer leaders hold guest and admin claims, unlike a demoted owner.
+test('an invited peer leader approves from the Disputes tab', async ({ page, browser }) => {
+  const leader = await addInvitedPeerLeader(browser);
+  await openAs(page, leader.email);
+  await decide(page, 'Approve');
+  await expect(undoButton(page)).toBeVisible();
+  expect(await activityData(DISPUTED)).toMatchObject({ disputed: 'successful', disputeResolvedBy: leader.uid });
+});
+
 test('an invited manager rejects and undoes', async ({ page, browser }) => {
   const manager = await addInvitedManager(browser);
   await openAs(page, manager.email);
@@ -82,9 +93,12 @@ test('an invited manager rejects and undoes', async ({ page, browser }) => {
 });
 
 test('a manager who is the resident sees no decision buttons', async ({ page }) => {
+  await operatorLogged('disputed');
   await makeResidentAManager('e2e-guest-a');
   await openAs(page, 'test-guest-a@rats-e2e.com');
-  await expect(page.getByTestId(`activity-item-${DISPUTED}`)).toBeVisible({ timeout: 15_000 });
+  // Control: as a manager they are offered the dispute that isn't theirs.
+  await expect(approveButton(page, OP_LOGGED)).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId(`activity-item-${DISPUTED}`)).toBeVisible();
   await expect(approveButton(page)).toHaveCount(0);
   await expect(rejectButton(page)).toHaveCount(0);
 });

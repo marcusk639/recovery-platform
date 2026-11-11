@@ -34,11 +34,13 @@ async function expectRefused(
   id: string,
   call: () => Promise<unknown>,
   message?: string,
+  code?: string,
 ) {
   const before = await settled(id);
-  const result = (await call()) as { ok: boolean; message?: string };
+  const result = (await call()) as { ok: boolean; message?: string; code?: string };
   expect(result.ok).toBe(false);
   if (message) expect(result).toMatchObject(refused(message));
+  if (code) expect(result.code).toBe(code);
   expect(await activityData(id)).toEqual(before);
   expect(await decisionIds(id, startedAt)).toEqual([]);
 }
@@ -110,6 +112,7 @@ test('another admin decides what the owner logged', async ({ page, browser }) =>
 });
 
 test('a manager who is the resident may not decide', async ({ page }) => {
+  await operatorLogged('disputed');
   await makeResidentAManager('e2e-guest-a');
   await signInAsRaw(page, 'test-guest-a@rats-e2e.com');
   await expectRefused(
@@ -118,6 +121,8 @@ test('a manager who is the resident may not decide', async ({ page }) => {
     () => probe(page, 'decide', DISPUTED, 'reject'),
     'Not allowed to decide this dispute',
   );
+  // Control: as a manager they may decide a dispute that isn't theirs.
+  expect(await probe(page, 'decide', OP_LOGGED, 'approve')).toEqual({ ok: true });
 });
 
 test('an admin of another house may not decide', async ({ page }) => {
@@ -162,7 +167,9 @@ test('undo before the decision is logged is refused, then accepted', async ({ pa
   const logged = (await entry.get()).data()!;
   await entry.delete();
   const before = await settled(DISPUTED);
-  expect(await probe(page, 'reopen', DISPUTED)).toEqual(refused('Not allowed to undo this decision'));
+  expect(await probe(page, 'reopen', DISPUTED)).toEqual(
+    refused('Not allowed to undo this decision'),
+  );
   expect(await activityData(DISPUTED)).toEqual(before);
   await entry.set(logged);
   expect(await probe(page, 'reopen', DISPUTED)).toEqual({ ok: true });
@@ -216,11 +223,23 @@ test("an operator raises a dispute on someone else's activity", async ({ page })
 test('the logger may not raise a dispute', async ({ page }) => {
   await operatorLogged('active');
   await owner(page);
-  await expectRefused(page, OP_LOGGED_ACTIVE, () => probe(page, 'raise', OP_LOGGED_ACTIVE, 'x'));
+  await expectRefused(
+    page,
+    OP_LOGGED_ACTIVE,
+    () => probe(page, 'raise', OP_LOGGED_ACTIVE, 'x'),
+    undefined,
+    'firestore/permission-denied',
+  );
 });
 
 test("a disputed activity can't be disputed again", async ({ page, browser }) => {
   const manager = await addInvitedManager(browser);
   await signInAsRaw(page, manager.email);
-  await expectRefused(page, DISPUTED, () => probe(page, 'raise', DISPUTED, 'x'));
+  await expectRefused(
+    page,
+    DISPUTED,
+    () => probe(page, 'raise', DISPUTED, 'x'),
+    undefined,
+    'firestore/permission-denied',
+  );
 });

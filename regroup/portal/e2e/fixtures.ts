@@ -186,13 +186,12 @@ export async function addInvitedManager(
   return { email, uid, adminId };
 }
 
-// A peer leader by invitation (role senior-peer), then a call made as them.
-export async function callAsInvitedPeerLeader(
+// A peer leader by invitation (role senior-peer), as the app makes them: guest
+// and admin claims, and a users doc with isGuest.
+export async function addInvitedPeerLeader(
   browser: Browser,
-  name: string,
-  data: object,
   houseId = 'test-house-123',
-): Promise<{ ok: boolean; code?: string; uid: string }> {
+): Promise<{ email: string; uid: string }> {
   // A peer leader takes a resident place, which is charged to the primary
   // owner found by house-roles where houseId == the house. createHouses writes
   // that field; the seed's owner record lacks it, so add it here.
@@ -202,6 +201,17 @@ export async function callAsInvitedPeerLeader(
   await admin().doc(`users/${uid}`).set({ id: uid, uid, email, firstName: 'Pat', lastName: 'Peer', isAdmin: false, isGuest: true });
   const redeem = await callInPage(browser, (page) => signInAsRaw(page, email), 'redeemInvitation', { token });
   if (!redeem.ok) throw new Error(`redeemInvitation failed: ${redeem.code}`);
+  return { email, uid };
+}
+
+// A call made as an invited peer leader.
+export async function callAsInvitedPeerLeader(
+  browser: Browser,
+  name: string,
+  data: object,
+  houseId = 'test-house-123',
+): Promise<{ ok: boolean; code?: string; uid: string }> {
+  const { email, uid } = await addInvitedPeerLeader(browser, houseId);
   const call = await callInPage(browser, (page) => signInAsRaw(page, email), name, data);
   return { ok: call.ok, code: call.code, uid };
 }
