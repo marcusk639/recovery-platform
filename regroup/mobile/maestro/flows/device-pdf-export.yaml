@@ -1,0 +1,76 @@
+# Device pass (#160) row 4: compliance PDF export from a resident's home.
+# Android: react-native-html-to-pdf writes the week's report and the app hands
+# the PDF to the system share sheet. iOS: export is switched off
+# on purpose until it is verified on a device (services/reportExport.ts
+# isPDFExportAvailable, decision record Task 6), so the app says so instead.
+# Persona: the manager, on the resident the guest tab opens on. The export needs
+# that resident's current-week summary, which the functions emulator writes a
+# few seconds after the seed.
+# Run: maestro/scripts/run-flows.sh device-pdf-export
+appId: ${APP_ID}
+tags:
+  - device
+  - files
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+# Wait for both residents' week summaries (the guest tab can open on either).
+- retry:
+    maxRetries: 10
+    commands:
+      - extendedWaitUntil:
+          visible: "never-shown-delay-marker"
+          timeout: 3000
+          optional: true
+      - runScript:
+          file: ../scripts/maestro-js/week-summary-exists.js
+          env:
+            GUEST_ID: guest-a
+      - assertTrue: ${output.weekSummaryExists}
+      - runScript:
+          file: ../scripts/maestro-js/week-summary-exists.js
+          env:
+            GUEST_ID: guest-b
+      - assertTrue: ${output.weekSummaryExists}
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "export-compliance-report-card"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    id: "export-compliance-report-card"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - assertNotVisible: "Export Error"
+      # The sheet must carry the PDF itself. It fails today, here and on main:
+      # GuestHome passes the file only as Share.share's `url`, which React
+      # Native sends on iOS alone, so Android opens an empty share sheet.
+      - extendedWaitUntil:
+          visible: ".*compliance_.*\\.pdf.*"
+          timeout: 30000
+      - assertNotVisible: "Export Failed"
+      - takeScreenshot: device-pdf-share-sheet
+      - pressKey: back
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: ".*temporarily unavailable on iOS.*"
+          timeout: 20000
+      - tapOn: "OK"
+- runFlow:
+    file: ../subflows/logout.yaml

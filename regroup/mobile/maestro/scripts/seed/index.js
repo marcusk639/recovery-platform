@@ -41,9 +41,15 @@ async function resetEmulators({ projectId, firestoreHost, authHost }) {
     `http://${authHost}/emulator/v1/projects/${projectId}/accounts`,
   ];
   for (const url of urls) {
-    const res = await fetch(url, { method: 'DELETE' });
-    if (!res.ok) {
-      throw new Error(`Emulator reset failed (${res.status}) for ${url}`);
+    // The Firestore emulator now and then answers a reset with 499 while the
+    // functions emulator's triggers are still writing; a retry clears it.
+    for (let attempt = 1; ; attempt++) {
+      const res = await fetch(url, { method: 'DELETE' });
+      if (res.ok) break;
+      if (attempt >= 3) {
+        throw new Error(`Emulator reset failed (${res.status}) for ${url}`);
+      }
+      await sleep(1000 * attempt);
     }
   }
 }

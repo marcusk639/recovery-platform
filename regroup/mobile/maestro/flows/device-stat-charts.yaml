@@ -1,0 +1,53 @@
+# Device pass (#160) row 5: the stat screens draw their charts. Each stat screen
+# (StatSummaryScreen) shows a "LAST TWO MONTHS" bar chart (victory-native on
+# react-native-svg) once the resident's week summaries load; the functions
+# emulator writes the current week's summary from the seeded activities.
+# The chart has no testID, so the card header and a screenshot are the proof.
+# Persona: guest-a.
+# Run: maestro/scripts/run-flows.sh device-stat-charts
+appId: ${APP_ID}
+tags:
+  - device
+  - ui
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+- tapOn:
+    id: "chores-card"
+- extendedWaitUntil:
+    visible:
+      id: "chore-summary-screen"
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "LAST TWO MONTHS"
+    timeout: 30000
+- assertVisible: "THIS WEEK"
+- takeScreenshot: device-stat-chart-chores
+- tapOn:
+    id: "back-button"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 15000
+- tapOn:
+    id: "meetings-card"
+- extendedWaitUntil:
+    visible:
+      id: "meeting-summary-screen"
+    timeout: 20000
+- extendedWaitUntil:
+    visible: "LAST TWO MONTHS"
+    timeout: 30000
+- takeScreenshot: device-stat-chart-meetings
+- runFlow:
+    file: ../subflows/logout.yaml

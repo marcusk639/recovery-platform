@@ -46,6 +46,25 @@ On Android, run `adb shell am force-stop com.regroup.app.e2e.emu` and wait a few
 
 `run-flows.sh` re-seeds once up front (`--no-seed` skips it) and resets the simulator Keychain before each flow, because iOS keeps the Firebase session across `clearState`.
 
+## Device-pass suites (#160)
+
+The parts of the RN 0.88 device pass (`regroup/docs/operations/manual-tasks/2026-11-06-rn-0.88-merge-device-pass.md`) that a simulator or emulator can prove. Each needs the emulators up and seeded, as above. They aren't in the default suite: some need a staged file, a particular emulator image, or a driver script.
+
+| Pass row | What                                                                                                              | How to run                                                                                                                                            |
+| -------- | ----------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3        | Rent reminder scheduled for Friday 09:00, fires on `default-channel-id`, cancelled when nothing is owed (Android) | `maestro/scripts/rent-reminder.sh --device emulator-5554` (firing needs a rootable `google_apis` image; it moves the emulator clock and puts it back) |
+| 4        | Document upload through the system picker, and a cancelled picker                                                 | `maestro/scripts/stage-picker-files.sh --platform <ios\|android> --device <id>`, then the `device-document-upload` flow                               |
+| 4        | Compliance PDF export (Android share sheet; the iOS "unavailable" notice)                                         | `device-pdf-export`                                                                                                                                   |
+| 5        | Date picker, modal swipe dismiss, stat charts, house search with location, Android back                           | `device-date-picker`, `device-modal-swipe`, `device-stat-charts`, `device-house-search-location`, `device-android-back` (Android)                     |
+| 5        | Keyboard: the focused field stays above the keyboard on the audited screens                                       | `maestro/scripts/keyboard.sh --platform <ios\|android> --device <id> [field ...]`                                                                     |
+| 6        | Edge-to-edge: no text or tappable view under the status or navigation bar                                         | `maestro/scripts/edge-to-edge.sh --device <serial> [screen ...]`, on API 35+ and on API 30                                                            |
+| 7        | Resume from the background keeps the screen                                                                       | `device-resume-background`                                                                                                                            |
+| 8        | Activity times under Hermes `Intl` match the host-computed text                                                   | `device-activity-time`                                                                                                                                |
+
+`device-open-screen.yaml` and `device-keyboard-field.yaml` open one screen or field (`-e SCREEN=…` / `-e FIELD=…`) and stop; the drivers inspect what they leave on screen with `check-insets.js` and `check-keyboard.js`.
+
+The Storage emulator writes upload chunks under `$TMPDIR/firebase/storage/blobs`, and every emulator suite that starts Storage recreates that folder. If another suite (another worktree, the portal tests) starts while an upload is running, the Storage emulator crashes. Give `test-prep.sh` its own short `TMPDIR` when suites run side by side, such as `TMPDIR=$HOME/.cache/rg-emu/`. Keep it short: the functions emulator puts its worker sockets there, and macOS refuses socket paths over 104 characters, so with a long `TMPDIR` the triggers fail with `EADDRINUSE` and no week summaries are written.
+
 ## Seed data
 
 `maestro/scripts/reset-and-seed.sh` runs `maestro/scripts/seed/index.js`. It wipes the emulators and writes the accounts from `e2e/setup/testAccounts.json` (uids `e2e-<id>`), the test and Oxford houses, activities, a dispute, and payments. It refuses any project that is not `demo-` and any non-loopback emulator host (`seed/guard.js`).
