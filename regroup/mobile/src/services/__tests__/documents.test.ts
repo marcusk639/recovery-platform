@@ -128,6 +128,10 @@ describe('documents service', () => {
         cacheControl: 'private, max-age=86400',
         contentType: 'application/pdf',
       });
+      // No permanent download link is made or stored; documents open through
+      // the getDocumentLink callable's short-lived link.
+      expect(storageRef.getDownloadURL).not.toHaveBeenCalled();
+      expect('storageUrl' in result).toBe(false);
       expect(result.houseId).toBe('house-1');
       expect(result.fileType).toBe('pdf');
       expect(result.category).toBe('lease');

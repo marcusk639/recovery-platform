@@ -11,7 +11,6 @@ import map from 'lodash/map';
 import { createInvitation } from './invitations';
 
 export const adminCollection = collection(firestore, 'admins');
-export const adminArchive = collection(firestore, 'admin-archive');
 
 export function createAdminId(): string {
   return crud.createId(adminCollection);
@@ -34,11 +33,9 @@ export async function updateAdmin(adminId: string, updates: Partial<Admin>): Pro
   return crud.get<Admin>(adminCollection, adminId);
 }
 
+// Nothing is archived: the old admin-archive copy was refused by the rules,
+// which made removal fail, and nothing read it (#196).
 export async function deleteAdmin(adminId: string): Promise<string> {
-  const admin = await crud.get<Admin>(adminCollection, adminId);
-  if (admin) {
-    await crud.create<Admin>(adminArchive, admin, adminId);
-  }
   await crud.deleteObject<Admin>(adminCollection, { id: adminId } as Admin);
   return adminId;
 }

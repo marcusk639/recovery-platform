@@ -26,12 +26,12 @@ import {
 } from '@react-native-firebase/firestore';
 import {
   deleteObject,
-  getDownloadURL,
   getStorage,
   putFile,
   ref,
 } from '@react-native-firebase/storage';
-import { firestore, auth } from '../../firebase-setup';
+import { httpsCallable } from '@react-native-firebase/functions';
+import { firestore, auth, functions } from '../../firebase-setup';
 import {
   HouseDocument,
   DocumentCategory,
@@ -79,7 +79,6 @@ function docToHouseDocument(
     houseId: String(data.houseId ?? ''),
     guestId: data.guestId ? String(data.guestId) : undefined,
     fileName: String(data.fileName ?? ''),
-    storageUrl: String(data.storageUrl ?? ''),
     storagePath: String(data.storagePath ?? ''),
     fileType: (data.fileType as DocumentFileType) ?? 'other',
     category: (data.category as DocumentCategory) ?? 'other',
@@ -90,6 +89,18 @@ function docToHouseDocument(
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
+
+/**
+ * A link to open a document with, signed by the server and good for 15
+ * minutes. Only the house's admins get one.
+ */
+export async function getDocumentLink(documentId: string): Promise<string> {
+  const result = await httpsCallable<{ documentId: string }, { url: string }>(
+    functions,
+    'getDocumentLink',
+  )({ documentId });
+  return result.data.url;
+}
 
 export interface UploadDocumentInput {
   houseId: string;
@@ -131,15 +142,11 @@ export async function uploadDocument(
       contentType: input.mimeType ?? undefined,
     });
 
-    // 2. Fetch permanent download URL.
-    const storageUrl = await getDownloadURL(ref(getStorage(), storagePath));
-
     // 3. Write metadata to Firestore.
     const record: HouseDocument = {
       id: docId,
       houseId: input.houseId,
       fileName: input.fileName,
-      storageUrl,
       storagePath,
       fileType,
       category: input.category,

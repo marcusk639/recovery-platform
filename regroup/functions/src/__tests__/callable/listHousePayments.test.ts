@@ -52,6 +52,11 @@ jest.mock("../../util/houseAuth", () => ({
   assertHouseMemberFromClaims: jest.fn(),
 }));
 
+const mockReadRoleTier = jest.fn((..._args: any[]): Promise<string | null> => Promise.resolve(null));
+jest.mock("../../util/houseRoleStore", () => ({
+  ...jest.requireActual("../../util/houseRoleStore"),
+  readRoleTier: (...args: any[]) => mockReadRoleTier(...args),
+}));
 jest.mock("../../util/stripe", () => ({
   createStripeClient: jest.fn(() => ({
     charges: {
@@ -159,6 +164,27 @@ describe("listHousePayments", () => {
   it("throws permission-denied when the caller is not an admin of the house", async () => {
     const req = makeRequest({
       auth: { uid: "resident1", token: { guest: { house1: true } } },
+    });
+    await expect((listHousePayments as any).run(req)).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+  });
+
+  // P5 finding: an invited manager isn't in ownerId or adminIds, so only their
+  // house-roles tier says they're staff (owner decision, 2026-11-10).
+  it("lets an invited manager list the house's payments", async () => {
+    mockReadRoleTier.mockResolvedValueOnce("manager");
+    const req = makeRequest({
+      auth: { uid: "manager-uid", token: { admin: { house1: true } } },
+    });
+    await expect((listHousePayments as any).run(req)).resolves.toBeDefined();
+    expect(mockReadRoleTier).toHaveBeenCalledWith("house1", "manager-uid");
+  });
+
+  it("refuses a peer leader, who holds the same admin claim", async () => {
+    mockReadRoleTier.mockResolvedValueOnce("peerLeader");
+    const req = makeRequest({
+      auth: { uid: "peer-uid", token: { admin: { house1: true } } },
     });
     await expect((listHousePayments as any).run(req)).rejects.toMatchObject({
       code: "permission-denied",

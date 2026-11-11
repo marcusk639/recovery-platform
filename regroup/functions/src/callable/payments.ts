@@ -24,9 +24,10 @@ import {
 } from "../util/connectAccountLifecycle";
 import {
   assertHouseAdmin,
+  assertHouseMoneyStaff,
   assertHouseMemberFromClaims,
   checkIsMember,
-  isHouseAdmin,
+  isHouseMoneyStaff,
   HouseAdminFields,
 } from "../util/houseAuth";
 import { parseInput, safeReturnUrlSchema } from "../validation";
@@ -176,8 +177,8 @@ export const createPaymentIntent = onCall(
       );
     }
     if (
-      !isHouseAdmin(request.auth.uid, house) &&
-      guestData.userId !== request.auth.uid
+      guestData.userId !== request.auth.uid &&
+      !(await isHouseMoneyStaff(request.auth.uid, houseId, house))
     ) {
       throw new HttpsError(
         "permission-denied",
@@ -305,8 +306,8 @@ export const listPayments = onCall(
       );
     }
     if (
-      !isHouseAdmin(request.auth.uid, house) &&
-      guestData.userId !== request.auth.uid
+      guestData.userId !== request.auth.uid &&
+      !(await isHouseMoneyStaff(request.auth.uid, houseId, house))
     ) {
       throw new HttpsError(
         "permission-denied",
@@ -377,8 +378,9 @@ export const listHousePayments = onCall(
 
     // Ground truth from the house doc, not the token: custom claims only say
     // "member", and may be up to an hour stale after a role change.
-    assertHouseAdmin(
+    await assertHouseMoneyStaff(
       request.auth.uid,
+      houseId,
       house,
       "Only house admins can view house-wide payments",
     );
@@ -477,7 +479,11 @@ export const updatePaymentInfo = onCall(
           .get();
         authorized =
           houseSnap.exists &&
-          isHouseAdmin(request.auth.uid, houseSnap.data() as HouseAdminFields);
+          (await isHouseMoneyStaff(
+            request.auth.uid,
+            guestData.houseId,
+            houseSnap.data() as HouseAdminFields,
+          ));
       }
       if (!authorized) {
         throw new HttpsError(
