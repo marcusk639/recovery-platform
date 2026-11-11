@@ -39,7 +39,7 @@ test("the dashboard's CSV export downloads the period's rows", async ({ page }) 
   ]);
   expect(download.suggestedFilename()).toMatch(/^payments-\d{4}-\d{2}-\d{2}\.csv$/);
   const lines = (await readFile((await download.path())!, 'utf8')).trim().split('\n');
-  expect(lines[0]).toBe('Date,Guest Name,Amount,Status,Type');
+  expect(lines[0].replace(/^\uFEFF/, '')).toBe('Date,Guest Name,Amount,Refunded,Status,Type');
   expect(lines.slice(1)).toHaveLength(2);
   expect(lines.some((l) => l.includes('50.00') && l.endsWith('Manual'))).toBe(true);
 });

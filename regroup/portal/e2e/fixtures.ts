@@ -137,38 +137,73 @@ export async function makeResidentAManager(uid: string, houseId = 'test-house-12
   await getAuth().setCustomUserClaims(uid, { ...claims, admin: { ...claims.admin, [houseId]: true } });
 }
 
-// A manager made the way the app makes one: the owner's createInvitation, then
-// redeemInvitation as the invited account (claims and house-roles, server-side),
-// then the users and admins docs SignUpForm writes. Unlike the seeded operator,
-// their uid is in neither ownerId nor adminIds, and their admins doc id is random.
+async function callInPage(browser: Browser, signIn: (page: Page) => Promise<void>, name: string, data: object) {
+  const context = await browser.newContext();
+  try {
+    const page = await context.newPage();
+    await signIn(page);
+    await page.waitForFunction(() => (window as any).__portalTest?.uid?.());
+    return await page.evaluate(async ({ name, data }) => {
+      try {
+        return { ok: true, result: await (window as any).__portalTest.callable(name, data) };
+      } catch (error) {
+        return { ok: false, code: String((error as { code?: string }).code ?? error) };
+      }
+    }, { name, data });
+  } finally {
+    await context.close();
+  }
+}
+
+// Staff made the way the app makes them: the owner's createInvitation, then
+// redeemInvitation as the invited account, which sets the claims and the
+// house-roles record server-side. Their uid is in neither ownerId nor adminIds.
+async function inviteAndRedeem(browser: Browser, role: 'admin' | 'senior-peer', houseId: string) {
+  const email = `invited-${role}-${Date.now()}@rats-e2e.com`;
+  const user = await getAuth().createUser({ email, password: process.env.E2E_TEST_PASSWORD!, emailVerified: true });
+  const invite = await callInPage(browser, (page) => signInAs(page, 'manager'), 'createInvitation', { email, houseId, role });
+  if (!invite.ok) throw new Error(`createInvitation failed: ${invite.code}`);
+  return { email, uid: user.uid, token: invite.result.data.token as string };
+}
+
+// A manager, plus the users and admins docs SignUpForm writes after redeeming
+// (the admins doc id is random, as in the app).
 export async function addInvitedManager(
   browser: Browser,
   houseId = 'test-house-123',
 ): Promise<{ email: string; uid: string; adminId: string }> {
-  const email = `invited-manager-${Date.now()}@rats-e2e.com`;
-  const user = await getAuth().createUser({ email, password: process.env.E2E_TEST_PASSWORD!, emailVerified: true });
-  const call = async (signIn: (page: Page) => Promise<void>, name: string, data: object) => {
-    const context = await browser.newContext();
-    try {
-      const page = await context.newPage();
-      await signIn(page);
-      await page.waitForFunction(() => (window as any).__portalTest?.uid?.());
-      return await page.evaluate(({ name, data }) => (window as any).__portalTest.callable(name, data), { name, data });
-    } finally {
-      await context.close();
-    }
-  };
-  const { data } = await call((page) => signInAs(page, 'manager'), 'createInvitation', { email, houseId, role: 'admin' });
+  const { email, uid, token } = await inviteAndRedeem(browser, 'admin', houseId);
   const adminId = admin().collection('admins').doc().id;
   const profile = { email, firstName: 'Ivy', lastName: 'Invited' };
-  await admin().doc(`users/${user.uid}`).set({
-    id: user.uid, uid: user.uid, ...profile,
+  await admin().doc(`users/${uid}`).set({
+    id: uid, uid, ...profile,
     isAdmin: true, isSuperAdmin: false, isGuest: false, isAnonymous: false,
     adminId, infoEntered: true, orgSetupCompleted: true,
   });
-  await admin().doc(`admins/${adminId}`).set({ id: adminId, userId: user.uid, ...profile, houseIds: [houseId], superAdmin: [] });
-  await call((page) => signInAsRaw(page, email), 'redeemInvitation', { token: data.token });
-  return { email, uid: user.uid, adminId };
+  await admin().doc(`admins/${adminId}`).set({ id: adminId, userId: uid, ...profile, houseIds: [houseId], superAdmin: [] });
+  const redeem = await callInPage(browser, (page) => signInAsRaw(page, email), 'redeemInvitation', { token });
+  if (!redeem.ok) throw new Error(`redeemInvitation failed: ${redeem.code}`);
+  return { email, uid, adminId };
+}
+
+// A peer leader by invitation (role senior-peer), then a call made as them.
+export async function callAsInvitedPeerLeader(
+  browser: Browser,
+  name: string,
+  data: object,
+  houseId = 'test-house-123',
+): Promise<{ ok: boolean; code?: string; uid: string }> {
+  // A peer leader takes a resident place, which is charged to the primary
+  // owner found by house-roles where houseId == the house. createHouses writes
+  // that field; the seed's owner record lacks it, so add it here.
+  const owner = await getAuth().getUserByEmail(EMAILS.manager);
+  await admin().doc(`house-roles/${houseId}_${owner.uid}`).update({ houseId });
+  const { email, uid, token } = await inviteAndRedeem(browser, 'senior-peer', houseId);
+  await admin().doc(`users/${uid}`).set({ id: uid, uid, email, firstName: 'Pat', lastName: 'Peer', isAdmin: false, isGuest: true });
+  const redeem = await callInPage(browser, (page) => signInAsRaw(page, email), 'redeemInvitation', { token });
+  if (!redeem.ok) throw new Error(`redeemInvitation failed: ${redeem.code}`);
+  const call = await callInPage(browser, (page) => signInAsRaw(page, email), name, data);
+  return { ok: call.ok, code: call.code, uid };
 }
 
 // The seed writes three Stripe-style records; money tests start from none.
