@@ -155,8 +155,10 @@ async function finishCheckout<U extends { id: string }, M>(
 // ─────────────────────────────────────────────────────────────────────────────
 // createOperatorSubscription
 // ─────────────────────────────────────────────────────────────────────────────
+// The new-subscriber notice (util/email) reads SENDGRID_API_KEY from
+// process.env, which a v2 function gets only for a secret it binds.
 export const createOperatorSubscription = onCall(
-  { secrets: [STRIPE_SECRET_KEY] },
+  { secrets: [STRIPE_SECRET_KEY, SENDGRID_API_KEY] },
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
