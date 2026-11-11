@@ -57,6 +57,7 @@ import {
   MAX_PAYMENT_CENTS,
 } from "../../services/payments";
 import { parseDollarsField, netPaidCents } from "../../util/money";
+import { recordAmountCsv, recordAmountLabel } from "../../util/paymentDisplay";
 import { Guest } from "../../entities/Guest";
 import {
   color,
@@ -188,7 +189,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
         return d ? format(d, "yyyy-MM-dd") : "Unknown";
       })();
       const name = `"${guestName(p.guestId)}"`;
-      const amount = (p.amount / 100).toFixed(2);
+      const amount = recordAmountCsv(p);
       const status = p.status;
       const type = (p.description ?? "").includes("Manual")
         ? "Manual"
@@ -483,7 +484,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                   <View style={styles.rightColumn}>
                     <RatsText
                       translate={false}
-                      text={`$${(item.amount / 100).toFixed(2)}`}
+                      text={recordAmountLabel(item)}
                       style={styles.amount}
                     />
                     <View

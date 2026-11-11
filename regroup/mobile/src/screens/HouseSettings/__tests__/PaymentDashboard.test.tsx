@@ -504,6 +504,18 @@ describe('PaymentDashboard figures', () => {
     expect(queryByText('100%')).toBeNull();
   });
 
+  it('shows a dash, not $NaN, for a record with no dollar amount', async () => {
+    setupStore(residents);
+    mockGetHousePaymentRecords.mockResolvedValue([
+      { id: 'p9', guestId: 'g1', houseId: 'house1', amountMinorUnits: 900, currency: 'eur',
+        status: 'succeeded', createdAt: now, description: 'Rent' },
+    ]);
+    const { findByTestId, queryByText } = renderDashboard();
+    const row = await findByTestId('payment-row-p9');
+    expect(within(row).getByText('—')).toBeTruthy();
+    expect(queryByText(/NaN/)).toBeNull();
+  });
+
   it("names the resident on a payment instead of Unknown (#183)", async () => {
     setupStore(residents);
     mockGetHousePaymentRecords.mockResolvedValue([
