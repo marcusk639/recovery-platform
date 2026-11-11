@@ -1,4 +1,5 @@
 import { onDocumentWritten } from 'firebase-functions/v2/firestore';
+import { rentOnGuestWrite } from '../../rent/guestWriteRent';
 import { logger } from 'firebase-functions';
 import { guestCollection, ratsFirestore } from '../../api/firestore';
 import { revokeHouseRoles } from '../../util/claims';
@@ -136,6 +137,16 @@ export const onGuestWrite = onDocumentWritten(
           error: (e as Error).message,
         });
       });
+    }
+
+    if (!stale && !isDelete) {
+      await rentOnGuestWrite({
+        guestId,
+        before,
+        after: guestData,
+        afterCreateTimeMs: event.data?.after?.createTime?.toMillis(),
+        eventTime: event.time,
+      }).catch((e) => remember('rent charge', e));
     }
 
     // A move: the old house loses a counted resident, so its week re-splits

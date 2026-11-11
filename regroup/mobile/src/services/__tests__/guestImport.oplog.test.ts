@@ -48,6 +48,9 @@ const guestDoc = (id: string, n: number) => ({
   phase: 'default',
   step: 1,
   createdAt: ISO,
+  // From main (rent charges, #212): rent charging starts an imported resident at
+  // the next full period. No createdBy here: the mock has no signed-in user.
+  importedAt: ISO,
   updatedAt: { __fv: 'serverTimestamp' },
 });
 

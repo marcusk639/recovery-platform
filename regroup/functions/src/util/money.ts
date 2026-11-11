@@ -18,8 +18,8 @@
  * charge" bug without also fixing a formatter would have charged every resident
  * 100x their balance. Until now the only thing preventing that was a comment.
  *
- * This copy matters most: a rent-accrual job -- reading house.monthlyRent in
- * dollars and raising guest.rentOwed in cents -- would live here.
+ * This copy matters most: the rent-accrual job (src/rent/) reads house.monthlyRent
+ * in dollars and raises guest.rentOwed in cents.
  *
  * These brands make the mistake a compile error instead. They carry no runtime
  * cost — a branded value is still just a number at runtime.
@@ -41,9 +41,11 @@
  * So the protection is on the write side. It does not validate that stored data
  * is really in the unit it claims — see `asCents`.
  *
- * There is no rent-accrual job in regroup today; `rentOwed` is raised by a
- * human. When that job is written it will need `dollarsToCents(house.monthlyRent)`,
- * and the type system will now insist on it.
+ * The rent-accrual job now exists: `rent/chargeResident.ts` (run by the
+ * `rentCharges` hourly job and the guest-write trigger) raises `rentOwed` from the
+ * house price with `dollarsToCents`, and `rent/rate.ts` treats a price that is not
+ * a number of dollars in (0, 2500] weekly or (0, 10000] monthly as charging off. Managers still edit balances
+ * by hand to correct a charge or give a credit.
  */
 
 declare const centsBrand: unique symbol;

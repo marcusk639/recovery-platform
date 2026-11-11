@@ -59,13 +59,26 @@ export interface RentPayment {
 }
 
 /** Result returned by the 'createPaymentIntent' Cloud Function. */
-export interface CreatePaymentIntentResult {
-  clientSecret: string;
-  /** @deprecated Server does not return this field. Kept for PaymentWebView compat. */
-  paymentUrl?: string;
-  /** @deprecated Server does not return this field. */
-  paymentIntentId?: string;
-}
+export type CreatePaymentIntentResult =
+  | {
+      alreadyPaid?: false;
+      clientSecret: string;
+      /** @deprecated Server does not return this field. Kept for PaymentWebView compat. */
+      paymentUrl?: string;
+      /** @deprecated Server does not return this field. */
+      paymentIntentId?: string;
+    }
+  | {
+      /**
+       * The day's key for this amount belongs to an intent that has already
+       * succeeded (a second tap, or the balance hadn't refreshed yet). There is
+       * no client secret, so there is nothing to confirm and nothing to record.
+       */
+      alreadyPaid: true;
+      clientSecret?: undefined;
+      paymentUrl?: undefined;
+      paymentIntentId?: undefined;
+    };
 
 /** CF-backed payment record used by the payments dashboard. */
 export interface PaymentRecord {

@@ -23,6 +23,8 @@ export * from './callable/documentLinks';
 // Callable functions — public tier pricing catalog (no auth — see file
 // comment in getTierCatalog.ts for why this callable is deliberately public)
 export * from './callable/getTierCatalog';
+// The caller's own tier per house, for the operator portal.
+export * from './callable/myHouseTiers';
 
 // Callable functions — Compliance (RG-SPEC-09 court/drug-court export; Phase 5 stub)
 export * from './callable/compliance';

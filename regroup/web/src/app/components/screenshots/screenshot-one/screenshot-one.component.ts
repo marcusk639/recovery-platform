@@ -1,8 +1,7 @@
 import { Component, OnInit, Inject, PLATFORM_ID } from '@angular/core';
 import { BaseComponent } from '../../base.component';
 import { isPlatformBrowser } from '@angular/common';
-
-declare var $: any;
+import { jqueryPlugin } from 'src/app/util/jquery';
 
 @Component({
   selector: 'app-screenshot-one',
@@ -16,8 +15,8 @@ export class ScreenshotOneComponent extends BaseComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    if (isPlatformBrowser(this.platformId)) {
-      //@ts-ignore
+    const $ = isPlatformBrowser(this.platformId) && jqueryPlugin('slick');
+    if ($) {
       $('.app-screenshots').slick({
         dots: true,
         arrows: false,

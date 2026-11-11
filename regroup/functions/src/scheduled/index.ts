@@ -79,3 +79,4 @@ export const warmWebsite = onSchedule(
 export * from "./officerTermReminder";
 export * from "./overdueRentNotification";
 export * from "./scheduledRentCollection";
+export * from "./rentChargeJob";

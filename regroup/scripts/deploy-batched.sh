@@ -26,7 +26,7 @@ ALL_FUNCTIONS=(
   connectStripeAccount disconnectStripeAccount getStripeAccountStatus
   createOperatorSubscription reactivateOperatorSubscription cancelUserSubscription
   updateSubscriptionGuests updateSubscriptionHouses
-  createBillingPortalSession applyBundleDiscount getTierCatalog
+  createBillingPortalSession applyBundleDiscount getTierCatalog myHouseTiers
   getDocumentLink
   setOxfordEnabled castOxfordVote complianceExport rentRoiMetrics
   deleteAccount
@@ -36,9 +36,9 @@ ALL_FUNCTIONS=(
   sendContactEmail sendSubscriptionUpdateEmail
   reportBug submitFeedback
   onGuestWrite onHouseDeleted setHouseSubscriptionStatusOnCreate
-  onActivityWritten onGuestLinkedRestamp
+  onActivityWritten onGuestLinkedRestamp onHouseRentSettingsWrite
   updateDisputes warmWebsite officerTermReminder weeklyTransfers
-  overdueRentNotification scheduledRentCollection
+  overdueRentNotification scheduledRentCollection rentCharges
 )
 
 BATCH_SIZE=5

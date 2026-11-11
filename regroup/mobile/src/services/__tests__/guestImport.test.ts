@@ -4,6 +4,7 @@ jest.mock('../../firebase-setup', () => {
   const mockBatchCommit = jest.fn().mockResolvedValue(undefined);
   const mockDoc = jest.fn(() => ({ id: 'new-guest-id' }));
   return {
+    auth: { currentUser: { uid: 'admin-1' } },
     firestore: {
       batch: jest.fn(() => ({ set: mockBatchSet, commit: mockBatchCommit })),
       collection: jest.fn(() => ({ doc: mockDoc })),
@@ -101,6 +102,33 @@ describe('importGuestsFromRows', () => {
     const count = await importGuestsFromRows('house-1', rows);
     expect(count).toBe(1);
     expect((firestore as any)._mockBatchCommit).toHaveBeenCalled();
+  });
+
+  it('marks each record as imported, so rent charging starts it at the next full period', async () => {
+    // The server reads importedAt (rent/chargeRule.ts): an imported resident already
+    // lived there, and their balance was entered by hand, so no prorated first charge.
+    const before = Date.now();
+    await importGuestsFromRows('house-1', [
+      { firstName: 'Jane', lastName: 'Smith', email: 'jane@example.com', sobrietyDate: '2025-01-15', drugOfChoice: 'Alcohol' },
+    ]);
+    const written = ((firestore as any)._mockBatchSet as jest.Mock).mock.calls[0][1];
+    expect(typeof written.importedAt).toBe('string');
+    expect(Date.parse(written.importedAt)).toBeGreaterThanOrEqual(before - 1000);
+  });
+
+  it('records the signed-in staff member as createdBy on every imported record', async () => {
+    const row = {
+      firstName: 'Jane',
+      lastName: 'Smith',
+      email: 'jane@example.com',
+      sobrietyDate: '2025-01-15',
+      drugOfChoice: 'Alcohol',
+    };
+    await importGuestsFromRows('house-1', [row, { ...row, email: 'jo@example.com' }]);
+    const written = ((firestore as any)._mockBatchSet as jest.Mock).mock.calls.map(
+      (call) => call[1],
+    );
+    expect(written.map((g) => g.createdBy)).toEqual(['admin-1', 'admin-1']);
   });
 
   it('returns 0 when given empty rows', async () => {

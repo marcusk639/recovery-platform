@@ -267,6 +267,8 @@ export interface Meeting {
   verified?: boolean;
   addedBy?: string;
   groupName?: string;
+  /** "YYYY-MM-DD" an imported directory listing dates from. */
+  dataAsOf?: string;
   createdAt?: Date;
   updatedAt?: Date;
   format?: string;

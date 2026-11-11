@@ -33,6 +33,7 @@ export { onHouseDeleted } from "./houseTombstone";
 export { onActivityWritten } from "./activityWeekSummary";
 export { onGuestLinkedRestamp } from "./guestRestamp";
 export { onGuestWrite } from "./guestWrite";
+export { onHouseRentSettingsWrite } from "./houseRentSettings";
 
 /**
  * Sends a push notification when a new document is created in /notifications/{notificationId}.

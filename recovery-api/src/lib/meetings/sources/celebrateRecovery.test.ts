@@ -35,12 +35,11 @@ describe('fetchCelebrateRecoveryMeetings', () => {
     expect(m.name).toBe('Grace Celebrate Recovery');
   });
 
-  it('canonicalizes day to integer 0–6 and time to 24-hour "HH:mm"', async () => {
+  it('canonicalizes day to a name and time to 24-hour "HH:mm"', async () => {
     const fetchFn = makeFetch(sampleXml);
     const [m] = await fetchCelebrateRecoveryMeetings(0, 0, { fetchFn });
 
-    expect(m.day).toBe(5); // Friday
-    expect(Number.isInteger(m.day)).toBe(true);
+    expect(m.day).toBe('friday');
     expect(m.time).toBe('17:00'); // 5:00 PM → 17:00
   });
 

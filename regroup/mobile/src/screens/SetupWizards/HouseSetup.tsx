@@ -288,20 +288,6 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
         />
         <Field
           component={RatsRadioButtonGroup}
-          name="houseType"
-          label="House Type"
-          labelDisabled={false}
-          formHorizontal={true}
-          labelHorizontal={true}
-          wrapStyle={{ marginHorizontal: 0, marginRight: normalize(15) }}
-          selectedButtonColor={color.black}
-          radioButtons={[
-            { label: "Traditional", value: "traditional" },
-            { label: "Oxford House", value: "oxford" },
-          ]}
-        />
-        <Field
-          component={RatsRadioButtonGroup}
           name="gender"
           setRef={initRef("gender")}
           label="Guest Gender"

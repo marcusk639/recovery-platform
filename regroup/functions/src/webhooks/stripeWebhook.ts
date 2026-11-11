@@ -40,6 +40,8 @@ import {
   reverseTransfersForRefunds,
 } from "./transferReversals";
 import { sendFcmToHouseAdmins } from "../util/notifications";
+import { syncOperatorTier } from "./syncOperatorTier";
+import { periodEndSeconds } from "../util/subscriptionPeriod";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
 import { Cents } from "../util/money";
@@ -238,25 +240,39 @@ type HouseSubscriptionStatus =
 
 async function updateHouseSubscriptionStatus(
   operatorUid: string,
+  subscriptionId: string,
   status: HouseSubscriptionStatus,
   guestGraceEndsAt?: string | admin.firestore.FieldValue,
 ): Promise<void> {
   const db = admin.firestore();
 
-  // Query houses by adminIds (preferred) — a single array-contains query.
-  // If the operator is only in the legacy adminId field, a second query picks them up.
-  const [byAdminIds, byAdminId] = await Promise.all([
-    db
-      .collection("houses")
-      .where("adminIds", "array-contains", operatorUid)
-      .get(),
-    db.collection("houses").where("adminId", "==", operatorUid).get(),
+  // An older subscription (one replaced at re-subscribe, or an orphan from a
+  // retried checkout) must not set the status of the houses the current one pays for.
+  const operatorSnap = await db.collection("users").doc(operatorUid).get();
+  const currentId = operatorSnap.exists
+    ? operatorSnap.data()?.subscriptionMetadata?.subscriptionId
+    : undefined;
+  if (typeof currentId === "string" && currentId !== "" && currentId !== subscriptionId) {
+    logger.warn("updateHouseSubscriptionStatus: not the operator's current subscription; houses unchanged", {
+      operatorUid,
+      subscriptionId,
+      status,
+    });
+    return;
+  }
+
+  // createHouses stores the operator's uid in ownerId; its adminIds hold an
+  // admin-record id, not the uid. Older houses have the uid in adminIds or
+  // adminId instead, so those lookups stay.
+  const houses = db.collection("houses");
+  const snaps = await Promise.all([
+    houses.where("ownerId", "==", operatorUid).get(),
+    houses.where("adminIds", "array-contains", operatorUid).get(),
+    houses.where("adminId", "==", operatorUid).get(),
   ]);
 
-  // Deduplicate by document ID
   const docMap = new Map<string, FirebaseFirestore.QueryDocumentSnapshot>();
-  byAdminIds.docs.forEach((d) => docMap.set(d.id, d));
-  byAdminId.docs.forEach((d) => docMap.set(d.id, d));
+  snaps.forEach((snap) => snap.docs.forEach((d) => docMap.set(d.id, d)));
 
   if (docMap.size === 0) {
     logger.warn("updateHouseSubscriptionStatus: no houses found for operator", {
@@ -646,6 +662,8 @@ async function handlePaymentIntentSucceeded(
 // Event handler: payment_intent.payment_failed
 // ---------------------------------------------------------------------------
 
+const PAID_STATUSES: unknown[] = ["succeeded", "resolved_offline"];
+
 async function handlePaymentIntentFailed(
   paymentIntent: Stripe.PaymentIntent,
 ): Promise<void> {
@@ -665,26 +683,55 @@ async function handlePaymentIntentFailed(
     houseId,
   });
 
-  // 1. Update payment document with failure details
-  await upsertPaymentDoc(paymentIntent.id, {
-    stripePaymentIntentId: paymentIntent.id,
-    houseId: houseId ?? null,
-    guestId: guestId ?? null,
-    ...guestUserIdField(paymentIntent.metadata?.guestUserId),
-    // Cents, like every other write to this field (#82). A failed payment is
-    // excluded from the analytics window by status, but the unit must still
-    // agree — the resident's history reads the same field.
-    amount: amountCents,
-    currency: paymentIntent.currency,
-    status: "failed",
-    failureCode,
-    failureMessage,
-    // Write-once in upsertPaymentDoc: a failure after an earlier record keeps
-    // the original date. Without it a failed attempt with no earlier doc is
-    // dropped by getPaymentHistory's orderBy("createdAt").
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  const db = admin.firestore();
+
+  // 1. Update payment document with failure details. A PaymentIntent can fail and
+  // then succeed on a retry, and Stripe doesn't promise event order, so a failure
+  // can arrive after the payment is paid. That one changes nothing and tells nobody.
+  // In a transaction so a success landing now can't fall between the read and write.
+  const paymentRef = db.collection("payments").doc(paymentIntent.id);
+  const recorded = await db.runTransaction(async (txn) => {
+    const existing = await txn.get(paymentRef);
+    if (
+      existing.get("rentApplied") === true ||
+      PAID_STATUSES.includes(existing.get("status"))
+    ) {
+      return false;
+    }
+    txn.set(
+      paymentRef,
+      {
+        stripePaymentIntentId: paymentIntent.id,
+        houseId: houseId ?? null,
+        guestId: guestId ?? null,
+        ...guestUserIdField(paymentIntent.metadata?.guestUserId),
+        // Cents, like every other write to this field (#82). A failed payment is
+        // excluded from the analytics window by status, but the unit must still
+        // agree — the resident's history reads the same field.
+        amount: amountCents,
+        currency: paymentIntent.currency,
+        status: "failed",
+        failureCode,
+        failureMessage,
+        // Write-once: a failure after an earlier record keeps the original date.
+        // Without it a failed attempt with no earlier doc is dropped by
+        // getPaymentHistory's orderBy("createdAt").
+        ...(existing.get("createdAt") == null
+          ? { createdAt: admin.firestore.FieldValue.serverTimestamp() }
+          : {}),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      },
+      { merge: true },
+    );
+    return true;
   });
+
+  if (!recorded) {
+    logger.warn("payment_intent.payment_failed: payment already paid, ignoring", {
+      paymentIntentId: paymentIntent.id,
+    });
+    return;
+  }
 
   if (!guestId || !houseId) {
     logger.warn(
@@ -694,7 +741,6 @@ async function handlePaymentIntentFailed(
     return;
   }
 
-  const db = admin.firestore();
   const guestSnap = await db.collection("guests").doc(guestId).get();
 
   if (!guestSnap.exists) {
@@ -929,6 +975,7 @@ async function handleInvoicePaymentSucceeded(
     if (operatorUid) {
       await updateHouseSubscriptionStatus(
         operatorUid,
+        stripeSubscriptionId,
         "active",
         admin.firestore.FieldValue.delete(),
       );
@@ -1013,6 +1060,7 @@ async function handleInvoicePaymentFailed(
     ).toISOString();
     await updateHouseSubscriptionStatus(
       subData.userId,
+      stripeSubscriptionId,
       newStatus as HouseSubscriptionStatus,
       graceEndsAt,
     );
@@ -1069,7 +1117,7 @@ async function handleSubscriptionDeleted(
   // B10: propagate canceled status to all operator houses.
   const operatorUid = await resolveOperatorUid(subscription);
   if (operatorUid) {
-    await updateHouseSubscriptionStatus(operatorUid, "canceled");
+    await updateHouseSubscriptionStatus(operatorUid, subscription.id, "canceled");
   } else {
     logger.warn(
       "customer.subscription.deleted: could not resolve operator uid for house update",
@@ -1081,13 +1129,13 @@ async function handleSubscriptionDeleted(
 // ---------------------------------------------------------------------------
 // Event handler: customer.subscription.updated
 //
-// Note: In Stripe API 2026-01-28.clover, Subscription.current_period_end was
-// removed. We store the billing_cycle_anchor as a proxy for period info,
-// or fall back to ISO date derived from the existing value in Firestore.
+// In Stripe API 2026-01-28.clover the period end is on the subscription item
+// (periodEndSeconds); billing_cycle_anchor is the cycle's start, not its end.
 // ---------------------------------------------------------------------------
 
 async function handleSubscriptionUpdated(
   subscription: Stripe.Subscription,
+  stripeClient: Stripe,
 ): Promise<void> {
   const db = admin.firestore();
   const subSnap = await db
@@ -1108,11 +1156,7 @@ async function handleSubscriptionUpdated(
 
   const newStatus = subscription.status as SubscriptionDoc["status"];
 
-  // billing_cycle_anchor is the best available date reference in the new API
-  // for when the next billing cycle starts.
-  const currentPeriodEnd = new Date(
-    subscription.billing_cycle_anchor * 1000,
-  ).toISOString();
+  const periodEnd = periodEndSeconds(subscription);
   const planId = subscription.items.data[0]?.price?.id ?? previousData.planId;
   const guestCount = parseInt(
     (subscription.metadata?.guestCount as string | undefined) ??
@@ -1122,7 +1166,10 @@ async function handleSubscriptionUpdated(
 
   await doc.ref.update({
     status: newStatus,
-    currentPeriodEnd,
+    // Left as stored when the event carries no period end.
+    ...(periodEnd != null
+      ? { currentPeriodEnd: new Date(periodEnd * 1000).toISOString() }
+      : {}),
     planId,
     guestCount: isNaN(guestCount) ? previousData.guestCount : guestCount,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -1143,8 +1190,10 @@ async function handleSubscriptionUpdated(
   if (operatorUid) {
     await updateHouseSubscriptionStatus(
       operatorUid,
+      subscription.id,
       newStatus as HouseSubscriptionStatus,
     );
+    await syncOperatorTier(stripeClient, operatorUid, subscription.id);
   } else {
     logger.warn(
       "customer.subscription.updated: could not resolve operator uid for house update",
@@ -1644,6 +1693,7 @@ export const stripeWebhook = onRequest(
         case "customer.subscription.updated":
           await handleSubscriptionUpdated(
             event.data.object as Stripe.Subscription,
+            getStripe(),
           );
           break;
 

@@ -1,6 +1,8 @@
 import { Location } from "./GeocodeResponse";
 
 export class RatsMeeting {
+  /** Mobile matches check-ins on this to stop a meeting counting twice in a day. */
+  id?: string;
   name: string = "";
   time: string = "";
   street: string = "";
@@ -17,6 +19,7 @@ export class RatsMeeting {
   online?: boolean;
   link?: string;
   onlineNotes: string = "";
+  dataAsOf?: string;
 }
 
 export type MeetingType =

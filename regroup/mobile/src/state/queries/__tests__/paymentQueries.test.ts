@@ -251,6 +251,23 @@ describe('paymentQueries', () => {
       );
     });
 
+    it('records nothing when the server reports the amount already paid today', async () => {
+      // RENT-012: { alreadyPaid: true } carries no intent, so an optimistic
+      // pending record would be a second, phantom payment in the history.
+      (paymentService.createRentPaymentIntent as jest.Mock).mockResolvedValue({
+        alreadyPaid: true,
+      });
+
+      const { result } = renderHook(() => useCreateRentPayment(), { wrapper });
+
+      result.current.mutate(mutationArgs);
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data).toEqual({ alreadyPaid: true });
+      expect(paymentService.recordRentPayment).not.toHaveBeenCalled();
+    });
+
     it('should use default description "Rent Payment" when none is provided', async () => {
       (paymentService.createRentPaymentIntent as jest.Mock).mockResolvedValue(
         mockIntentResult,

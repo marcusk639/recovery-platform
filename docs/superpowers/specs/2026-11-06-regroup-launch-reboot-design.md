@@ -160,7 +160,7 @@ Stripe Connect has **0 connected accounts** in live mode. In the last 90 days th
     - **Locally:** `~/.maestro/tests/2026-10-26_152429` and `_152717` (20:24 and 20:27 UTC, minutes after the 246-account window) ran a `deeplink-probe` flow with `appId=com.rats.dev`. That is the iOS bundle that signs into production. Logs inside the window weren't kept, so the burst itself is attributed, not proven.
     - **The suite's own docs invite this.** `maestro/flows/smoke.yaml`'s header says to run it with `APP_ID=com.rats.dev` (iOS) or `com.regroup.app` (Android), both production builds.
     - **In CI, on every PR (until 2026-11-06):** the "Maestro Cloud — smoke tests (regroup Android)" job built `assembleDebug`, whose `google-services.json` is `phoenix-cleanhouse`. It ran `e2e-maestro/regroup/login-and-view-dashboard.yaml` (`clearState: true`, logging in as `operator@example.com` with the e2e password). That flow declared `appId: com.rats.dev` while the APK is `com.regroup.app`, and the step was `continue-on-error`, so whether it wrote to production can't be told.
-      - **Fixed 2026-11-06 (P1 Task 3):** the owner chose to remove the job. The Maestro step and the flow file are removed. The executor kept the job as the build-only `regroup-android-build`, because it is CI's only regroup Android compile check, **pending the owner's approval of that deviation**. Deleting the job entirely is a one-block edit. Branch protection requires no status checks, so the rename blocks nothing.
+      - **Fixed 2026-11-06 (P1 Task 3):** the owner chose to remove the job. The Maestro step and the flow file are removed. The executor kept the job as the build-only `regroup-android-build`, because it is CI's only regroup Android compile check, **The owner approved build-only on 2026-11-06.** Branch protection requires no status checks, so the rename blocks nothing.
 
 Firestore point-in-time recovery was off on both projects. **The owner had it turned on for `phoenix-cleanhouse` on 2026-11-06** (7-day retention, so the full window exists from 2026-11-13). Staging stays off, and delete protection is off on both. The settings and restore steps are in `regroup/docs/operations/data-recovery.md`.
 
@@ -171,6 +171,7 @@ Firestore point-in-time recovery was off on both projects. **The owner had it tu
   - `operator-setup-wizard` fails because of the Add Home bug.
   - `operator-applications` and `oxford-onboarding` fail on missing or contrary seed data.
   - Several passing flows are weak. `guest-activity-dispute` makes the long-press and submit optional, and `signup` never checks where signup lands.
+  - **Corrected 2026-11-06 (P2, from the run logs):** two of the six never exercise their key step on any version. `signup` never ticks the terms box, so it lands nowhere. `guest-activity-dispute` long-presses the list, while the app opens disputes from a DISPUTE button, so nothing is submitted. Real parity is four flows. Decision record §7.2 has the RN 0.72 comparison: its Android build can't get past sign-in.
 - **Feature areas with no flow:** invitations; beds; issues and complaints; drug testing; documents; staff notes; house chat and direct messages; notifications inbox and preferences; Stripe Connect; the subscription gate (all states); discharge; intake; meeting search and check-in; logging meds/work/supporter; chore photo evidence; profile edit and avatar; delete account; 2FA; compliance PDF; payment CSV and receipts; Oxford officers, EES, business meetings, voting and treasury; manager promote/demote; admin report.
 - **Web:** Karma specs exist for the pricing, signup, billing-info and tier-picker components, but **CI runs none of them** (it only type-checks the web app). There are no browser E2E tests; the only one is the Protractor scaffold.
 - **Functions:** Jest tests with everything mocked. The Stripe CLI scripts (`stripe:listen`, `stripe:trigger:*`, `stripe:scenario:*`) target the production project path.
@@ -183,14 +184,27 @@ Firestore point-in-time recovery was off on both projects. **The owner had it tu
   - **Missing:**
     - No staging app has ever been built on the owner's Mac: there is no `E2EStaging` product in DerivedData and no `e2eStaging` APK.
     - Staging has **no account anyone can sign in with**: 83 users, none with a password, and 0 houses. The seeder refuses every project that isn't `demo-`, by design.
-    - **No web app is deployed** to staging. The hosting site `regroup-e2e.web.app` exists, but `/`, `/pricing` and `/signup` all return 404, so web checkout has nowhere to run.
+    - **Resolved 2026-11-06 (P3a):** the web app is deployed to staging. `regroup-e2e.web.app` serves `/`, `/pricing`, `/signup` and `/login` server-rendered, and the served bundle carries the staging project id and key. Before this the site existed but all three returned 404.
     - The variants were written on RN 0.72 (#143) and have not been built on 0.88.
-    - **The web can't be deployed to staging safely yet** (verified).
+    - **Resolved 2026-11-06 (P3a), kept for the record:** the web couldn't be deployed to staging safely. `web/angular.json` now has an `e2e-staging` server configuration, `build:ssr:e2e-staging` builds both halves against staging and refuses a half missing the staging identifiers, and `ssr`'s min instances are 0 on staging (`SSR_MIN_INSTANCES`). See `web/CLAUDE.md` § Staging.
       - The browser build has an `e2e-staging` configuration, but the server-render (SSR) target in `web/angular.json` has only `production`.
       - `build:ssr` hardcodes `ng run sapp:server:production`, and hosting sends `**` to the `ssr` function (`web/firebase.json`).
       - A staging deploy would serve pages rendered from the production environment.
 
 The feature inventory this coverage is measured against is Appendix A.
+
+### 3.6 Bugs found during P1 and P2 (2026-11-06)
+
+These are tracked as GitHub issues. Each is fixed in the phase shown, and its fix PR updates this list.
+
+| Issue | Bug                                                                                                                                      | Fixed in                                                                                             |
+| ----- | ---------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| #174  | Opening the dispute or confirm modal also opens the global "Loading…" modal, which blocks disputes on Android 0.88. Pre-existing wiring. | **Right after #160 merges**, before P3's mobile half. It blocks the dispute flow and its matrix rows |
+| #175  | Maestro's cold launch on the Android emulator intermittently shows a blank white screen. Not reproduced by hand.                         | P6, before the suite gates the release                                                               |
+| #176  | E2E tooling follow-ups: stale simulator default, guard device selection, checker argument edge cases, a stale seed script, matrix rows   | P6                                                                                                   |
+| #177  | The Firestore exports bucket has no retention rule for pre-write exports, which hold resident data                                       | Before the first production backfill (P10 step 10.3)                                                 |
+
+Fixed already: the CI wrapper-jar validation (GHSA-7495) and the workflow-hardening checker's stale job ID, both on #160; the stale `signup` and `guest-activity-dispute` flows, also on #160.
 
 ## 4. What gets built
 
@@ -533,7 +547,7 @@ Each production step has its way back prepared before the step runs. Each recove
 - ~~Production changes stay compatible with today's store build until the reboot ships.~~ Replaced after plan review; see below. The minimum-version gate stays.
 - The relaunch ships as an update to the existing store listings. The owner confirms the IDs and supplies the Play signing fingerprint.
 - Operator checkout and plan management link out to the system browser instead of using an in-app WebView.
-- Grace period: 7 days from the first failed payment, for everyone, then blocked. Aligned with Stripe's retries.
+- Grace period: 7 days from the first failed payment, for everyone, then blocked. Aligned with Stripe's retries. Measured from the failed invoice's Stripe time, not from when the webhook arrives (owner, 2026-11-08).
 - The list of paying houses comes from Stripe's live active subscriptions, cross-checked against Firestore. Done 2026-11-06; see §3.4.
 
 **The owner's, after plan review (2026-11-06; he accepted the review's recommendations):**

@@ -92,6 +92,8 @@ export const useCreateRentPayment = () => {
         amountInCents: amount,
         description,
       });
+      // Already paid today at this amount: nothing new to record (RENT-012).
+      if (intentResult.alreadyPaid) return intentResult;
       // Optimistically record the pending payment so history shows immediately
       try {
         await paymentService.recordRentPayment(

@@ -86,8 +86,36 @@ describe('validate — structure', () => {
     const errs = check(matrix(row({ coveredBy: 'regroup/mobile/maestro/flows/nope.yaml' })));
     expect(errs).toEqual([expect.stringMatching(/AUTH-001: missing file/)]);
   });
+  it('reads a covering path with Markdown-escaped underscores, which Prettier keeps', () => {
+    // Prettier rewrites a bare __tests__ in a table cell as **tests**; escaped, it stays.
+    const escaped = 'regroup/e2e/src/payments/\\_\\_tests\\_\\_/rentLedger.server.test.ts';
+    expect(check(matrix(row({ kind: 'server', guard: 'money', coveredBy: escaped })))).toEqual([]);
+  });
   it('does not check the file of a missing row', () => {
     expect(check(matrix(row({ coveredBy: '—', status: 'missing' })))).toEqual([]);
+  });
+  it('needs a covering file for a server row that has run', () => {
+    const server = { kind: 'server', guard: 'money' };
+    expect(check(matrix(row({ ...server, coveredBy: '—' })))).toEqual([
+      expect.stringMatching(/AUTH-001: needs Covered by/),
+    ]);
+    expect(check(matrix(row({ ...server, coveredBy: 'regroup/nope.test.ts' })))).toEqual([
+      expect.stringMatching(/AUTH-001: missing file/),
+    ]);
+    expect(check(matrix(row(server)))).toEqual([]);
+  });
+  it('cannot defer a money-guarded server row', () => {
+    const errs = check(
+      matrix(
+        row({
+          kind: 'server',
+          guard: 'money',
+          status: 'deferred',
+          deferred: 'checklist: x (2026-11-08)',
+        }),
+      ),
+    );
+    expect(errs).toEqual([expect.stringMatching(/cannot defer a money row/)]);
   });
 });
 
@@ -184,12 +212,16 @@ describe('CLI', () => {
 
 describe('gate integrity', () => {
   it('requires device rows to use a DEVS- or DEVP- id', () => {
-    const errs = check(matrix(row({ id: 'LINK-004', kind: 'device', coveredBy: 'x', status: 'missing' })));
+    const errs = check(
+      matrix(row({ id: 'LINK-004', kind: 'device', coveredBy: 'x', status: 'missing' })),
+    );
     expect(errs).toEqual([expect.stringMatching(/LINK-004: device rows need a DEVS- or DEVP- id/)]);
   });
 
   it('requires DEVS-/DEVP- rows to be Kind device', () => {
-    expect(check(matrix(row({ id: 'DEVS-009' })))).toEqual([expect.stringMatching(/DEVS-009: .*must be Kind device/)]);
+    expect(check(matrix(row({ id: 'DEVS-009' })))).toEqual([
+      expect.stringMatching(/DEVS-009: .*must be Kind device/),
+    ]);
   });
 
   it('refuses a Rows table whose header is not the column list', () => {
@@ -200,5 +232,10 @@ describe('gate integrity', () => {
   it('refuses a row line outside the Rows table', () => {
     const md = `${matrix(row())}\n## Later\n\n${HEADER}${row({ id: 'AUTH-002' })}`;
     expect(() => parseMatrix(md)).toThrow(/AUTH-002.*outside the Rows table/);
+  });
+
+  it('refuses a row without its leading pipe, which would drop out of every gate', () => {
+    const md = matrix(row(), row({ id: 'AUTH-002', status: 'missing' }).replace(/^\| /, ''));
+    expect(() => parseMatrix(md)).toThrow(/AUTH-002.*leading \|/);
   });
 });

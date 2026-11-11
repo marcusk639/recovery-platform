@@ -21,14 +21,15 @@ import { House } from "../entities/House";
 // except `requestKey`, which toPayload adds). imageUrl/avatar are deliberately
 // absent: they are local file URIs until uploaded. `id` is absent too: the
 // server derives house ids, and the local wizard id is sent only as the
-// idempotency `requestKey`. Keep this a plain string-literal array: the
+// idempotency `requestKey`. `houseType` is absent: the operator's plan
+// sets it on the server (#225). Keep this a plain string-literal array: the
 // functions suite parses it from this file to check it against the schema
 // (regroup/functions/src/__tests__/houses/mobilePayloadKeys.drift.test.ts).
 export const HOUSE_PAYLOAD_KEYS = [
   "name", "lat", "lng", "street", "city", "state", "zip", "country",
   "timezone", "phoneNumber", "monthlyRent", "weeklyRent", "maximumCapacity",
   "depositsAndFees", "rentFrequency", "gender", "baths", "wifi", "certified",
-  "managerSetupType", "houseType", "phases", "chores", "rooms",
+  "managerSetupType", "phases", "chores", "rooms",
   "pendingAdminInvites", "pendingGuestInvites", "seniorPeerEmails",
 ];
 

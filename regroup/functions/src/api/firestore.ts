@@ -35,6 +35,18 @@ export const rentCollectionAttemptCollection = ratsFirestore.collection('rent-co
 export const houseTombstoneCollection = ratsFirestore.collection('houseTombstones');
 // Server-only role records house-roles/{houseId}_{uid} (util/houseRoles).
 export const houseRolesCollection = ratsFirestore.collection('house-roles');
+// Rent charges (src/rent/), server-only (rules deny every client):
+// rentAccounts/{guestId} holds chargeFrom/chargedThrough; rentCharges/{guestId}_{from}
+// is one charge record; config/rentCharges.paused stops the charge job.
+export const rentAccountCollection = ratsFirestore.collection('rentAccounts');
+export const rentChargeCollection = ratsFirestore.collection('rentCharges');
+// rentHouseStates/{houseId}: when charging turned on (houseRentSettings trigger).
+export const rentHouseStateCollection = ratsFirestore.collection('rentHouseStates');
+// Reversed charges, moved here by scripts/reverseRentCharges (server-only).
+export const rentChargeReversalCollection = ratsFirestore.collection('rentChargeReversals');
+export const configCollection = ratsFirestore.collection('config');
+// A function, not a ref: suites that mock collection() return nothing from it at import time.
+export const rentConfigRef = () => configCollection.doc('rentCharges');
 
 /**
  * Shape of a document in the `subscriptions` collection. Read by the Stripe

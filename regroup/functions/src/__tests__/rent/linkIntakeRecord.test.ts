@@ -1,0 +1,340 @@
+// Intake followed by an invite sign-up leaves two active records for one person.
+// linkIntakeRecord moves the rent onto the invite record, so only one is charged.
+
+jest.mock('firebase-functions/v2', () => ({
+  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
+}));
+jest.mock('firebase-admin/firestore', () => ({
+  FieldValue: require('../helpers/memFirestore').fieldValue,
+}));
+jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFirestore);
+jest.mock('../../util/notifications', () => ({ sendNotification: jest.fn() }));
+
+import { apiFirestore, mem } from '../helpers/memFirestore';
+import { account, at, charges, guest, house, invitedAs } from '../helpers/rentFixtures';
+import { chargeResident } from '../../rent/chargeResident';
+import { rentOnGuestWrite } from '../../rent/guestWriteRent';
+import { linkIntakeRecord } from '../../rent/linkIntakeRecord';
+
+const intake = (o: Record<string, unknown> = {}, id = 'gIntake') =>
+  guest({ userId: '', email: 'Pat@Example.com ', rentOwed: 12500, ...o }, id);
+const invite = (o: Record<string, unknown> = {}, invitedEmail = 'pat@example.com') => {
+  invitedAs(typeof o.userId === 'string' ? o.userId : 'u1', invitedEmail);
+  return guest({ userId: 'u1', email: 'pat@example.com', moveInDate: undefined, ...o }, 'gNew');
+};
+const doc = (id: string) => mem.get(`guests/${id}`) ?? {};
+
+beforeEach(() => mem.reset());
+
+it('an intake record with $125 owed and the same email (different case) is linked', async () => {
+  house();
+  intake({ rentDueDate: '2026-11-18', choreFees: 500, createdBy: 'mgr' });
+  mem.seed('rentAccounts/gIntake', {
+    ...{ guestId: 'gIntake', houseId: 'H', anchoredTo: '2026-11-11' },
+    chargeFrom: '2026-11-18',
+    chargedThrough: '2026-11-22',
+  });
+  mem.seed('rentCharges/gIntake_2026-11-18', {
+    guestId: 'gIntake',
+    houseId: 'H',
+    guestUserId: null,
+  });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew')).toMatchObject({
+    rentOwed: 12500,
+    choreFees: 500,
+    moveInDate: '2026-11-18',
+    rentDueDate: '2026-11-18',
+  });
+  expect(doc('gIntake')).toMatchObject({ rentOwed: 0, choreFees: 0, rentLinkedTo: 'gNew' });
+  expect(mem.get('rentAccounts/gIntake')).toBeUndefined();
+  expect(mem.get('rentAccounts/gNew')).toMatchObject({
+    guestId: 'gNew',
+    chargedThrough: '2026-11-22',
+  });
+  expect(mem.get('rentCharges/gIntake_2026-11-18')?.guestUserId).toBe('u1');
+});
+
+// The stamps let a reversal find where the balance went after staff delete the intake
+// record. Written in a second write after the link, a failure there left the link done
+// and the charges unstamped for good: a retried trigger finds nothing left to link.
+it('the moved charges are stamped in the same commit as the link', async () => {
+  house();
+  intake({ createdBy: 'mgr' });
+  mem.seed('rentCharges/gIntake_2026-11-18', { guestId: 'gIntake', houseId: 'H', guestUserId: null });
+  invite();
+  jest.spyOn(apiFirestore.ratsFirestore, 'batch').mockImplementation(() => {
+    throw new Error('a second write after the link');
+  });
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(mem.get('rentCharges/gIntake_2026-11-18')).toMatchObject({ guestUserId: 'u1', linkedTo: 'gNew' });
+  jest.restoreAllMocks();
+});
+
+it("after linking, the next chargeResident on the intake record is 'linked'", async () => {
+  house();
+  intake({ rentOwed: 0 });
+  await chargeResident('gIntake', at('2026-11-18'));
+  expect(doc('gIntake').rentOwed).toBe(12500);
+  invite();
+  const now = at('2026-11-18');
+  await rentOnGuestWrite({
+    guestId: 'gNew',
+    after: doc('gNew'),
+    afterCreateTimeMs: now.getTime(),
+    eventTime: now.toISOString(),
+    now,
+  });
+  await expect(chargeResident('gIntake', now)).resolves.toEqual({
+    status: 'skipped',
+    reason: 'linked',
+  });
+  expect(doc('gNew').rentOwed).toBe(12500);
+  expect(charges()).toEqual(['rentCharges/gIntake_2026-11-18']);
+  await chargeResident('gNew', at('2026-11-23'));
+  expect(charges()).toEqual(['rentCharges/gIntake_2026-11-18', 'rentCharges/gNew_2026-11-23']);
+});
+
+it('a negative balance on an intake record is not carried across', async () => {
+  house();
+  intake({ rentOwed: -80000, choreFees: -5000, createdBy: 'mgr' });
+  invite({ rentOwed: 80000 });
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew')).toMatchObject({ rentOwed: 80000 });
+  expect(doc('gNew').choreFees ?? 0).toBe(0);
+  expect(doc('gIntake')).toMatchObject({ rentOwed: -80000, rentLinkedTo: 'gNew' });
+});
+
+it('an intake record the person created themselves is not linked', async () => {
+  house();
+  intake({ rentOwed: 100, createdBy: 'u1' });
+  invite({ rentOwed: 80000 });
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('refused');
+  expect(doc('gNew').rentOwed).toBe(80000);
+  expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+});
+
+it('a custom rate a manager set on the intake record moves to the invite record', async () => {
+  house();
+  intake({
+    rentOwed: 0,
+    createdBy: 'mgr',
+    customRent: { amountCents: 0, frequency: 'monthly' },
+  });
+  invite();
+  await linkIntakeRecord('gNew');
+  expect(doc('gNew').customRent).toEqual({ amountCents: 0, frequency: 'monthly' });
+});
+
+// The due date decides overdue notices, so it follows the person only from a record a
+// known staff member made, and only as a real date.
+it('a due date moves only with a creator the rules confirm', async () => {
+  house();
+  intake({ rentOwed: 1, rentDueDate: '9999-12-31' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentOwed).toBe(1);
+  expect(doc('gNew').rentDueDate).toBeUndefined();
+});
+
+it('a due date that is not a calendar date never moves', async () => {
+  house();
+  intake({ createdBy: 'mgr', rentOwed: 100, rentDueDate: 'later' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentDueDate).toBeUndefined();
+});
+
+it("a manager's due date on the intake record still moves", async () => {
+  house();
+  intake({ createdBy: 'mgr', rentOwed: 100, rentDueDate: '2026-11-18' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentDueDate).toBe('2026-11-18');
+});
+
+it('a custom rate or move-in date moves only with a creator the rules confirm', async () => {
+  house();
+  intake({
+    rentOwed: 5000,
+    intakeCompletedBy: 'mgr',
+    moveInDate: '2026-10-01',
+    customRent: { amountCents: 0, frequency: 'monthly' },
+  });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(doc('gNew').rentOwed).toBe(5000);
+  expect(doc('gNew').customRent).toBeUndefined();
+  expect(doc('gNew').moveInDate).toBeUndefined();
+});
+
+it('a custom rate is not copied when the intake record has no known creator', async () => {
+  house();
+  intake({ rentOwed: 0, customRent: { amountCents: 0, frequency: 'monthly' } });
+  invite();
+  await linkIntakeRecord('gNew');
+  expect(doc('gNew').customRent).toBeUndefined();
+});
+
+it("two matching intake records are 'ambiguous' and nothing changes", async () => {
+  house();
+  intake({}, 'i1');
+  intake({}, 'i2');
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('ambiguous');
+  expect(doc('gNew').rentOwed).toBe(0);
+  expect(doc('i1').rentLinkedTo).toBeUndefined();
+  expect(doc('i2').rentLinkedTo).toBeUndefined();
+});
+
+it('a match in another house is ignored', async () => {
+  house();
+  intake({ houseId: 'other' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+});
+
+it('a discharged intake record is ignored', async () => {
+  house();
+  intake({ status: 'discharged' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+});
+
+it('a record that already has an account is not an intake record', async () => {
+  house();
+  intake({ userId: 'someoneElse' });
+  invite();
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+});
+
+it('a new record without email does nothing and makes no reads', async () => {
+  house();
+  intake();
+  invite({ email: '' });
+  const where = jest.spyOn(apiFirestore.guestCollection, 'where');
+  const docRef = jest.spyOn(apiFirestore.guestCollection, 'doc');
+  await expect(linkIntakeRecord('gNew', doc('gNew'))).resolves.toBe('none');
+  expect(where).not.toHaveBeenCalled();
+  expect(docRef).not.toHaveBeenCalled();
+  jest.restoreAllMocks();
+});
+
+it('an account on the new record is kept and the intake one removed', async () => {
+  house();
+  intake();
+  mem.seed('rentAccounts/gIntake', { guestId: 'gIntake', chargedThrough: '2026-11-22' });
+  invite();
+  account({ guestId: 'gNew', chargedThrough: '2026-11-29' });
+  mem.seed('rentAccounts/gNew', { ...mem.get('rentAccounts/g1'), guestId: 'gNew' });
+  await linkIntakeRecord('gNew');
+  expect(mem.get('rentAccounts/gNew')?.chargedThrough).toBe('2026-11-29');
+  expect(mem.get('rentAccounts/gIntake')).toBeUndefined();
+});
+
+describe('intake created after the invite record', () => {
+  it('the new intake record is linked to the existing invite record', async () => {
+    house();
+    invite({ moveInDate: '2026-11-16', rentOwed: 17500 });
+    intake({ rentOwed: 5000 });
+    await expect(linkIntakeRecord('gIntake')).resolves.toBe('linked');
+    expect(doc('gIntake')).toMatchObject({ rentLinkedTo: 'gNew', rentOwed: 0 });
+    expect(doc('gNew').rentOwed).toBe(22500);
+    expect(doc('gNew').moveInDate).toBe('2026-11-16');
+  });
+
+  it('its create event charges the invite record only', async () => {
+    house();
+    invite({ moveInDate: '2026-11-18' });
+    await chargeResident('gNew', at('2026-11-18'));
+    intake({ rentOwed: 0 });
+    const now = at('2026-11-18');
+    await expect(
+      rentOnGuestWrite({
+        guestId: 'gIntake',
+        after: doc('gIntake'),
+        afterCreateTimeMs: now.getTime(),
+        eventTime: now.toISOString(),
+        now,
+      }),
+    ).resolves.toEqual({ status: 'skipped', reason: 'linked' });
+    expect(charges()).toEqual(['rentCharges/gNew_2026-11-18']);
+    expect(doc('gNew').rentOwed).toBe(12500);
+  });
+
+  it('two invite records with the email are ambiguous', async () => {
+    house();
+    invitedAs('u1', 'pat@example.com');
+    invitedAs('u2', 'pat@example.com');
+    guest({ userId: 'u1', email: 'pat@example.com' }, 'a');
+    guest({ userId: 'u2', email: 'pat@example.com' }, 'b');
+    intake();
+    await expect(linkIntakeRecord('gIntake')).resolves.toBe('ambiguous');
+    expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+  });
+});
+
+// The resident writes their own record (any email, see the self-create rule), so the
+// match uses the email the invitation was sent to, which staff typed.
+describe('only the invited email links an account to an intake record', () => {
+  it("an invited resident who writes someone else's email on their record claims nothing", async () => {
+    house();
+    intake({ createdBy: 'mgr', customRent: { amountCents: 0, frequency: 'monthly' } });
+    invite({ userId: 'u2' }, 'sam@example.com');
+    await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+    expect(doc('gIntake')).toMatchObject({ rentOwed: 12500 });
+    expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+    expect(doc('gNew').customRent).toBeUndefined();
+  });
+
+  it('a later intake record is not linked to a resident who edited their email to match', async () => {
+    house();
+    invite({ userId: 'u2' }, 'sam@example.com');
+    intake({ createdBy: 'mgr' });
+    await expect(linkIntakeRecord('gIntake')).resolves.toBe('none');
+    expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+  });
+
+  it('the invited email links even when the record carries a different one', async () => {
+    house();
+    intake({ createdBy: 'mgr' });
+    invite({ email: 'pat.new@example.com' });
+    await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+    expect(doc('gNew').rentOwed).toBe(12500);
+  });
+
+  it('an account with no admission ticket in the house is never linked', async () => {
+    house();
+    intake({ createdBy: 'mgr' });
+    guest({ userId: 'u3', email: 'pat@example.com', moveInDate: undefined }, 'gNew');
+    await expect(linkIntakeRecord('gNew')).resolves.toBe('none');
+    expect(doc('gIntake').rentLinkedTo).toBeUndefined();
+  });
+});
+
+it('a linked intake record with no account passes on when it joined the house', async () => {
+  house({ rentChargesStartedAtMs: at('2026-11-11').getTime() });
+  mem.seedAt(
+    'guests/gIntake',
+    {
+      houseId: 'H',
+      status: 'active',
+      userId: '',
+      email: 'pat@example.com',
+      moveInDate: '2026-10-01',
+      rentOwed: 5000,
+    },
+    at('2026-11-01').getTime(),
+  );
+  invite();
+  await linkIntakeRecord('gNew');
+  expect(mem.get('rentAccounts/gNew')).toMatchObject({
+    guestId: 'gNew',
+    houseId: 'H',
+    houseJoinedAtMs: at('2026-11-01').getTime(),
+  });
+  await chargeResident('gNew', at('2026-11-18'));
+  expect(charges()).toEqual(['rentCharges/gNew_2026-11-16']);
+  expect(doc('gNew').rentOwed).toBe(5000 + 17500);
+});

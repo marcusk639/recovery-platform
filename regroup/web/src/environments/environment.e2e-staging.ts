@@ -1,8 +1,8 @@
 // e2e-staging: the web app against the deployed `regroup-e2e` Firebase project.
 //   ng serve --configuration e2e-staging   /   ng build --configuration e2e-staging
 //
-// The web config is NOT committed. It is generated, gitignored, by the
-// regroup/e2e package into ./e2e-staging.generated.ts. If that file is missing,
+// The web config is NOT committed. It is generated, gitignored, by
+// `npm run gen:e2e-staging` (scripts/gen-e2e-staging-config.js) into ./e2e-staging.generated.ts. If that file is missing,
 // the build fails with "Cannot find module './e2e-staging.generated'": generate
 // it first. The shape is in ./e2e-staging.generated.example.ts.
 import { e2eStaging } from './e2e-staging.generated';
@@ -16,7 +16,8 @@ assertE2eStagingConfig(e2eStaging);
 
 export const environment = {
   ...e2eFlags,
-  production: false,
+  // Production mode, like the release: staging is the release candidate.
+  production: true,
   appName: 'App Name',
   stripePublishableKey: e2eStaging.stripePublishableKey,
   firebaseConfig: e2eStaging.firebaseConfig,

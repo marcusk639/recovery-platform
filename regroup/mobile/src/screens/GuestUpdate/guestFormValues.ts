@@ -1,3 +1,4 @@
+import isEqual from 'lodash/isEqual';
 import { Guest } from '../../entities/Guest';
 import type { MoneyEdits } from '../../services/guest';
 import {
@@ -71,7 +72,14 @@ export function guestMoneyUpdate(
   values: GuestFormValues,
 ): GuestMoneyUpdate {
   const seeded = guestToFormValues(guest);
-  const payload = { ...guest, ...values } as unknown as Record<string, unknown>;
+  // Only what the operator changed, plus the record's ids. updateGuest merges this over
+  // the server's copy and the payload wins, so an untouched cached field would overwrite
+  // a newer server value: the hourly charge moves rentDueDate on, and the rules refuse a
+  // write below a manager that changes rentDueDate or customRent.
+  const payload: Record<string, unknown> = { id: guest.id, houseId: guest.houseId };
+  for (const [field, value] of Object.entries(values)) {
+    if (!isEqual(value, seeded[field])) payload[field] = value;
+  }
   const authoritativeFields: Array<keyof Guest> = [];
   const moneyEdits: MoneyEdits = {};
   const malformedFields: Array<keyof Guest> = [];

@@ -35,5 +35,6 @@ echo "✓ Emulator is up."
 echo "▶ Seeding test data (maestro/scripts/seed/index.js) ..."
 cd "${MOBILE_DIR}"
 node maestro/scripts/seed/index.js
+nc -z 127.0.0.1 8082 >/dev/null 2>&1 && node maestro/scripts/seed/directory.js
 
 echo "✓ Seed complete. Test accounts + houses are in the emulator."

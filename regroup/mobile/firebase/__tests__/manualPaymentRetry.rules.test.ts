@@ -33,8 +33,11 @@ beforeAll(async () => {
       port: Number(PORT),
     },
   });
-  await testEnv.withSecurityRulesDisabled(async ctx => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(doc(ctx.firestore(), `houses/${HOUSE}`), { id: HOUSE, adminIds: ['admin'] });
+    // Recording a payment and lowering a balance take a manager or above (owner
+    // decision 2026-11-10): a bare admin claim ranks as a peer leader.
+    await setDoc(doc(ctx.firestore(), `house-roles/${HOUSE}_admin`), { tier: 'manager' });
     await setDoc(doc(ctx.firestore(), 'guests/g1'), { id: 'g1', houseId: HOUSE, rentOwed: 30000 });
   });
 });
@@ -64,7 +67,7 @@ test('the same payment id can only be recorded once (#190)', async () => {
   await assertSucceeds(recordBatch('pay-1'));
   await assertFails(recordBatch('pay-1'));
 
-  await testEnv.withSecurityRulesDisabled(async ctx => {
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
     const guest = await getDoc(doc(ctx.firestore(), 'guests/g1'));
     expect(guest.data()?.rentOwed).toBe(15000);
   });

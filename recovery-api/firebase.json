@@ -3,6 +3,7 @@
     {
       "source": ".",
       "codebase": "recovery-platform",
+      "predeploy": ["npm --prefix \"$RESOURCE_DIR\" run build"],
       "ignore": ["node_modules", ".git", "firebase-debug.log", "firebase-debug.*.log", "src"]
     }
   ],
@@ -10,9 +11,31 @@
     "indexes": "firestore.indexes.json"
   },
   "emulators": {
-    "functions": { "port": 5002 },
-    "firestore": { "port": 8082 },
-    "auth": { "port": 9100 },
-    "ui": { "enabled": true, "port": 4001 }
+    "functions": {
+      "port": 5002
+    },
+    "firestore": {
+      "port": 8082,
+      "websocketPort": 9165
+    },
+    "auth": {
+      "port": 9100
+    },
+    "ui": {
+      "enabled": true,
+      "port": 4001
+    },
+    "hub": {
+      "port": 4402
+    },
+    "logging": {
+      "port": 4502
+    },
+    "eventarc": {
+      "port": 9302
+    },
+    "tasks": {
+      "port": 9502
+    }
   }
 }

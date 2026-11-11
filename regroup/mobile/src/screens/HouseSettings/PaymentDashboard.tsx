@@ -50,6 +50,7 @@ import RatsButton from "../../components/rats-button/rats-button";
 
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { useGuests, guestKeys } from "../../state/queries/guestQueries";
+import { useMayEditRentMoney } from "../../state/queries/houseTierQueries";
 import {
   getHousePaymentRecords,
   recordManualPayment,
@@ -87,6 +88,9 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
   const { data: guestsData = {} } = useGuests(house?.id ?? "");
   const guests = guestsData as Record<string, Guest>;
   const { data: failedPayments = [] } = useFailedPayments(house?.id ?? "");
+  // Peer leaders do not record payments at launch (owner decision 2026-11-10);
+  // the rules refuse it (payments create, guest rentOwed).
+  const canRecordPayments = useMayEditRentMoney(house?.id ?? "");
 
   const [dateFilter, setDateFilter] = useState<DateFilter>("month");
   const [showManualModal, setShowManualModal] = useState(false);
@@ -521,17 +525,19 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
       </ScrollView>
 
       {/* FAB for manual payment */}
-      <TouchableOpacity
-        testID="manual-payment-fab"
-        style={[styles.fab, { marginBottom: insets.bottom }]}
-        onPress={() => setShowManualModal(true)}
-      >
-        <RatsText
-          translate={false}
-          text="+ Record Payment"
-          style={styles.fabText}
-        />
-      </TouchableOpacity>
+      {canRecordPayments && (
+        <TouchableOpacity
+          testID="manual-payment-fab"
+          style={[styles.fab, { marginBottom: insets.bottom }]}
+          onPress={() => setShowManualModal(true)}
+        >
+          <RatsText
+            translate={false}
+            text="+ Record Payment"
+            style={styles.fabText}
+          />
+        </TouchableOpacity>
+      )}
 
       <ManualPaymentModal
         visible={showManualModal}

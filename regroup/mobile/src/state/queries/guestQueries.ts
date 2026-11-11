@@ -111,9 +111,11 @@ export const useUpdateGuest = () => {
         guestKeys.detail(updatedGuest.id),
       );
 
-      // Optimistically update. Merge over the cached guest: the payload is often
-      // partial and never carries the balance, so replacing it showed $0 owed
-      // and re-seeded the balance form from 0 (review).
+      // Optimistically update. Merged over the cached guest, not replaced: callers
+      // send only the fields that changed and never the balance, and a partial guest
+      // in the cache blanks every other field until the refetch (and showed $0 owed).
+      // Balance edits are applied on top.
+      const id = updatedGuest.id;
       const withEdits = (cached: Partial<Guest> | undefined): Partial<Guest> => {
         const next: Partial<Guest> = { ...(cached ?? {}), ...updatedGuest };
         for (const [field, edit] of Object.entries(moneyEdits)) {
@@ -121,25 +123,24 @@ export const useUpdateGuest = () => {
         }
         return next;
       };
-      queryClient.setQueryData(
-        guestKeys.detail(updatedGuest.id),
-        withEdits(previousGuest as Partial<Guest> | undefined),
-      );
+      queryClient.setQueryData<Partial<Guest>>(guestKeys.detail(id), (old) => withEdits(old));
 
       // Also update in the list if it exists
+      let previousGuests: Guests | undefined;
       if (updatedGuest.houseId) {
-        const previousGuests = queryClient.getQueryData<Guests>(
+        previousGuests = queryClient.getQueryData<Guests>(
           guestKeys.list(updatedGuest.houseId),
         );
-        if (previousGuests) {
+        // Only a guest the list already holds: a partial entry would blank it there too.
+        if (previousGuests?.[id]) {
           queryClient.setQueryData(guestKeys.list(updatedGuest.houseId), {
             ...previousGuests,
-            [updatedGuest.id]: withEdits(previousGuests[updatedGuest.id]),
+            [id]: withEdits(previousGuests[id]) as Guest,
           });
         }
       }
 
-      return { previousGuest, previousGuests: previousGuest };
+      return { previousGuest, previousGuests };
     },
 
     // Rollback on error
@@ -149,6 +150,9 @@ export const useUpdateGuest = () => {
           guestKeys.detail(updatedGuest.id),
           context.previousGuest,
         );
+      }
+      if (context?.previousGuests && updatedGuest.houseId) {
+        queryClient.setQueryData(guestKeys.list(updatedGuest.houseId), context.previousGuests);
       }
     },
 

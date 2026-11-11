@@ -72,6 +72,13 @@ describe("findMeetings", () => {
     expect(mockFetchDirectoryMeetings).toHaveBeenCalled();
   });
 
+  it("searches the directory out to 10 km, matching Homegroups' default", async () => {
+    await call(findMeetings, { filters: { type: "AA", location, day: "" } });
+    expect(mockFetchDirectoryMeetings.mock.calls[0][0]).toMatchObject({
+      radiusMeters: 10_000,
+    });
+  });
+
   it("filters directory results down to the requested provider", async () => {
     mockFetchDirectoryMeetings.mockResolvedValue([
       directoryMeeting({ provider: "AA", name: "AA One" }),
@@ -134,12 +141,12 @@ describe("findMeetings", () => {
     expect(result[0].day).toBe("monday");
   });
 
-  it("forwards the numeric day index and caller uid to the directory query", async () => {
+  it("forwards the day name and caller uid to the directory query", async () => {
     await call(findMeetings, {
       filters: { type: "AA", location, day: "monday" },
     });
     expect(mockFetchDirectoryMeetings).toHaveBeenCalledWith(
-      expect.objectContaining({ day: 1 }),
+      expect.objectContaining({ day: "monday" }),
       expect.objectContaining({ uid: "test-user" }),
     );
   });

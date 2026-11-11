@@ -26,6 +26,8 @@ import { RootStackParamList, Routes } from '../../navigation/types';
 import { cancelRentReminder } from '../../services/notifications/rentReminder';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useSelectedHouse } from '../../hooks/useSelectedHouse';
+import { ALREADY_PAID_MESSAGE } from '../RentPayment/rentPaymentHelpers';
+import type { CreatePaymentIntentResult } from '../../services/payments';
 
 // ---------------------------------------------------------------------------
 // Stripe import — wrapped defensively so the screen compiles before the
@@ -78,7 +80,7 @@ type CreateRentPaymentIntentFn = (params: {
   houseId: string;
   amountInCents: number;
   description?: string;
-}) => Promise<{ clientSecret: string }>;
+}) => Promise<CreatePaymentIntentResult>;
 
 let createRentPaymentIntent: CreateRentPaymentIntentFn;
 try {
@@ -154,6 +156,9 @@ const ResidentPayment: React.FC<Props> = ({ navigation, route }) => {
   const [paymentState, setPaymentState] = useState<PaymentState>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [successAmountDisplay, setSuccessAmountDisplay] = useState<string>('');
+  // The server reported this amount already paid today: the success screen says
+  // so instead of announcing a new payment.
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
   const paymentInProgress = useRef(false);
 
   const {
@@ -197,6 +202,7 @@ const ResidentPayment: React.FC<Props> = ({ navigation, route }) => {
 
     try {
       setErrorMessage('');
+      setAlreadyPaid(false);
       setPaymentState('fetching');
 
       // Step 1 — fetch clientSecret from Cloud Function
@@ -208,6 +214,12 @@ const ResidentPayment: React.FC<Props> = ({ navigation, route }) => {
           amountInCents,
           description: `Rent - ${house.name ?? 'House'}`,
         });
+        if (result.alreadyPaid) {
+          // RENT-012: no client secret, so no sheet and no second charge.
+          setAlreadyPaid(true);
+          setPaymentState('success');
+          return;
+        }
         clientSecret = result.clientSecret;
       } catch (err: any) {
         const msg = err?.message?.toLowerCase().includes('network')
@@ -289,7 +301,11 @@ const ResidentPayment: React.FC<Props> = ({ navigation, route }) => {
           />
           <RatsText
             translate={false}
-            text={`${successAmountDisplay} has been processed.`}
+            text={
+              alreadyPaid
+                ? ALREADY_PAID_MESSAGE
+                : `${successAmountDisplay} has been processed.`
+            }
             style={styles.successSubtitle}
           />
           <RatsText
