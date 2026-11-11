@@ -56,6 +56,22 @@ it('an intake record with $125 owed and the same email (different case) is linke
   expect(mem.get('rentCharges/gIntake_2026-11-18')?.guestUserId).toBe('u1');
 });
 
+// The stamps let a reversal find where the balance went after staff delete the intake
+// record. Written in a second write after the link, a failure there left the link done
+// and the charges unstamped for good: a retried trigger finds nothing left to link.
+it('the moved charges are stamped in the same commit as the link', async () => {
+  house();
+  intake({ createdBy: 'mgr' });
+  mem.seed('rentCharges/gIntake_2026-11-18', { guestId: 'gIntake', houseId: 'H', guestUserId: null });
+  invite();
+  jest.spyOn(apiFirestore.ratsFirestore, 'batch').mockImplementation(() => {
+    throw new Error('a second write after the link');
+  });
+  await expect(linkIntakeRecord('gNew')).resolves.toBe('linked');
+  expect(mem.get('rentCharges/gIntake_2026-11-18')).toMatchObject({ guestUserId: 'u1', linkedTo: 'gNew' });
+  jest.restoreAllMocks();
+});
+
 it("after linking, the next chargeResident on the intake record is 'linked'", async () => {
   house();
   intake({ rentOwed: 0 });

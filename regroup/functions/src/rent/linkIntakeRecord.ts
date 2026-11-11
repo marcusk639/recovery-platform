@@ -155,6 +155,8 @@ async function linkRecords(
       oldAccountRef,
       newAccountRef,
     );
+    // Read here, with the records: a transaction does every read before any write.
+    const history = await txn.get(rentChargeCollection.where('guestId', '==', intakeId));
     const target = (newSnap.data() ?? {}) as Data;
     const source = (intakeSnap.data() ?? {}) as Data;
     if (
@@ -212,6 +214,10 @@ async function linkRecords(
       choreFees: num(source.choreFees) - fees,
       rentLinkedTo: newGuestId,
     });
+    // So the resident sees the intake record's charges in their own history, and a
+    // reversal finds the record the balance moved to after staff delete the intake
+    // record. In the same commit as the link: once linked, nothing would retry it.
+    history.docs.forEach((d) => txn.update(d.ref, { guestUserId: userId, linkedTo: newGuestId }));
     if (oldAccount.exists) {
       if (!newAccount.exists) {
         txn.set(newAccountRef, { ...(oldAccount.data() ?? {}), guestId: newGuestId });
@@ -246,15 +252,6 @@ async function linkRecords(
     return badBalance || selfMade ? 'refused' : 'none';
   }
 
-  // So the resident sees the intake record's charges in their own history.
-  const history = await rentChargeCollection.where('guestId', '==', intakeId).get();
-  if (!history.empty) {
-    const batch = ratsFirestore.batch();
-    // linkedTo lets a reversal find the record the balance moved to, even after
-    // staff delete the intake record.
-    history.docs.forEach((d) => batch.update(d.ref, { guestUserId: userId, linkedTo: newGuestId }));
-    await batch.commit();
-  }
   logger.info('linkIntakeRecord: linked', { guestId: newGuestId, intakeId, houseId });
   return 'linked';
 }
