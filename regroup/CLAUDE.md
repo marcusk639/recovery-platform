@@ -6,6 +6,8 @@
 
 **Firebase project:** `phoenix-cleanhouse`
 
+**No live users (owner, 2026-11-10):** no houses are in live use, so there are no live paying operators or residents. Treat it as a fresh app: no backfill is needed for data a bug left wrong in production. Deploys and live writes still need the owner's approval.
+
 ---
 
 ## Stack
@@ -33,6 +35,8 @@ Per-area commands, architecture, and domain rules live in subdirectory CLAUDE.md
 Rules, indexes and emulators live in `mobile/firebase/` (its own `firebase.json`; no `.firebaserc` there). The project pin is `regroup/.firebaserc` -> `phoenix-cleanhouse`. `regroup/firebase.json` only wires `functions.predeploy` to run `scripts/preflight-billing.js`. Start emulators from `mobile/firebase/` (auth 9099, firestore 8080, database 9000, storage 9199, UI 4000; no functions port).
 
 Commits from this repo's installed hook also run `.claude/agent-gates/verify-diff.sh` (blocks deleted/renamed test files and test-count drops — keep a moved test in its original file).
+
+**Payment suite** (`cd e2e && npm run test:payments -- <filter>`; commands in `mobile/maestro/README.md`): emulators plus the local Stripe sandbox, not run in CI. A fresh worktree needs the gitignored `functions/.secret.local` copied in. Red rows are deliberate: each `fail` row in `mobile/docs/e2e/coverage-matrix.md` waits on a named fix, and a row is `pass` only when its test covers the row's whole Action. A Stripe test-clock stall can time a lifecycle test out at 180 s; rerun it alone with `-t` before calling it red.
 
 Account deletion is a resumable orchestrator in `functions/src/accountDeletion/`. Stripe ownership is proven only by `metadata.userId`. The property cap counts keys of `users/{uid}.subscriptionMetadata.houses`.
 
