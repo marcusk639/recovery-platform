@@ -702,6 +702,14 @@ describe("guests/{guestId} — admins can't move another house's guest", () => {
 
   test("ALLOW an operator who admins both houses moving the guest between them", async () => {
     await seedGuestDoc();
+    await testEnv.withSecurityRulesDisabled(async (context) => {
+      // An operator manages the house: below a manager, a resident who owes rent can't be
+      // moved (owner decision 2026-11-10), and an admin claim alone ranks as a peer leader.
+      await context
+        .firestore()
+        .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+        .set({ tier: "manager" });
+    });
     const ctx = testEnv.authenticatedContext(ADMIN_UID, {
       admin: { [HOUSE_ID]: true, [ATTACKER_HOUSE_ID]: true },
     });

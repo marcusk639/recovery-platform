@@ -354,6 +354,25 @@ describe('guests: deleting a resident record', () => {
     await assertFails(deleteDoc(doc(as(PEER), 'guests/gResident')));
   });
 
+  it('a peer leader cannot delete a resident record with a rate a manager set', async () => {
+    // Re-created, it would lose the rate (rentMoneyOnCreateByManager forces none), a rate
+    // change below a manager.
+    await owing({ customRent: { amountCents: 12000, frequency: 'weekly' } });
+    await assertFails(deleteDoc(doc(as(PEER), 'guests/gResident')));
+  });
+
+  it('a peer leader can delete a resident record paid in full across rent and chore fees', async () => {
+    // A payment comes off rentOwed only, so paying both leaves rent -$50 and chore fees $50.
+    await owing({ rentOwed: -5000, choreFees: 5000 });
+    await assertSucceeds(deleteDoc(doc(as(PEER), 'guests/gResident')));
+  });
+
+  it('a peer leader cannot delete a resident record holding a credit', async () => {
+    // The house owes the resident: a manager settles it.
+    await owing({ rentOwed: -5000 });
+    await assertFails(deleteDoc(doc(as(PEER), 'guests/gResident')));
+  });
+
   it('a manager can delete a resident record that owes rent', async () => {
     await owing({ rentOwed: 20000 });
     await assertSucceeds(deleteDoc(doc(as(ADMIN), 'guests/gResident')));
@@ -363,6 +382,53 @@ describe('guests: deleting a resident record', () => {
     await owing({ rentOwed: 20000 });
     await assertSucceeds(deleteDoc(doc(as(ADMIN), 'guests/gResident')));
     await assertSucceeds(recreate(ADMIN, 'gResident'));
+  });
+});
+
+// Moving a record to a house where the caller ranks higher, then changing its money there,
+// would get around rentMoneyByManager, which reads the house the record is in at each write.
+describe('guests: moving a resident to another house', () => {
+  const OTHER_HOUSE = 'houseB';
+  const inBoth = (uid: string) =>
+    rules
+      .env()
+      .authenticatedContext(uid, { admin: { [HOUSE]: true, [OTHER_HOUSE]: true }, guest: { [HOUSE]: true } })
+      .firestore();
+  const owing = (o: Record<string, unknown>) =>
+    rules.env().withSecurityRulesDisabled(async (ctx) => {
+      const db = ctx.firestore();
+      await setDoc(doc(db, `houses/${OTHER_HOUSE}`), { id: OTHER_HOUSE, rentFrequency: 'weekly' });
+      // The peer leader of HOUSE manages the other house.
+      await setDoc(doc(db, `house-roles/${OTHER_HOUSE}_${PEER}`), { tier: 'manager' });
+      await setDoc(doc(db, `house-roles/${OTHER_HOUSE}_${ADMIN}`), { tier: 'manager' });
+      await setDoc(doc(db, 'guests/gResident'), {
+        userId: RESIDENT,
+        houseId: HOUSE,
+        status: 'active',
+        rentOwed: 0,
+        choreFees: 0,
+        ...o,
+      });
+    });
+
+  it('a peer leader who manages the other house cannot move a resident who owes rent there', async () => {
+    await owing({ rentOwed: 20000 });
+    await assertFails(updateDoc(doc(inBoth(PEER), 'guests/gResident'), { houseId: OTHER_HOUSE }));
+  });
+
+  it('nor one with a rate a manager set', async () => {
+    await owing({ customRent: { amountCents: 12000, frequency: 'weekly' } });
+    await assertFails(updateDoc(doc(inBoth(PEER), 'guests/gResident'), { houseId: OTHER_HOUSE }));
+  });
+
+  it('a peer leader can move a resident who owes nothing', async () => {
+    await owing({});
+    await assertSucceeds(updateDoc(doc(inBoth(PEER), 'guests/gResident'), { houseId: OTHER_HOUSE }));
+  });
+
+  it('a manager can move a resident who owes rent', async () => {
+    await owing({ rentOwed: 20000 });
+    await assertSucceeds(updateDoc(doc(inBoth(ADMIN), 'guests/gResident'), { houseId: OTHER_HOUSE }));
   });
 });
 

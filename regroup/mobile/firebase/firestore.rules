@@ -361,6 +361,23 @@ service cloud.firestore {
       // and house may change in the same write); a record ranked 0 (a
       // resident, or no record) any staff may change. Staff never change
       // these on their own record.
+      // Owes nothing and has no rate a manager set. Below a manager, only such a record can
+      // be deleted or moved to another house (owner decision 2026-11-10): either, then a
+      // re-create or a change made where the caller ranks higher, would clear a balance or
+      // a rate. Paying in full comes off rentOwed only, so rent -$50 with chore fees $50
+      // owes nothing; a credit is the house's to settle. A non-number balance counts as owed.
+      function settled(d) {
+        let rent = d.get('rentOwed', 0);
+        let fees = d.get('choreFees', 0);
+        return rent is number && fees is number && rent + fees == 0 && rent <= 0 &&
+          d.get('customRent', null) == null;
+      }
+
+      function houseMoveAllowed() {
+        return !request.resource.data.diff(resource.data).affectedKeys().hasAny(['houseId']) ||
+          callerRank(resource.data.houseId) >= 2 || settled(resource.data);
+      }
+
       function staffDepartureAllowed() {
         let own = resource.data.get('userId', '') == request.auth.uid;
         let changed = request.resource.data.diff(resource.data).affectedKeys()
@@ -410,7 +427,7 @@ service cloud.firestore {
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['updatedBy']) ||
          request.resource.data.updatedBy == request.auth.uid) && (
         (isAdmin([resource.data.houseId]) && isAdmin([request.resource.data.houseId]) &&
-         staffDepartureAllowed() && ownMoneyUnchanged() && rentMoneyByManager()) ||
+         staffDepartureAllowed() && houseMoveAllowed() && ownMoneyUnchanged() && rentMoneyByManager()) ||
         (isSameUser(request.resource.data.userId) &&
          request.resource.data.userId == resource.data.userId &&
          request.resource.data.houseId == resource.data.houseId &&
@@ -430,14 +447,12 @@ service cloud.firestore {
       // runs server-side with the Admin SDK.
       // Staff delete follows rank (staffDepartureAllowed above), never of
       // their own record.
-      // Below a manager, only a record that owes nothing (owner decision 2026-11-10):
-      // deleting one that owes rent or chore fees, then re-creating the resident without
-      // it, would clear what they owe. A balance that isn't a number counts as owed.
+      // Below a manager, only a settled record (above): deleting one that owes rent or chore
+      // fees, then re-creating the resident without it, would clear what they owe.
       allow delete: if isAdmin([resource.data.houseId]) &&
         resource.data.get('userId', '') != request.auth.uid &&
         callerRank(resource.data.houseId) > targetRank(resource.data) &&
-        (callerRank(resource.data.houseId) >= 2 ||
-         (resource.data.get('rentOwed', 0) == 0 && resource.data.get('choreFees', 0) == 0));
+        (callerRank(resource.data.houseId) >= 2 || settled(resource.data));
     }
     
     match /guest-reports/{reportId} {
