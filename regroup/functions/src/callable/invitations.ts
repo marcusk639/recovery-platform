@@ -21,6 +21,7 @@ import {
 import { assertSlotForRole, recordSlotTaken } from '../util/inviteCapacity';
 import { enforceHouseEntitlement } from '../util/entitlement';
 import { Invitation, InvitationRole } from '../entities/Invitation';
+import { SENDGRID_API_KEY } from '../config';
 
 /**
  * Fetches an invitation by token, throwing a `not-found` HttpsError when the
@@ -81,7 +82,9 @@ function buildInviteLink(token: string): string {
   return `regroup-app://?type=invitation&token=${encodeURIComponent(token)}`;
 }
 
-export const createInvitation = onCall(async (request) => {
+// The invitation email (util/email) reads SENDGRID_API_KEY from process.env,
+// which a v2 function gets only for a secret it binds.
+export const createInvitation = onCall({ secrets: [SENDGRID_API_KEY] }, async (request) => {
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Login required');
   }
