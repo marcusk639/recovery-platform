@@ -1043,6 +1043,17 @@ async function handleInvoicePaymentFailed(
     });
     return;
   }
+  // A late failure for an invoice since paid (or voided) must not set grace,
+  // even while a later invoice keeps the subscription past due.
+  const currentInvoice = await stripeClient.invoices.retrieve(invoice.id as string);
+  if (currentInvoice.status === "paid" || currentInvoice.status === "void") {
+    logger.info("invoice.payment_failed: this invoice is since settled", {
+      stripeSubscriptionId,
+      invoiceId: invoice.id,
+      invoiceStatus: currentInvoice.status,
+    });
+    return;
+  }
   const newStatus = fresh.status;
 
   await subSnap.docs[0].ref.update({
@@ -1085,7 +1096,8 @@ async function handleInvoicePaymentFailed(
     operatorUid,
     stripeSubscriptionId,
     newStatus,
-    newStatus === "past_due" ? { finalizedAt: invoiceFinalizedAt(invoice) } : undefined,
+    // Unpaid: Stripe stopped retrying, so grace ends with it.
+    newStatus === "past_due" ? { finalizedAt: invoiceFinalizedAt(invoice) } : "clear",
   );
   await syncOperatorStatus(operatorUid, fresh);
 }
@@ -1134,7 +1146,8 @@ async function handleSubscriptionDeleted(
         `Your Regroup subscription has been canceled as of ${canceledAt}. Contact support to reactivate.`,
       );
     }
-    await updateHouseSubscriptionStatus(operatorUid, subscription.id, "canceled");
+    // Access ends when Stripe cancels: no reader may keep granting grace.
+    await updateHouseSubscriptionStatus(operatorUid, subscription.id, "canceled", "clear");
     await syncOperatorStatus(operatorUid, subscription);
   } else {
     logger.warn(
@@ -1171,7 +1184,8 @@ async function operatorForSubscription(
 
 async function handleTrialWillEnd(subscription: Stripe.Subscription): Promise<void> {
   const operatorUid = await operatorForSubscription(subscription.id, async () => subscription);
-  const notice = trialEndingNotice(subscription);
+  // A trial set to cancel won't be charged, so "you will be charged" would be wrong.
+  const notice = subscription.cancel_at_period_end ? null : trialEndingNotice(subscription);
   if (operatorUid && notice) {
     await sendFcmToUser(operatorUid, notice.title, notice.body);
   }
@@ -1198,8 +1212,10 @@ async function handlePaymentActionRequired(
  */
 function graceFromSubscription(fresh: Stripe.Subscription): GraceUpdate | undefined {
   if (fresh.status === "active" || fresh.status === "trialing") return "clear";
+  // Only an open (finalized, unpaid) invoice anchors grace: a renewal still in
+  // draft, or one already paid, must not move the deadline.
   const invoice = fresh.latest_invoice;
-  if (fresh.status === "past_due" && invoice && typeof invoice !== "string") {
+  if (fresh.status === "past_due" && invoice && typeof invoice !== "string" && invoice.status === "open") {
     return { finalizedAt: invoiceFinalizedAt(invoice) };
   }
   return undefined;

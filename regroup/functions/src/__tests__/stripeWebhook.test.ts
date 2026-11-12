@@ -29,6 +29,7 @@ const mockChargesRetrieve = jest.fn();
 const mockV2AccountsRetrieve = jest.fn();
 const mockV1AccountsRetrieve = jest.fn();
 const mockSubscriptionsRetrieve = jest.fn();
+const mockInvoicesRetrieve = jest.fn();
 
 // ---------------------------------------------------------------------------
 // firebase-admin mock
@@ -97,6 +98,7 @@ jest.mock("stripe", () => {
     },
     accounts: { retrieve: mockV1AccountsRetrieve },
     subscriptions: { retrieve: mockSubscriptionsRetrieve },
+    invoices: { retrieve: mockInvoicesRetrieve },
     v2: { core: { accounts: { retrieve: mockV2AccountsRetrieve } } },
   }));
 });
@@ -476,6 +478,9 @@ beforeEach(() => {
       ? object
       : { id, status: "active", metadata: {}, items: { data: [] } };
   });
+
+  // The failure handler re-reads the invoice: open (still unpaid) by default.
+  mockInvoicesRetrieve.mockImplementation(async (id: string) => ({ id, status: "open" }));
 
   // Default idempotency: event not yet processed
   setupIdempotencyTransaction(false);

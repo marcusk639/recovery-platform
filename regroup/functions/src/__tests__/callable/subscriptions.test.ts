@@ -116,6 +116,11 @@ jest.mock("../../util/email", () => ({
   regroupEmail: "admin@regroup-app.com",
 }));
 
+const mockSetOperatorHousesStatus = jest.fn().mockResolvedValue(1);
+jest.mock("../../util/operatorHouses", () => ({
+  setOperatorHousesStatus: (...args: unknown[]) => mockSetOperatorHousesStatus(...args),
+}));
+
 // The sales-open switch: open here unless a test closes it.
 const mockIsSalesOpen = jest.fn().mockResolvedValue(true);
 jest.mock("../../util/salesSwitch", () => ({
@@ -720,10 +725,12 @@ describe("reactivateOperatorSubscription — never creates a duplicate subscript
 
   afterEach(() => {
     delete process.env.TIER_BILLING_ENABLED;
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
   });
 
   beforeEach(() => {
     process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
     mockReactivateSubscription.mockReset();
     mockUncancelSubscription.mockReset();
     mockUpdateUser.mockReset();
@@ -1594,5 +1601,61 @@ describe("checkout and reactivation wait for sales to open", () => {
       message: "Subscriptions open when the new Regroup app is released",
     });
     expect(mockReactivateSubscription).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// A replacement subscription is recorded where the webhooks and the houses see
+// it: the subscriptions doc the webhook handlers look up, Stripe's own status
+// on the operator, and that status on the operator's houses.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("reactivating a canceled subscription records the replacement", () => {
+  beforeEach(() => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockUpdateUser.mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    delete process.env.TIER_BILLING_ENABLED;
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+  });
+
+  it("stores Stripe's status, seeds the subscriptions doc and writes the houses", async () => {
+    const periodEnd = 1767225600000;
+    mockGetUser.mockResolvedValue({
+      ...fakeUser,
+      subscriptionMetadata: {
+        ...fakeUser.subscriptionMetadata,
+        status: "canceled",
+        houseType: "traditional",
+        tier: "starter",
+      },
+    });
+    mockReactivateSubscription.mockResolvedValue({
+      subscriptionId: "sub_replacement",
+      customerId: "cus_fake",
+      status: "incomplete",
+      currentPeriodEnd: periodEnd,
+      houseType: "traditional",
+      tier: "starter",
+    });
+
+    const result = await call(reactivateOperatorSubscription, { user: fakeUser });
+
+    expect(result.subscriptionMetadata).toMatchObject({
+      subscriptionId: "sub_replacement",
+      status: "incomplete",
+    });
+    expect(mockUpsertSubscriptionDoc).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stripeSubscriptionId: "sub_replacement",
+        stripeCustomerId: "cus_fake",
+        status: "incomplete",
+        planId: "price_starter",
+        userId: fakeUser.id,
+        currentPeriodEnd: new Date(periodEnd).toISOString(),
+      }),
+    );
+    expect(mockSetOperatorHousesStatus).toHaveBeenCalledWith(fakeUser.id, "incomplete");
   });
 });

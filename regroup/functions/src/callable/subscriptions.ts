@@ -1,6 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { isPrimaryOwner } from "../util/houseRoles";
 import { isSalesOpen } from "../util/salesSwitch";
+import { setOperatorHousesStatus } from "../util/operatorHouses";
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import isNil from "lodash/isNil";
@@ -39,7 +40,7 @@ import {
   withinResidentCap,
   totalResidents,
 } from "../util/tierCaps";
-import { isTierAvailableForSale } from "../util/tierPricing";
+import { isTierAvailableForSale, resolveTierPriceId } from "../util/tierPricing";
 import {
   addHousesToSubscription,
   removeHouseFromSubscription,
@@ -373,6 +374,7 @@ export const reactivateOperatorSubscription = onCall(
     }
 
     let subscriptionMetadata: typeof storedMetadata;
+    let replacement = false;
     if (status === "cancelling") {
       // Set to cancel at period end but still live — resume in place.
       await uncancelSubscription(storedMetadata.subscriptionId);
@@ -399,7 +401,8 @@ export const reactivateOperatorSubscription = onCall(
         storedMetadata,
         data.user.id,
       );
-      subscriptionMetadata = { ...freshMetadata, status: "active" };
+      subscriptionMetadata = { ...freshMetadata, status: freshMetadata.status || "pending" };
+      replacement = true;
     } else {
       // past_due, unpaid, or unrecognized. The Stripe subscription still exists
       // in these states, so creating a second one would double-bill.
@@ -410,6 +413,28 @@ export const reactivateOperatorSubscription = onCall(
     }
     logger.info("Subscription reactivated");
     await updateUser(data.user.id!, { subscriptionMetadata });
+    if (replacement) {
+      // The webhooks find a subscription only through its subscriptions doc, and
+      // the replacement's first events can arrive before the record above points
+      // at it, so the doc is seeded and the houses written here, as checkout does.
+      await upsertSubscriptionDoc({
+        houseId: "",
+        stripeCustomerId: subscriptionMetadata.customerId,
+        stripeSubscriptionId: subscriptionMetadata.subscriptionId,
+        status: subscriptionMetadata.status as SubscriptionDoc["status"],
+        currentPeriodEnd: subscriptionMetadata.currentPeriodEnd
+          ? new Date(subscriptionMetadata.currentPeriodEnd).toISOString()
+          : "",
+        // The replacement is created on the stored plan.
+        planId: resolveTierPriceId(
+          storedMetadata.houseType as HouseType,
+          storedMetadata.tier as TierKey,
+        ),
+        guestCount: 0,
+        userId: data.user.id,
+      });
+      await setOperatorHousesStatus(data.user.id!, subscriptionMetadata.status);
+    }
     return { ...data.user, subscriptionMetadata };
   },
 );

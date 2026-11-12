@@ -58,6 +58,8 @@ const mockBatch = jest.fn(() => ({
 
 // Stripe subscriptions.retrieve mock — needed by handleInvoicePaymentSucceeded
 const mockSubscriptionsRetrieve = jest.fn();
+// The failure handler re-reads the invoice: open unless a test says otherwise.
+const mockInvoicesRetrieve = jest.fn();
 
 // ---------------------------------------------------------------------------
 // firebase-admin mock
@@ -159,6 +161,7 @@ jest.mock("stripe", () => {
       list: mockTransfersList,
     },
     subscriptions: { retrieve: mockSubscriptionsRetrieve },
+    invoices: { retrieve: mockInvoicesRetrieve },
     v2: { core: { accounts: { retrieve: mockV2AccountsRetrieve } } },
   }));
 });
@@ -317,6 +320,7 @@ beforeEach(() => {
     if (object && object.id === id) return object;
     return { id: "sub_default", status: "active", metadata: {}, items: { data: [] } };
   });
+  mockInvoicesRetrieve.mockImplementation(async (id: string) => ({ id, status: "open" }));
 
   // A test-mode deployment with all four signing secrets bound — what both
   // deployed functions actually get. All four matter: with only the live/platform
@@ -2182,7 +2186,7 @@ describe("subscription events apply Stripe's current state", () => {
     deliver("customer.subscription.updated", { status: "past_due" });
     stripeNow({
       status: "past_due",
-      latest_invoice: { id: "in_1", status_transitions: { finalized_at: JAN_1 }, created: 1 },
+      latest_invoice: { id: "in_1", status: "open", status_transitions: { finalized_at: JAN_1 }, created: 1 },
     });
 
     await (stripeWebhook as any)(makeReq(), makeRes());
@@ -2424,7 +2428,7 @@ describe("invoice events apply Stripe's current state", () => {
     expect(mockMessagingSend).not.toHaveBeenCalled();
   });
 
-  it("unpaid writes the status with no grace field", async () => {
+  it("unpaid writes the status and ends grace", async () => {
     operatorTx();
     const { houseRef } = wire();
     deliverInvoice("invoice.payment_failed", { attempt_count: 1 });
@@ -2434,9 +2438,8 @@ describe("invoice events apply Stripe's current state", () => {
 
     expect(mockBatchUpdate).toHaveBeenCalledWith(
       houseRef,
-      expect.objectContaining({ subscriptionStatus: "unpaid" }),
+      expect.objectContaining({ subscriptionStatus: "unpaid", guestGraceEndsAt: "__FieldValue.delete__" }),
     );
-    expect(mockBatchUpdate.mock.calls[0][1]).not.toHaveProperty("guestGraceEndsAt");
   });
 
   it("a success while Stripe still says past due keeps the houses in grace", async () => {
@@ -2498,7 +2501,7 @@ describe("invoice events apply Stripe's current state", () => {
     });
     stripeNow({
       status: "past_due",
-      latest_invoice: { id: "in_invoice_1", status_transitions: { finalized_at: JAN_1 }, created: JAN_1 - 60 },
+      latest_invoice: { id: "in_invoice_1", status: "open", status_transitions: { finalized_at: JAN_1 }, created: JAN_1 - 60 },
     });
     await (stripeWebhook as any)(makeReq(), makeRes());
     const fromUpdated = mockBatchUpdate.mock.calls[0][1].guestGraceEndsAt;
@@ -2676,6 +2679,127 @@ describe("subscription notices reach the operator", () => {
     await (stripeWebhook as any)(makeReq(), makeRes());
 
     pushed("Subscription Canceled");
+  });
+});
+
+// ===========================================================================
+// Grace stays tied to the unpaid invoice; cancellation ends it
+// ===========================================================================
+
+describe("grace stays tied to the unpaid invoice, and ends when Stripe gives up", () => {
+  const operatorUid = "uid_grace";
+  const houseId = "house_grace";
+  const JAN_1 = 1767225600;
+  const JAN_8 = "2026-01-08T00:00:00.000Z";
+
+  const wire = (houseData: Record<string, unknown> = createdHouse(operatorUid), tokens: string[] = []) => {
+    const houseRef = { update: jest.fn(), set: jest.fn() };
+    const subDocRef = { update: jest.fn().mockResolvedValue(undefined), set: jest.fn() };
+    mockCollectionFn.mockImplementation(
+      wireHousesForOperator(operatorUid, houseId, houseRef, houseData, { subscriptionId: "sub_b8" }, {
+        subDocRef,
+        operatorTokens: tokens,
+      }),
+    );
+    return { houseRef, subDocRef };
+  };
+
+  const stripeNow = (fields: Record<string, unknown>) =>
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_b8",
+      items: { data: [] },
+      metadata: { userId: operatorUid },
+      ...fields,
+    });
+
+  const event = (type: string, object: Record<string, unknown>) =>
+    mockConstructEvent.mockReturnValue({ id: `evt_grace_${type}`, type, account: undefined, data: { object } });
+
+  const failedInvoice = {
+    id: "in_grace_a",
+    created: JAN_1 - 60,
+    status_transitions: { finalized_at: JAN_1 },
+    attempt_count: 1,
+    next_payment_attempt: null,
+    parent: { type: "subscription_details", subscription_details: { subscription: "sub_b8" } },
+    lines: { data: [] },
+  };
+
+  it("a failure for an invoice since paid changes nothing, though a later one keeps the subscription past due", async () => {
+    const { houseRef, subDocRef } = wire(
+      { ...createdHouse(operatorUid), subscriptionStatus: "past_due", guestGraceEndsAt: "2026-02-08T00:00:00.000Z" },
+      ["tok_operator"],
+    );
+    event("invoice.payment_failed", failedInvoice);
+    stripeNow({ status: "past_due" });
+    mockInvoicesRetrieve.mockResolvedValue({ id: "in_grace_a", status: "paid" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockInvoicesRetrieve).toHaveBeenCalledWith("in_grace_a");
+    expect(mockBatchUpdate).not.toHaveBeenCalled();
+    expect(subDocRef.update).not.toHaveBeenCalled();
+    expect(mockMessagingSend).not.toHaveBeenCalled();
+    expect(houseRef.update).not.toHaveBeenCalled();
+  });
+
+  it("a renewal still in draft doesn't move grace", async () => {
+    const { houseRef } = wire({ ...createdHouse(operatorUid), subscriptionStatus: "past_due", guestGraceEndsAt: JAN_8 });
+    event("customer.subscription.updated", { id: "sub_b8", status: "past_due", items: { data: [] }, metadata: { userId: operatorUid } });
+    stripeNow({
+      status: "past_due",
+      latest_invoice: { id: "in_grace_b", status: "draft", status_transitions: { finalized_at: null }, created: JAN_1 + 30 * 86400 },
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(houseRef, expect.objectContaining({ subscriptionStatus: "past_due" }));
+    expect(mockBatchUpdate.mock.calls[0][1]).not.toHaveProperty("guestGraceEndsAt");
+  });
+
+  it("a cancellation ends grace on every house", async () => {
+    const { houseRef } = wire({ ...createdHouse(operatorUid), subscriptionStatus: "past_due", guestGraceEndsAt: JAN_8 });
+    event("customer.subscription.deleted", {
+      id: "sub_b8",
+      status: "canceled",
+      canceled_at: JAN_1,
+      items: { data: [] },
+      metadata: { userId: operatorUid },
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "canceled", guestGraceEndsAt: "__FieldValue.delete__" }),
+    );
+  });
+
+  it("unpaid ends grace on every house", async () => {
+    const { houseRef } = wire({ ...createdHouse(operatorUid), subscriptionStatus: "past_due", guestGraceEndsAt: JAN_8 });
+    event("invoice.payment_failed", failedInvoice);
+    stripeNow({ status: "unpaid" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "unpaid", guestGraceEndsAt: "__FieldValue.delete__" }),
+    );
+  });
+
+  it("a trial already set to cancel gets no 'you will be charged' notice", async () => {
+    wire(createdHouse(operatorUid), ["tok_operator"]);
+    event("customer.subscription.trial_will_end", {
+      id: "sub_b8",
+      trial_end: JAN_1,
+      cancel_at_period_end: true,
+      metadata: { userId: operatorUid },
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockMessagingSend).not.toHaveBeenCalled();
   });
 });
 
