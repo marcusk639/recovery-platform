@@ -726,6 +726,68 @@ describe("Splash (withSplash HOC)", () => {
           });
         });
       });
+      // On a device the user arrives after Splash mounts (auto-login resolves
+      // later), so the token callbacks must see the user in state now, not the
+      // one from the first render.
+      it("persists the token when the user signs in after Splash mounted", async () => {
+        const { mockNavigation, rerender } = renderSplash();
+        await act(async () => {});
+        expect(mockUpdateUser).not.toHaveBeenCalled();
+
+        (global as any).__splashTestUserState = {
+          ...baseUserState,
+          user: { uid: "user-123", email: "test@example.com" },
+        };
+        rerender(<SplashHOC navigation={mockNavigation as any} />);
+        await act(async () => {});
+
+        expect(mockUpdateUser).toHaveBeenCalledWith({
+          user: { uid: "user-123", email: "test@example.com" },
+          updates: { messagingToken: ["mock-fcm-token"] },
+        });
+      });
+
+      it("persists a refreshed token for a user who signed in after Splash mounted", async () => {
+        const { mockNavigation, rerender } = renderSplash();
+        await act(async () => {});
+        const user = {
+          uid: "user-123",
+          email: "test@example.com",
+          messagingToken: ["old-token"],
+        };
+        (global as any).__splashTestUserState = { ...baseUserState, user };
+        rerender(<SplashHOC navigation={mockNavigation as any} />);
+        await act(async () => {});
+
+        const onRefresh = (mockOnTokenRefresh.mock.calls[0] as any)[0];
+        await act(async () => {
+          await onRefresh("refreshed-token");
+        });
+
+        expect(mockUpdateUser).toHaveBeenLastCalledWith({
+          user,
+          updates: { messagingToken: ["old-token", "refreshed-token"] },
+        });
+      });
+
+      it("does not add a refreshed token the user already has", async () => {
+        renderSplash({
+          user: {
+            uid: "user-123",
+            email: "test@example.com",
+            messagingToken: ["mock-fcm-token", "tok-a"],
+          } as any,
+        });
+        await act(async () => {});
+        mockUpdateUser.mockClear();
+
+        const onRefresh = (mockOnTokenRefresh.mock.calls[0] as any)[0];
+        await act(async () => {
+          await onRefresh("tok-a");
+        });
+
+        expect(mockUpdateUser).not.toHaveBeenCalled();
+      });
     });
   });
 
