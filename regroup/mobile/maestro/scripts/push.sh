@@ -9,17 +9,18 @@
 # (push-fcm.js) and reads what Android posted (check-notifications.js):
 #   1. resident push, app in the foreground: shown, on channel `default`;
 #   2. data-only push, app in the foreground: the app keeps running, no crash;
-#   3. admin push, app in the background: shown, on channel `default`.
-# Also reported, not required: an admin push in the foreground and a resident
-# push in the background (the app shows only notifee payloads itself, and only
-# in the foreground; see services/notifications/remoteMessage.ts).
+#   3. admin push, app in the background: shown, on channel `default`;
+#   4. resident push, app in the background: shown, on channel `default`.
+# Also reported, not required: an admin push in the foreground (the app shows
+# only notifee payloads itself; see services/notifications/remoteMessage.ts).
 #
 # iOS (--sim <udid>): no FCM. `xcrun simctl push` hands APNs payloads to the
 # E2EEmulator build (com.rats.dev.e2e.emu) signed in as guest-a, with the
 # emulators up and seeded, as the other device-pass suites:
-#   1. resident push (content-available + notifee) in the foreground: banner shown;
+#   1. resident push (alert + notifee) in the foreground: banner shown;
 #   2. admin push (alert) in the foreground: banner shown;
-#   3. data-only push in the foreground: the app keeps running.
+#   3. data-only push in the foreground: the app keeps running;
+#   4. resident push with the app in the background: banner shown.
 # This proves the app's handling under RN 0.88, not APNs or FCM delivery.
 #
 # Usage (from regroup/mobile):
@@ -123,8 +124,12 @@ if [[ -n "${DEVICE}" ]]; then
   fi
 
   m="push-e2e-resident-bg-${RUN}"; send resident "$m"
-  if ch="$(posted "$m")"; then info "resident push, background: shown on ${ch}"; else
-    info "resident push, background: not shown (the background handler is a no-op)"; fi
+  if ch="$(posted "$m")"; then
+    [[ "$ch" == default ]] && pass "resident push, background: shown on default" ||
+      fail "resident push, background: shown on ${ch}, not default"
+  else
+    fail "resident push, background: not shown"
+  fi
 
   adb_ shell cmd notification cancel_all "${APP_ID}" >/dev/null 2>&1 || true
 else
@@ -148,10 +153,14 @@ else
       sleep 0.7
       xcrun simctl io "${SIM}" screenshot "${WORK}/shot-${i}.png" >/dev/null 2>&1 || true
     done
+    local found=1
     for i in 1 2 3 4; do
-      [[ -f "${WORK}/shot-${i}.png" ]] && "${WORK}/ocr" "${WORK}/shot-${i}.png" | grep -qF "$1" && return 0
+      [[ -f "${WORK}/shot-${i}.png" ]] && "${WORK}/ocr" "${WORK}/shot-${i}.png" | grep -qF "$1" && found=0 && break
     done
-    return 1
+    rm -f "${WORK}"/shot-*.png
+    # iOS queues banners: let this one go before the next push is sent.
+    sleep 5
+    return "${found}"
   }
   # Newer simulators refuse a silent (content-available, no alert) push with
   # UNErrorDomain 1401 "no user visible content". Those checks then belong to a
@@ -160,13 +169,16 @@ else
   refused_silent() { grep -q "no user visible content" "${PAYLOAD}.err"; }
   echo "Pushes on ${SIM} (${APP_ID}, simctl push):"
 
-  m="push-e2e-resident-${RUN}"
-  printf '{"aps":{"content-available":1},"gcm.message_id":"%s","notifee":"{\\"title\\":\\"%s\\",\\"body\\":\\"Device pass push check\\",\\"data\\":{}}"}' \
-    "$m" "$m" > "${PAYLOAD}"
+  # The resident shape as FCM hands it to APNs: sendNotification's notification
+  # block becomes aps.alert, its data keys sit beside aps.
+  resident_payload() {
+    printf '{"aps":{"alert":{"title":"%s","body":"Device pass push check"}},"gcm.message_id":"%s","notifee":"{\\"title\\":\\"%s\\",\\"body\\":\\"Device pass push check\\",\\"data\\":{}}"}' \
+      "$1" "$1" "$1" > "${PAYLOAD}"
+  }
+
+  m="push-e2e-resident-${RUN}"; resident_payload "$m"
   if simpush; then
     banner "$m" && pass "resident push, foreground: banner shown" || fail "resident push, foreground: no banner"
-  elif refused_silent; then
-    info "resident push, foreground: the simulator refuses silent pushes; check on a real iPhone"
   else
     fail "resident push: simctl push failed: $(tail -1 "${PAYLOAD}.err")"
   fi
@@ -188,6 +200,16 @@ else
     info "data-only push, foreground: the simulator refuses silent pushes; check on a real iPhone"
   else
     fail "data-only push: simctl push failed: $(tail -1 "${PAYLOAD}.err")"
+  fi
+
+  # Last, because it leaves Settings in front of the app.
+  xcrun simctl launch "${SIM}" com.apple.Preferences >/dev/null
+  sleep 2
+  m="push-e2e-resident-bg-${RUN}"; resident_payload "$m"
+  if simpush; then
+    banner "$m" && pass "resident push, background: banner shown" || fail "resident push, background: no banner"
+  else
+    fail "resident push: simctl push failed: $(tail -1 "${PAYLOAD}.err")"
   fi
 fi
 
