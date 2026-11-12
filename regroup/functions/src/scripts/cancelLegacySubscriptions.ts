@@ -63,9 +63,15 @@ export async function listUnmatched(stripe: Stripe): Promise<string[]> {
 }
 
 function repoRoot(): string {
+  // Inherited GIT_* variables (a git hook sets GIT_DIR) make git report the
+  // current directory as the work tree, and the inside-the-repo check would miss.
+  const env = Object.fromEntries(
+    Object.entries(process.env).filter(([name]) => !name.startsWith('GIT_')),
+  );
   return execFileSync('git', ['rev-parse', '--show-toplevel'], {
     cwd: __dirname,
     encoding: 'utf8',
+    env,
   }).trim();
 }
 

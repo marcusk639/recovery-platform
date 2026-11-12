@@ -1,3 +1,4 @@
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -106,6 +107,28 @@ describe('cancelListed', () => {
 
     await expect(cancelListed(stripe, records, ['sub_legacy'], insideRepo)).rejects.toThrow();
 
+    expect(fs.existsSync(insideRepo)).toBe(false);
+    expect(calls).toEqual([]);
+  });
+
+  it('still finds the repository when git variables are inherited (as in a git hook)', async () => {
+    const { stripe, calls } = fakeStripe(ACCOUNT);
+    const records = await listLegacySubscriptions(stripe);
+    const insideRepo = path.resolve(__dirname, 'legacy-cancel-record.json');
+    const saved = process.env.GIT_DIR;
+    // A git hook runs with GIT_DIR set to the repository's own git directory.
+    process.env.GIT_DIR = execFileSync('git', ['rev-parse', '--absolute-git-dir'], {
+      cwd: __dirname,
+      encoding: 'utf8',
+    }).trim();
+    try {
+      await expect(cancelListed(stripe, records, ['sub_legacy'], insideRepo)).rejects.toThrow(
+        /outside the repository/,
+      );
+    } finally {
+      if (saved === undefined) delete process.env.GIT_DIR;
+      else process.env.GIT_DIR = saved;
+    }
     expect(fs.existsSync(insideRepo)).toBe(false);
     expect(calls).toEqual([]);
   });
