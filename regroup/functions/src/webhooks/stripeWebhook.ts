@@ -40,6 +40,9 @@ import {
 } from "./transferReversals";
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { syncOperatorTier } from "./syncOperatorTier";
+import { syncOperatorStatus } from "./subscriptionState";
+import { operatorStatusToHouseStatus } from "../util/entitlement";
+import { graceDeadline, invoiceFinalizedAt } from "../util/grace";
 import { periodEndSeconds } from "../util/subscriptionPeriod";
 import { sendEmail, regroupEmail } from "../util/email";
 import type { SubscriptionDoc } from "../api/firestore";
@@ -237,11 +240,17 @@ type HouseSubscriptionStatus =
   | "canceled"
   | "unpaid";
 
+/**
+ * Grace for the houses being written: start (or keep) a deadline from a failed
+ * invoice's finalized_at, or clear it once Stripe says the subscription is live.
+ */
+type GraceUpdate = { finalizedAt: number } | "clear";
+
 async function updateHouseSubscriptionStatus(
   operatorUid: string,
   subscriptionId: string,
   status: HouseSubscriptionStatus,
-  guestGraceEndsAt?: string | admin.firestore.FieldValue,
+  grace?: GraceUpdate,
 ): Promise<void> {
   const db = admin.firestore();
 
@@ -288,8 +297,10 @@ async function updateHouseSubscriptionStatus(
       subscriptionStatus: status,
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     };
-    if (guestGraceEndsAt !== undefined) {
-      update.guestGraceEndsAt = guestGraceEndsAt;
+    if (grace === "clear") {
+      update.guestGraceEndsAt = admin.firestore.FieldValue.delete();
+    } else if (grace) {
+      update.guestGraceEndsAt = graceDeadline(doc.data()?.guestGraceEndsAt, grace.finalizedAt);
     }
     batch.update(
       doc.ref,
@@ -303,7 +314,7 @@ async function updateHouseSubscriptionStatus(
     operatorUid,
     status,
     houseCount: docMap.size,
-    guestGraceEndsAt: guestGraceEndsAt ?? "(no change)",
+    grace: grace ?? "(no change)",
   });
 }
 
@@ -963,7 +974,7 @@ async function handleInvoicePaymentSucceeded(
         operatorUid,
         stripeSubscriptionId,
         "active",
-        admin.firestore.FieldValue.delete(),
+        "clear",
       );
     } else {
       logger.warn(
@@ -1038,17 +1049,14 @@ async function handleInvoicePaymentFailed(
     notifBody,
   );
 
-  // B10: propagate past_due / unpaid status to all operator houses;
-  // set guestGraceEndsAt to 48 hours from now to give guests time to resolve.
+  // B10: propagate past_due / unpaid status to all operator houses; grace runs
+  // 7 days from the invoice's finalized_at.
   if (subData.userId) {
-    const graceEndsAt = new Date(
-      Date.now() + 48 * 60 * 60 * 1000,
-    ).toISOString();
     await updateHouseSubscriptionStatus(
       subData.userId,
       stripeSubscriptionId,
       newStatus as HouseSubscriptionStatus,
-      graceEndsAt,
+      { finalizedAt: invoiceFinalizedAt(invoice) },
     );
   } else {
     logger.warn(
@@ -1092,24 +1100,37 @@ async function handleSubscriptionDeleted(
     lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  const subData = subSnap.docs[0].data() as SubscriptionDoc;
-
-  await sendFcmToHouseAdmins(
-    subData.houseId,
-    "Subscription Canceled",
-    `Your Regroup subscription has been canceled as of ${canceledAt}. Contact support to reactivate.`,
-  );
-
-  // B10: propagate canceled status to all operator houses.
+  // B10: propagate canceled status to all operator houses and their record.
+  // Deletion is terminal, so the payload is Stripe's current state.
   const operatorUid = await resolveOperatorUid(subscription);
   if (operatorUid) {
+    await sendFcmToUser(
+      operatorUid,
+      "Subscription Canceled",
+      `Your Regroup subscription has been canceled as of ${canceledAt}. Contact support to reactivate.`,
+    );
     await updateHouseSubscriptionStatus(operatorUid, subscription.id, "canceled");
+    await syncOperatorStatus(operatorUid, subscription);
   } else {
     logger.warn(
       "customer.subscription.deleted: could not resolve operator uid for house update",
       { stripeSubscriptionId: subscription.id },
     );
   }
+}
+
+/**
+ * Past due: start grace from the latest invoice, which is the one that failed.
+ * customer.subscription.updated can arrive before invoice.payment_failed, and a
+ * past_due house with no deadline is denied at once. Live again: clear it.
+ */
+function graceFromSubscription(fresh: Stripe.Subscription): GraceUpdate | undefined {
+  if (fresh.status === "active" || fresh.status === "trialing") return "clear";
+  const invoice = fresh.latest_invoice;
+  if (fresh.status === "past_due" && invoice && typeof invoice !== "string") {
+    return { finalizedAt: invoiceFinalizedAt(invoice) };
+  }
+  return undefined;
 }
 
 // ---------------------------------------------------------------------------
@@ -1140,12 +1161,17 @@ async function handleSubscriptionUpdated(
   const doc = subSnap.docs[0];
   const previousData = doc.data() as SubscriptionDoc;
 
-  const newStatus = subscription.status as SubscriptionDoc["status"];
+  // Stripe's current state, not the event's: a late, retried or out-of-order
+  // event must not move the subscription backwards.
+  const fresh = await stripeClient.subscriptions.retrieve(subscription.id, {
+    expand: ["latest_invoice"],
+  });
+  const newStatus = fresh.status as SubscriptionDoc["status"];
 
-  const periodEnd = periodEndSeconds(subscription);
-  const planId = subscription.items.data[0]?.price?.id ?? previousData.planId;
+  const periodEnd = periodEndSeconds(fresh);
+  const planId = fresh.items?.data?.[0]?.price?.id ?? previousData.planId;
   const guestCount = parseInt(
-    (subscription.metadata?.guestCount as string | undefined) ??
+    (fresh.metadata?.guestCount as string | undefined) ??
       String(previousData.guestCount),
     10,
   );
@@ -1162,23 +1188,32 @@ async function handleSubscriptionUpdated(
     lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
   });
 
-  // Notify admin if subscription transitioned to past_due
-  if (newStatus === "past_due" && previousData.status !== "past_due") {
-    await sendFcmToHouseAdmins(
-      previousData.houseId,
-      "Subscription Past Due",
-      "Your Regroup subscription is now past due. Please update your payment method to avoid service interruption.",
-    );
-  }
-
   // B10: propagate subscription status changes to all operator houses.
-  const operatorUid = await resolveOperatorUid(subscription);
+  const operatorUid = await resolveOperatorUid(fresh);
   if (operatorUid) {
-    await updateHouseSubscriptionStatus(
-      operatorUid,
-      subscription.id,
-      newStatus as HouseSubscriptionStatus,
-    );
+    // Notify the operator if the subscription moved to past_due.
+    if (newStatus === "past_due" && previousData.status !== "past_due") {
+      await sendFcmToUser(
+        operatorUid,
+        "Subscription Past Due",
+        "Your Regroup subscription is now past due. Please update your payment method to avoid service interruption.",
+      );
+    }
+    const houseStatus = operatorStatusToHouseStatus(fresh.status);
+    if (houseStatus) {
+      await updateHouseSubscriptionStatus(
+        operatorUid,
+        subscription.id,
+        houseStatus,
+        graceFromSubscription(fresh),
+      );
+    } else {
+      logger.warn("customer.subscription.updated: status houses don't know; houses unchanged", {
+        stripeSubscriptionId: subscription.id,
+        status: fresh.status,
+      });
+    }
+    await syncOperatorStatus(operatorUid, fresh);
     await syncOperatorTier(stripeClient, operatorUid, subscription.id);
   } else {
     logger.warn(
@@ -1676,6 +1711,7 @@ export const stripeWebhook = onRequest(
           );
           break;
 
+        case "customer.subscription.created":
         case "customer.subscription.updated":
           await handleSubscriptionUpdated(
             event.data.object as Stripe.Subscription,

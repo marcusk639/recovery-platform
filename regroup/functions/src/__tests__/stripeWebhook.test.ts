@@ -28,6 +28,7 @@ const mockConstructEvent = jest.fn();
 const mockChargesRetrieve = jest.fn();
 const mockV2AccountsRetrieve = jest.fn();
 const mockV1AccountsRetrieve = jest.fn();
+const mockSubscriptionsRetrieve = jest.fn();
 
 // ---------------------------------------------------------------------------
 // firebase-admin mock
@@ -95,6 +96,7 @@ jest.mock("stripe", () => {
       retrieve: mockChargesRetrieve,
     },
     accounts: { retrieve: mockV1AccountsRetrieve },
+    subscriptions: { retrieve: mockSubscriptionsRetrieve },
     v2: { core: { accounts: { retrieve: mockV2AccountsRetrieve } } },
   }));
 });
@@ -422,6 +424,7 @@ function setupIdempotencyTransaction(alreadyExists: boolean): void {
           // payment_intent.succeeded reads payments/{id}.rentApplied inside its
           // own transaction to make the rentOwed decrement exactly-once.
           get: (_field: string) => undefined,
+          data: () => undefined,
         }),
         set: jest.fn(),
         // The rentOwed decrement moved inside a transaction. Delegate to the
@@ -462,6 +465,14 @@ beforeEach(() => {
     id: "ch_test_123",
     payment_intent: "pi_test_123",
     metadata: { houseId: "house_1", guestId: "guest_1" },
+  });
+
+  // Default: Stripe's current state is the delivered event's own subscription
+  // (the subscription handlers re-read it from Stripe).
+  mockSubscriptionsRetrieve.mockImplementation(async (id: string) => {
+    const returned = mockConstructEvent.mock.results.filter((r) => r.type === "return");
+    const object = returned[returned.length - 1]?.value?.data?.object;
+    return object && object.id === id ? object : { id, metadata: {}, items: { data: [] } };
   });
 
   // Default idempotency: event not yet processed
@@ -1957,10 +1968,11 @@ describe("invoice.payment_failed", () => {
 // ===========================================================================
 
 describe("customer.subscription.deleted", () => {
-  test("status updated to canceled, admin notified", async () => {
+  test("status updated to canceled, operator notified", async () => {
     const sub = makeSubscription({
       status: "active",
       canceled_at: Math.floor(Date.now() / 1000),
+      metadata: { guestCount: "5", userId: "admin_1" },
     });
     const event = makeStripeEvent("customer.subscription.deleted", sub);
     mockConstructEvent.mockReturnValue(event);
@@ -2002,6 +2014,9 @@ describe("customer.subscription.deleted", () => {
       if (name === "houses") {
         return {
           doc: jest.fn().mockReturnValue({ get: houseAdmin.houseDocGet }),
+          where: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
         };
       }
       if (name === "users") {
@@ -2109,6 +2124,9 @@ describe("customer.subscription.updated", () => {
       if (name === "houses") {
         return {
           doc: jest.fn().mockReturnValue({ get: houseAdmin.houseDocGet }),
+          where: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
         };
       }
       if (name === "users") {
@@ -2150,9 +2168,10 @@ describe("customer.subscription.updated", () => {
     );
   });
 
-  test("status changed to past_due: admin notified", async () => {
+  test("status changed to past_due: operator notified", async () => {
     const sub = makeSubscription({
       status: "past_due" as Stripe.Subscription["status"],
+      metadata: { guestCount: "5", userId: "admin_1" },
     });
     const event = makeStripeEvent("customer.subscription.updated", sub);
     mockConstructEvent.mockReturnValue(event);

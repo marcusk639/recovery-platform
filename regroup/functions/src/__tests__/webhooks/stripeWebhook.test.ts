@@ -307,12 +307,15 @@ beforeEach(() => {
   // Default: batch resolves successfully (no-op until test overrides collection)
   mockBatchCommit.mockResolvedValue(undefined);
 
-  // Default: subscriptions.retrieve returns subscription with no userId in metadata
+  // Default: Stripe's current state is the delivered event's own subscription,
+  // when the handler asks for that one (the subscription handlers re-read it).
+  // Anything else gets a subscription with no userId in metadata
   // → resolveOperatorUid returns null → house update is skipped in non-B8 tests
-  mockSubscriptionsRetrieve.mockResolvedValue({
-    id: "sub_default",
-    metadata: {},
-    items: { data: [] },
+  mockSubscriptionsRetrieve.mockImplementation(async (id: string) => {
+    const returned = mockConstructEvent.mock.results.filter((r) => r.type === "return");
+    const object = returned[returned.length - 1]?.value?.data?.object;
+    if (object && object.id === id) return object;
+    return { id: "sub_default", metadata: {}, items: { data: [] } };
   });
 
   // A test-mode deployment with all four signing secrets bound — what both
@@ -1936,6 +1939,11 @@ function wireHousesForOperator(
   houseDocRef: { update: jest.Mock; set: jest.Mock },
   houseData: Record<string, unknown> = createdHouse(operatorUid),
   operatorMeta?: Record<string, unknown>,
+  extras: {
+    subDocRef?: { update: jest.Mock; set: jest.Mock };
+    operatorTokens?: string[];
+    markerSet?: jest.Mock;
+  } = {},
 ) {
   const houseDoc = { id: houseId, data: () => houseData, ref: houseDocRef };
   const matches = (field: string, op: string, value: unknown) => {
@@ -1980,7 +1988,7 @@ function wireHousesForOperator(
                     houseId,
                     userId: operatorUid,
                   }),
-                  ref: {
+                  ref: extras.subDocRef ?? {
                     update: jest.fn().mockResolvedValue(undefined),
                     set: jest.fn(),
                   },
@@ -1996,8 +2004,23 @@ function wireHousesForOperator(
         }),
       };
     }
+    if (col === "webhookEvents" && extras.markerSet) {
+      return {
+        doc: jest.fn().mockReturnValue({
+          get: jest.fn().mockResolvedValue({ exists: false }),
+          set: extras.markerSet,
+          update: extras.markerSet,
+        }),
+      };
+    }
     if (col === "users" && operatorMeta) {
-      const snap = { exists: true, data: () => ({ subscriptionMetadata: operatorMeta }) };
+      const snap = {
+        exists: true,
+        data: () => ({
+          subscriptionMetadata: operatorMeta,
+          messagingToken: extras.operatorTokens ?? [],
+        }),
+      };
       // isOperatorDoc lets a test's transaction mock answer for this doc only.
       return {
         doc: jest.fn().mockReturnValue({
@@ -2025,6 +2048,250 @@ function wireHousesForOperator(
     };
   };
 }
+
+// ===========================================================================
+// Subscription events apply Stripe's current state
+//
+// Each subscription event re-reads the subscription from Stripe and writes
+// that state to the subscriptions doc, the houses and the operator's record,
+// so a late, retried or out-of-order event can't move it backwards.
+// ===========================================================================
+
+describe("subscription events apply Stripe's current state", () => {
+  const operatorUid = "uid_state";
+  const houseId = "house_state";
+  const JAN_1 = 1767225600;
+
+  /** Answers the operator's doc inside transactions; returns their update mock. */
+  const operatorTx = () => {
+    const txUpdate = jest.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: any) => any) =>
+      fn({
+        get: jest.fn().mockImplementation(async (ref: any) =>
+          ref?.isOperatorDoc
+            ? ref.get()
+            : { exists: false, get: () => undefined, data: () => undefined },
+        ),
+        set: jest.fn(),
+        update: txUpdate,
+      }),
+    );
+    return txUpdate;
+  };
+
+  const operatorStatusWrite = (txUpdate: jest.Mock) =>
+    txUpdate.mock.calls
+      .map((c) => c[1])
+      .find((u) => u && "subscriptionMetadata.status" in u);
+
+  const deliver = (type: string, object: Record<string, unknown> = {}) =>
+    mockConstructEvent.mockReturnValue({
+      id: `evt_state_${type}`,
+      type,
+      account: undefined,
+      data: {
+        object: {
+          id: "sub_b8",
+          items: { data: [] },
+          metadata: { userId: operatorUid },
+          ...object,
+        },
+      },
+    });
+
+  /** What Stripe says the subscription is now. */
+  const stripeNow = (fields: Record<string, unknown>) =>
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_b8",
+      items: { data: [] },
+      metadata: { userId: operatorUid },
+      ...fields,
+    });
+
+  const wire = (
+    opts: { houseData?: Record<string, unknown>; tokens?: string[]; markerSet?: jest.Mock } = {},
+  ) => {
+    const houseRef = { update: jest.fn(), set: jest.fn() };
+    const subDocRef = { update: jest.fn().mockResolvedValue(undefined), set: jest.fn() };
+    mockCollectionFn.mockImplementation(
+      wireHousesForOperator(
+        operatorUid,
+        houseId,
+        houseRef,
+        opts.houseData ?? createdHouse(operatorUid),
+        { subscriptionId: "sub_b8" },
+        { subDocRef, operatorTokens: opts.tokens, markerSet: opts.markerSet },
+      ),
+    );
+    return { houseRef, subDocRef };
+  };
+
+  it("an older updated event applies what Stripe has now: canceled stays canceled", async () => {
+    const txUpdate = operatorTx();
+    const { houseRef, subDocRef } = wire();
+    deliver("customer.subscription.updated", { status: "active" });
+    stripeNow({ status: "canceled" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(subDocRef.update).toHaveBeenCalledWith(expect.objectContaining({ status: "canceled" }));
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "canceled" }),
+    );
+    expect(operatorStatusWrite(txUpdate)).toMatchObject({
+      "subscriptionMetadata.status": "canceled",
+    });
+  });
+
+  it("customer.subscription.created is handled like updated", async () => {
+    operatorTx();
+    const { houseRef } = wire();
+    deliver("customer.subscription.created", { status: "incomplete" });
+    stripeNow({ status: "trialing" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockSubscriptionsRetrieve).toHaveBeenCalledWith("sub_b8", { expand: ["latest_invoice"] });
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "trialing" }),
+    );
+  });
+
+  it("a trial set to cancel at period end keeps the houses trialing and marks the operator cancelling", async () => {
+    const txUpdate = operatorTx();
+    const { houseRef } = wire();
+    deliver("customer.subscription.updated", { status: "trialing", cancel_at_period_end: true });
+    stripeNow({ status: "trialing", cancel_at_period_end: true });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "trialing" }),
+    );
+    expect(operatorStatusWrite(txUpdate)).toMatchObject({
+      "subscriptionMetadata.status": "cancelling",
+    });
+  });
+
+  it("past due before the failure event arrives still starts grace from the latest invoice", async () => {
+    operatorTx();
+    const { houseRef } = wire({ tokens: ["tok_operator"] });
+    deliver("customer.subscription.updated", { status: "past_due" });
+    stripeNow({
+      status: "past_due",
+      latest_invoice: { id: "in_1", status_transitions: { finalized_at: JAN_1 }, created: 1 },
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockSubscriptionsRetrieve).toHaveBeenCalledWith("sub_b8", { expand: ["latest_invoice"] });
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({
+        subscriptionStatus: "past_due",
+        guestGraceEndsAt: "2026-01-08T00:00:00.000Z",
+      }),
+    );
+    expect(mockMessagingSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: "tok_operator",
+        notification: expect.objectContaining({ title: "Subscription Past Due" }),
+      }),
+    );
+  });
+
+  it("active again clears the grace deadline", async () => {
+    operatorTx();
+    const { houseRef } = wire({
+      houseData: { ...createdHouse(operatorUid), guestGraceEndsAt: "2026-01-08T00:00:00.000Z" },
+    });
+    deliver("customer.subscription.updated", { status: "active" });
+    stripeNow({ status: "active" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({
+        subscriptionStatus: "active",
+        guestGraceEndsAt: "__FieldValue.delete__",
+      }),
+    );
+  });
+
+  it("a status houses don't know leaves the houses alone and is recorded on the operator", async () => {
+    const txUpdate = operatorTx();
+    wire();
+    deliver("customer.subscription.updated", { status: "incomplete" });
+    stripeNow({ status: "incomplete" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).not.toHaveBeenCalled();
+    expect(operatorStatusWrite(txUpdate)).toMatchObject({
+      "subscriptionMetadata.status": "incomplete",
+    });
+  });
+
+  it("a failed Stripe read fails the event, so Stripe redelivers it", async () => {
+    operatorTx();
+    const markerSet = jest.fn().mockResolvedValue(undefined);
+    wire({ markerSet });
+    deliver("customer.subscription.updated", { status: "active" });
+    mockSubscriptionsRetrieve.mockRejectedValue(new Error("stripe unavailable"));
+    const res = makeRes();
+
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(markerSet).toHaveBeenCalledWith({ status: "failed" }, { merge: true });
+  });
+
+  it.each([
+    "customer.subscription.updated",
+    "customer.subscription.created",
+    "customer.subscription.deleted",
+  ])("%s for a subscription Regroup has no record of changes nothing", async (type) => {
+    wireCollection({});
+    deliver(type, { status: "canceled", metadata: {} });
+    const res = makeRes();
+
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockSubscriptionsRetrieve).not.toHaveBeenCalled();
+    expect(mockBatchCommit).not.toHaveBeenCalled();
+    expect(mockMessagingSend).not.toHaveBeenCalled();
+    expect(mockDocSet).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "done" }),
+      { merge: true },
+    );
+  });
+
+  it("customer.subscription.deleted cancels the operator's record and pushes to the operator", async () => {
+    const txUpdate = operatorTx();
+    wire({ tokens: ["tok_operator"] });
+    deliver("customer.subscription.deleted", {
+      status: "canceled",
+      canceled_at: JAN_1,
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(operatorStatusWrite(txUpdate)).toMatchObject({
+      "subscriptionMetadata.status": "canceled",
+    });
+    expect(mockMessagingSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: "tok_operator",
+        notification: expect.objectContaining({ title: "Subscription Canceled" }),
+      }),
+    );
+  });
+});
 
 describe("B8 — house.subscriptionStatus propagation", () => {
   it("invoice.payment_succeeded sets house subscriptionStatus to active", async () => {
@@ -2201,6 +2468,9 @@ describe("B8 — house.subscriptionStatus propagation", () => {
       data: {
         object: {
           id: "in_b8_failed",
+          // Every Stripe invoice has these; grace runs from finalized_at.
+          created: Math.floor(Date.now() / 1000) - 60,
+          status_transitions: { finalized_at: Math.floor(Date.now() / 1000) },
           attempt_count: 1,
           next_payment_attempt: Math.floor(Date.now() / 1000) + 86400,
           parent: {
