@@ -1,5 +1,7 @@
-// Mounts every first-release screen and records what happens, without failing on
-// a broken screen, so the go/no-go report can see the whole set. Not a pass/fail gate.
+// Mounts every first-release screen and records what happens for the go/no-go
+// report, then fails a screen that isn't ok: one that crashes, refuses a read or
+// shows a deferred feature, or throws an uncaught page error. The report is written
+// either way, so it still shows the whole set.
 import fs from 'node:fs';
 import { expect, reseed, signInAs, test } from './helpers';
 
@@ -35,10 +37,15 @@ const SCREENS: [string, object?][] = [
   ['AdminReport', { houseId: HOUSE }],
 ];
 
+// Deferred modules a screen may show and still pass, because they're deferred on
+// purpose (tools/replacements.mjs). Any other deferral or refused read fails.
+const EXPECTED_DEFERRED: Record<string, string[]> = {
+  EditUserInfo: ['react-native-date-picker'],
+};
+
 const OUT = 'dist/screen-survey.json';
 const rows: object[] = [];
 
-test.use({ allowPageErrors: true });
 test.beforeAll(() => {
   reseed();
   fs.mkdirSync('dist/survey', { recursive: true });
@@ -59,16 +66,20 @@ for (const [route, params] of SCREENS) {
     const main = page.locator('main');
     const hasContent = (await main.count()) > 0 && (await main.innerText()).trim().length > 0;
     const crashed = !hasContent || (await page.getByText('Something went wrong').count()) > 0;
-    const degraded = consoleErrors.length > 0 || (await page.getByText(/not available on the web yet/).count()) > 0;
+    const deferredShown = await page.getByText(/not available on the web yet/).allInnerTexts();
+    const allowed = EXPECTED_DEFERRED[route] ?? [];
+    const unexpectedDeferred = deferredShown.filter((text) => !allowed.some((name) => text.endsWith(`: ${name}`)));
+    const degraded = consoleErrors.length > 0 || unexpectedDeferred.length > 0;
     rows.push({
       screen: route,
       status: crashed ? 'crashed' : degraded ? 'degraded' : 'ok',
       pageErrors,
       consoleErrors: [...new Set(consoleErrors)],
-      deferredShown: await page.getByText(/not available on the web yet/).allInnerTexts(),
+      deferredShown,
       alerts: await page.getByRole('alertdialog').allInnerTexts(),
     });
     await page.screenshot({ path: `dist/survey/${route}.png` });
-    expect(route).toBeTruthy();
+    const status = crashed ? 'crashed' : degraded ? 'degraded' : 'ok';
+    expect(status, `${route}: ${JSON.stringify(rows[rows.length - 1])}`).toBe('ok');
   });
 }

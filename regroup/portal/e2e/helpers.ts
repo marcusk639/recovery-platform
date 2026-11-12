@@ -1,4 +1,4 @@
-import { test as base, expect, type Page } from '@playwright/test';
+import { test as base, expect, type BrowserContext, type Page } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
@@ -90,33 +90,68 @@ export async function revokeClaimsAndRefresh(page: Page, account: Account): Prom
   await page.evaluate(() => (window as any).__portalTest.refreshToken());
 }
 
-// Fails a test on any non-loopback browser request or uncaught page error.
-export const test = base.extend<{ allowPageErrors: boolean; guards: void; pageErrors: string[] }>({
+const LOOPBACK = new Set(['127.0.0.1', 'localhost']);
+
+// Every page in the context, popups included, and its WebSockets: requests leaving
+// this machine are aborted and recorded, and uncaught page errors are recorded.
+async function guardContext(context: BrowserContext, external: string[], pageErrors: string[]): Promise<void> {
+  await context.route('**/*', (route) => {
+    const { protocol, hostname, pathname } = new URL(route.request().url());
+    // The Firestore SDK's own connectivity check when offline. It carries no data.
+    if (hostname === 'www.google.com' && pathname === '/images/cleardot.gif') return route.abort();
+    if (protocol === 'data:' || protocol === 'blob:' || LOOPBACK.has(hostname)) return route.continue();
+    external.push(hostname);
+    return route.abort();
+  });
+  await context.routeWebSocket(/.*/, (ws) => {
+    const { hostname } = new URL(ws.url());
+    if (LOOPBACK.has(hostname)) return ws.connectToServer();
+    external.push(`ws:${hostname}`);
+    return ws.close();
+  });
+  const watch = (page: Page) => {
+    page.on('pageerror', (error) => {
+      pageErrors.push(`${error.name}: ${error.message}`.slice(0, 300));
+      if (process.env.PORTAL_E2E_DEBUG) console.log('[pageerror]', error.stack?.slice(0, 1200));
+    });
+    if (process.env.PORTAL_E2E_DEBUG) {
+      page.on('console', (m) => {
+        if (m.type() === 'error' || m.type() === 'warning') console.log(`[${m.type()}]`, m.text().slice(0, 500));
+      });
+    }
+  };
+  context.pages().forEach(watch);
+  context.on('page', watch);
+}
+
+// Fails a test on any non-loopback browser request or uncaught page error, from the
+// test's own page and from any context the test or a fixture opens: a second tab,
+// browser.newPage(), or the invited-staff sign-ins in fixtures.ts.
+export const test = base.extend<{
+  allowPageErrors: boolean;
+  guards: void;
+  pageErrors: string[];
+  externalRequests: string[];
+}>({
   allowPageErrors: [false, { option: true }],
   pageErrors: async ({}, use) => use([]),
+  // What the guards caught, so guards.spec.ts can prove they catch it.
+  externalRequests: async ({}, use) => use([]),
   guards: [
-    async ({ page, allowPageErrors, pageErrors }, use) => {
-      const external: string[] = [];
-      await page.route('**/*', (route) => {
-        const { protocol, hostname, pathname } = new URL(route.request().url());
-        // The Firestore SDK's own connectivity check when offline. It carries no data.
-        if (hostname === 'www.google.com' && pathname === '/images/cleardot.gif') return route.abort();
-        if (protocol === 'data:' || protocol === 'blob:' || hostname === '127.0.0.1' || hostname === 'localhost') {
-          return route.continue();
-        }
-        external.push(hostname);
-        return route.abort();
-      });
-      page.on('pageerror', (error) => {
-        pageErrors.push(`${error.name}: ${error.message}`.slice(0, 300));
-        if (process.env.PORTAL_E2E_DEBUG) console.log('[pageerror]', error.stack?.slice(0, 1200));
-      });
-      if (process.env.PORTAL_E2E_DEBUG) {
-        page.on('console', (m) => {
-          if (m.type() === 'error' || m.type() === 'warning') console.log(`[${m.type()}]`, m.text().slice(0, 500));
-        });
+    async ({ context, browser, allowPageErrors, pageErrors, externalRequests: external }, use) => {
+      await guardContext(context, external, pageErrors);
+      // browser.newPage() goes through newContext(), so this covers both.
+      const newContext = browser.newContext;
+      browser.newContext = async (...args) => {
+        const opened = await newContext.apply(browser, args);
+        await guardContext(opened, external, pageErrors);
+        return opened;
+      };
+      try {
+        await use();
+      } finally {
+        browser.newContext = newContext;
       }
-      await use();
       expect(external, 'browser requests outside this machine').toEqual([]);
       if (!allowPageErrors) expect(pageErrors, 'uncaught page errors').toEqual([]);
     },

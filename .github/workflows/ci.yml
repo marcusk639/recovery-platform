@@ -257,6 +257,91 @@ jobs:
       - name: Bundle checks
         run: cd regroup/portal && node tools/check-bundle.mjs --warn-versions
 
+  # Which packages a change touches, for jobs that run only when their package changes.
+  changes:
+    name: changed packages
+    runs-on: ubuntu-latest
+    outputs:
+      portal: ${{ steps.diff.outputs.portal }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: |
+          # An unknown base (a new branch, a force-push) runs everything.
+          if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+            portal=true
+          elif git diff --name-only "${BASE}...${HEAD}" | grep -qE '^(regroup/portal/|regroup/firebase\.portal\.json$)'; then
+            portal=true
+          else
+            portal=false
+          fi
+          echo "portal=${portal}" >> "$GITHUB_OUTPUT"
+
+  regroup-portal-e2e:
+    name: regroup/portal — browser tests
+    needs: changes
+    # Blocking, but only for changes to the portal itself, so the portal still never
+    # blocks a mobile PR before launch. A skipped job counts as passed.
+    if: needs.changes.outputs.portal == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: |
+            regroup/portal/package-lock.json
+            regroup/functions/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+      - name: Install dependencies
+        run: cd regroup/portal && npm ci
+      - name: Install firebase-tools
+        run: npm install -g firebase-tools
+      - name: Install Chromium
+        run: cd regroup/portal && npx playwright install --with-deps chromium
+      # The payments journeys call the real functions against the Stripe sandbox.
+      - name: Stripe test key for the functions emulator
+        env:
+          STRIPE_SECRET_KEY: ${{ secrets.REGROUP_PORTAL_E2E_STRIPE_SECRET_KEY }}
+        run: |
+          case "$STRIPE_SECRET_KEY" in
+            "") echo "::error::Add the REGROUP_PORTAL_E2E_STRIPE_SECRET_KEY repository secret, a Stripe test-mode key."; exit 1 ;;
+            *_test_*) ;;
+            *) echo "::error::REGROUP_PORTAL_E2E_STRIPE_SECRET_KEY must be a test-mode key."; exit 1 ;;
+          esac
+          umask 077
+          printf 'STRIPE_SECRET_KEY=%s\n' "$STRIPE_SECRET_KEY" > regroup/functions/.secret.local
+      - name: Browser tests
+        env:
+          # The sandbox's test-mode connected account, which the seed gives each house.
+          E2E_STRIPE_ACCOUNT_ID: ${{ secrets.REGROUP_PORTAL_E2E_STRIPE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$E2E_STRIPE_ACCOUNT_ID" ]; then
+            echo "::error::Add the REGROUP_PORTAL_E2E_STRIPE_ACCOUNT_ID repository secret, the sandbox's connected account."
+            exit 1
+          fi
+          regroup/portal/scripts/e2e.sh --production
+      - name: Failure screenshots
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: regroup-portal-e2e-results
+          path: regroup/portal/test-results
+          retention-days: 7
+
   detox-recovery:
     name: detox-recovery — typecheck + test
     runs-on: ubuntu-latest

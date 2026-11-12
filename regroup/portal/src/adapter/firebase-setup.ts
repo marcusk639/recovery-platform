@@ -24,7 +24,11 @@ connectAuthEmulator(auth, `http://${EMULATOR_HOST}:${EMULATOR_PORTS.auth}`, { di
 const firestore = initializeFirestore(app, { ignoreUndefinedProperties: true });
 connectFirestoreEmulator(firestore, EMULATOR_HOST, EMULATOR_PORTS.firestore);
 
-const functions = getFunctions(app);
+// The phone's services/houseTiers.ts calls functions.httpsCallable(name), the older
+// form; the web SDK has only httpsCallable(functions, name).
+const functions = Object.assign(getFunctions(app), {
+  httpsCallable: (name: string) => httpsCallable(functions, name),
+});
 connectFunctionsEmulator(functions, EMULATOR_HOST, EMULATOR_PORTS.functions);
 
 const storage = getStorage(app);
