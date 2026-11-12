@@ -12,6 +12,8 @@ import { getTodaysDate } from "./date";
 import { logger } from "firebase-functions";
 import { BatchResponse } from "firebase-admin/lib/messaging/messaging-api";
 
+const DEFAULT_CHANNEL_ID = "default-channel-id";
+
 interface SendNotificationParams {
   recipientId: string;
   title: string;
@@ -34,17 +36,20 @@ export async function sendNotification(
     // background (the app's background handler is a no-op, and iOS doesn't
     // deliver data-only pushes to a backgrounded app). The notifee data is what
     // the app shows itself in the Android foreground, where FCM shows nothing.
+    // The channel is `default-channel-id`: the one the app creates at startup
+    // (`regroup/mobile/src/services/notifications/service.ts`). An id the app
+    // never created falls back to Android's "Miscellaneous" channel.
     const result = await admin.messaging(app).sendEachForMulticast({
       tokens: user.messagingToken,
       notification: { title, body },
-      android: { notification: { channelId: "default" } },
+      android: { notification: { channelId: DEFAULT_CHANNEL_ID } },
       data: {
         notifee: JSON.stringify({
           body,
           title,
           data,
           android: {
-            channelId: "default",
+            channelId: DEFAULT_CHANNEL_ID,
           },
         }),
       },

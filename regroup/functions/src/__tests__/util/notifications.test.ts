@@ -121,7 +121,7 @@ describe("sendNotification", () => {
 
     const call = mockSendEachForMulticast.mock.calls[0][0];
     const notifee = JSON.parse(call.data.notifee);
-    expect(notifee.android).toEqual({ channelId: "default" });
+    expect(notifee.android).toEqual({ channelId: "default-channel-id" });
   });
 
   // A data-only message shows nothing when the app is in the background: the
@@ -144,7 +144,9 @@ describe("sendNotification", () => {
       title: "Rent due",
       body: "Pay by Friday",
     });
-    expect(call.android).toEqual({ notification: { channelId: "default" } });
+    expect(call.android).toEqual({
+      notification: { channelId: "default-channel-id" },
+    });
   });
 
   it("keeps the notifee data so the app shows it in the Android foreground", async () => {
