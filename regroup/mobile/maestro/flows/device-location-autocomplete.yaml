@@ -1,0 +1,56 @@
+# Location autocomplete in the house search filter: typing a place shows
+# suggestions, and picking one fills the field.
+# Regression: from react-native-google-places-autocomplete 2.6.5 a boolean
+# `listViewDisplayed` controls the list outright, and the app's wrapper always
+# passed false, so the dropdown never appeared (house search filter, house
+# setup and meeting search all share the wrapper).
+# Needs a build bundled with a real GOOGLE_MAPS_API_KEY in regroup/mobile/.env
+# and network access: the suggestions come from the live Places API (New).
+# Signed out. Both platforms.
+# Run (Android): maestro test -e APP_ID=com.regroup.app.e2e.emu maestro/flows/device-location-autocomplete.yaml
+appId: ${APP_ID}
+tags:
+  - device
+  - ui
+  - network
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    permissions:
+      location: deny
+      notifications: allow
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "landing-role-guest"
+- tapOn:
+    id: "nav-house-search"
+- extendedWaitUntil:
+    visible:
+      id: "house-search-screen"
+    timeout: 20000
+- tapOn:
+    id: "filter-activities-button"
+- extendedWaitUntil:
+    visible: "Begin typing to see addresses..."
+    timeout: 10000
+- tapOn: "Begin typing to see addresses..."
+- inputText: "Austin"
+# A suggestion row from the live API, below the field.
+- extendedWaitUntil:
+    visible: "Austin, TX, USA"
+    timeout: 15000
+- takeScreenshot: device-location-autocomplete-suggestions
+- tapOn: "Austin, TX, USA"
+# The pick fills the field (the row and the field read the same, so the list
+# closing is pinned by the unit tests, not here).
+- extendedWaitUntil:
+    visible: "Austin, TX, USA"
+    timeout: 10000
+- assertVisible: "Gender"
+- takeScreenshot: device-location-autocomplete-picked
