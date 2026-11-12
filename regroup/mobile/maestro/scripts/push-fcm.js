@@ -3,8 +3,9 @@
  * Sends real FCM pushes to an e2e test account on staging (regroup-e2e), for
  * push.sh (device pass #160, row 3). The message shapes copy the server's:
  *
- *   resident  sendNotification (functions/src/util/notifications.ts): data only,
- *             a notifee JSON string the app shows itself in the foreground;
+ *   resident  sendNotification (functions/src/util/notifications.ts): a
+ *             notification block the OS shows in the background, plus a
+ *             notifee JSON string the app shows itself in the foreground;
  *   admin     sendFcmToHouseAdmins: a notification block on channel `default`;
  *   data      a data-only probe with no title or body.
  *
@@ -27,6 +28,8 @@ function buildMessage(kind, token, marker) {
     case 'resident':
       return {
         token,
+        notification: { title: marker, body: BODY },
+        android: { notification: { channelId: 'default' } },
         data: {
           notifee: JSON.stringify({
             body: BODY,

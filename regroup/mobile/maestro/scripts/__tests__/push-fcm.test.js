@@ -1,10 +1,15 @@
 const { buildMessage, assertStagingProject, assertTestEmail } = require('../push-fcm');
 
 describe('push-fcm', () => {
-  it('builds a resident push the way sendNotification does: data only, notifee JSON', () => {
+  it('builds a resident push the way sendNotification does: a notification block plus notifee JSON', () => {
     const msg = buildMessage('resident', 'tok-1', 'push-e2e-resident-1');
 
-    expect(msg).toEqual({ token: 'tok-1', data: { notifee: expect.any(String) } });
+    expect(msg).toEqual({
+      token: 'tok-1',
+      notification: { title: 'push-e2e-resident-1', body: 'Device pass push check' },
+      android: { notification: { channelId: 'default' } },
+      data: { notifee: expect.any(String) },
+    });
     expect(JSON.parse(msg.data.notifee)).toEqual({
       title: 'push-e2e-resident-1',
       body: 'Device pass push check',
