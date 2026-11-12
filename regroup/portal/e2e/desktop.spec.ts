@@ -78,3 +78,46 @@ for (const width of [1440, 1024]) {
     expect(await right(legal)).toBeLessThanOrEqual(await frameRight(page));
   });
 }
+
+// The column clips sideways, so page overflow can't show content cut off at its
+// edge. This checks what an operator can see against the column itself.
+const REUSED: (string | [string, object])[] = [
+  `${HOUSE}/beds`, `${HOUSE}/applications`, `${HOUSE}/payments`, `${HOUSE}/payments/balances`,
+  `${HOUSE}/disputes`, `${HOUSE}/activities`, `${HOUSE}/drug-tests`, `${HOUSE}/issues`,
+  `${HOUSE}/complaints`, `${HOUSE}/reports`, `${HOUSE}/shift-log`, `${RECORD}/profile`,
+  `${RECORD}/payments`, `${RECORD}/meetings`, `${RECORD}/work`, `${RECORD}/chores`,
+  `${RECORD}/supporter`, `${RECORD}/medication`, `${RECORD}/notes`,
+  ['ResidentIntake', { houseId: 'test-house-123' }],
+  ['DrugTestForm', { houseId: 'test-house-123', guestId: 'guest-a' }],
+  ['DrugTestHistory', { houseId: 'test-house-123', guestId: 'guest-a' }],
+  ['Documents', { houseId: 'test-house-123', guestId: 'guest-a', title: 'Documents' }],
+];
+
+for (const width of [1440, 1024]) {
+  test(`nothing in a reused screen runs past its column at ${width}`, async ({ page }) => {
+    test.setTimeout(240_000);
+    await page.setViewportSize({ width, height: 900 });
+    await signInAs(page, 'manager');
+    const cut: string[] = [];
+    for (const target of REUSED) {
+      if (typeof target === 'string') await page.goto(target);
+      else await page.evaluate(([route, params]) => (window as any).__portalTest.open(route, params), target);
+      const column = page.getByTestId('reused-screen');
+      await expect(column).toBeVisible({ timeout: 20_000 });
+      await page.waitForTimeout(2_000);
+      const past = await column.evaluate((frame) => {
+        const edge = frame.getBoundingClientRect().right + 1;
+        return [...frame.querySelectorAll('*')]
+          .filter((el) => {
+            const r = el.getBoundingClientRect();
+            const visibleText = [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent!.trim());
+            const control = el.matches('input, textarea, button, [role=button], svg');
+            return r.width > 0 && r.height > 0 && (visibleText || control) && r.right > edge;
+          })
+          .map((el) => `${Math.round(el.getBoundingClientRect().right)}:${el.tagName}:${(el.textContent ?? '').trim().slice(0, 20)}`);
+      });
+      if (past.length) cut.push(`${JSON.stringify(target)} → ${past.slice(0, 3).join(' | ')}`);
+    }
+    expect(cut).toEqual([]);
+  });
+}
