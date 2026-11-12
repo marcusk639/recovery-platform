@@ -122,6 +122,7 @@ const RoomForm: React.FC<Props> = props => {
         }
       } catch (error) {
         setStateError('Something went wrong');
+        notify?.('Room Update Failed', 'Failed to update this room', [], 'fail');
       }
     },
     [action, dismissFormModal, house, room, error, notify, dispatch],
