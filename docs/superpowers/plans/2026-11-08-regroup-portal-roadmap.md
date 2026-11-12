@@ -20,7 +20,7 @@
 | P6  | Disputes, against the rules tests                                                                              | §7, §8.6     | Done (lands after #231, #232, #233) |
 | P7  | Production release of the core, after launch day                                                               | §6, §8.9     | When P6 is done and launch has finished |
 | P8  | Beds, drug tests, documents, issues, complaints, reports                                                       | §5, §8.7     | Done (lands after #231, #232, #233 and #250) |
-| P9  | Desktop polish on the reused screens that need it most                                                         | §8.8         | Before or after P7                      |
+| P9  | Desktop polish: `2026-11-11-regroup-portal-p9-desktop-polish.md`                                                         | §8.8         | Done (lands with P8)                      |
 
 P7 sits before P8 and P9 so the owner's "ship the core first if running late" decision needs no replanning. If the work is on time, run P8 and P9 first and release everything together.
 
@@ -41,6 +41,7 @@ P7 sits before P8 and P9 so the owner's "ship the core first if running late" de
 - P9: the reused ComplianceBreakdown on the resident record keeps phone-sized type.
 - P5: intake doesn't link the new resident to the approved application, so an approved applicant can be admitted twice by hand (phone behaviour); #217 is the double-submit case. Discharge copy is #221.
 - P9: intake's step indicator is sized from the window, so its last step runs past the right edge.
+- P9: reused screens now use phone type sizes (the phone's size scaling read the desktop window, so text was about 1.8 times as big), sit in a 960px column, and lay out from their column's width, which fixes intake's step bar and ComplianceBreakdown's type. The resident `/edit` URL opened the signed-in person's own profile editor; it's gone. Filed: STAFF_NOTES_ISSUE, a blank button on empty Staff notes (phone).
 - P5 ran on the launch-fix phone code (#231, #232, #233 merged locally), so #210 lands after them. Found and fixed during P5: managers refused by the payment callables (#232, isHouseMoneyStaff), $NaN for a non-dollar record and the payment screens disagreeing on what's owed (#233), and a ?guestId= query that skipped the role gate (portal). Filed: #238 (failed-payment banner), #239 (late payment_failed).
 - P6: disputes never affect money (owner, 2026-11-10). The document-open journey can't sign links on the emulator; check real links on staging.
 - P6: every dispute write the portal can make (raise, approve, reject, undo) is proven through the phone's own services against the rules and functions, for owners, invited managers, peer leaders, a manager who is the resident, the logger and another house's admin, and none changes money. Filed: #244 (open disputes older than two weeks are counted but not listed).
