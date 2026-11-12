@@ -34,6 +34,11 @@ export const currentAlert = (): QueuedAlert | undefined => queue[0];
 export const cancelButton = (buttons: AlertButton[]) =>
   buttons.find((b) => b.style === 'cancel' || b.text === 'Cancel');
 
+// What Escape or a click outside presses, as on iOS: Cancel, or a lone acknowledgement
+// such as intake's OK, which closes the form behind it. Otherwise the alert stays open.
+export const dismissButton = (buttons: AlertButton[]): AlertButton | undefined =>
+  cancelButton(buttons) ?? (buttons.length === 1 && buttons[0].style !== 'destructive' ? buttons[0] : undefined);
+
 // The last alert closed, and when: lets a leave guard tell a finished form from an abandoned one.
 let lastClosed: { title?: string; at: number } | undefined;
 export const lastClosedAlert = () => lastClosed;

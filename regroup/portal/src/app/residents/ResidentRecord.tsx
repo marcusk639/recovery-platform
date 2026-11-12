@@ -55,7 +55,7 @@ export function ResidentRecord() {
       <RecordActions guest={guest} house={house} />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(420px, 1fr))', gap: 12 }}>
         <WeekSection guest={guest} house={house} />
-        <PaymentsSection guest={guest} houseId={house.id} />
+        {view === 'full' && <PaymentsSection guest={guest} houseId={house.id} />}
         <RecoverySection guest={guest} fullView={view === 'full'} />
         <OpenItemsSection guest={guest} houseId={house.id} onDocuments={documents} />
       </div>

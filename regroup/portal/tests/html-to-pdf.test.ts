@@ -117,3 +117,19 @@ test('the print view stays until a minute after it loads', async () => {
     vi.useRealTimers();
   }
 });
+
+// The print script is the only one the frame's policy runs, so it must be the only one left.
+test("a script in the report's HTML is dropped, leaving only the print script", async () => {
+  const hostile = `<html><head><script>steal()</script></head>
+    <body><p>Text</p><script src="https://example.com/x.js"></script><svg><script>steal()</script></svg></body></html>`;
+  const result = generatePDF({ html: hostile, fileName: NAME });
+  const frame = frames()[0];
+  frame.dispatchEvent(new Event('load'));
+  await result;
+  const doc = frame.getAttribute('srcdoc')!;
+  const nonce = /script-src 'nonce-([0-9a-f]{32})'/.exec(doc)?.[1];
+  expect(doc.match(/<script\b/g)).toEqual(['<script']);
+  expect(doc).toContain(`<script nonce="${nonce}">`);
+  expect(doc).not.toContain('steal()');
+  expect(doc).not.toContain('example.com');
+});

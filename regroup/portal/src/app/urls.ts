@@ -51,6 +51,13 @@ export const RESIDENT_ROUTE_PATHS: Record<string, string> = {
   [Routes.SupporterSummary]: `${RECORD_PATH}/supporter`,
   [Routes.MedicationSummary]: `${RECORD_PATH}/medication`,
   [Routes.StaffNotes]: `${RECORD_PATH}/notes`,
+  [Routes.Documents]: `${RECORD_PATH}/documents`,
+};
+
+// Screens under a tab that aren't the tab itself. Without a path a reload lost the house.
+const TAB_SCREENS: Record<string, { section: Section; path: string }> = {
+  [Routes.DrugTestForm]: { section: 'drugTests', path: 'houses/:houseId/drug-tests/new' },
+  [Routes.DrugTestHistory]: { section: 'drugTests', path: 'houses/:houseId/drug-tests/history/:guestId' },
 };
 
 export const residentPath = (houseId: string, guestId: string): string =>
@@ -63,6 +70,7 @@ export const stripQuery = (path: string): string => path.split('?')[0];
 // The tab a route belongs to. A resident's screens sit under Residents.
 export function sectionForRoute(routeName: string): Section | null {
   if (RESIDENT_ROUTE_PATHS[routeName]) return 'residents';
+  if (TAB_SCREENS[routeName]) return TAB_SCREENS[routeName].section;
   const entry = (Object.entries(SECTIONS) as [Section, { route: string }][]).find(([, s]) => s.route === routeName);
   return entry ? entry[0] : null;
 }
@@ -91,5 +99,6 @@ export function linkingConfig(origin: string) {
     ...RESIDENT_ROUTE_PATHS,
   };
   for (const { route, path } of Object.values(SECTIONS)) screens[route] = path;
+  for (const [route, { path }] of Object.entries(TAB_SCREENS)) screens[route] = path;
   return { prefixes: [origin], config: { screens } };
 }

@@ -51,6 +51,7 @@ const submit = (page: Page) => page.getByText('Log Drug Test', { exact: true }).
 test("adding a result writes the phone's record", async ({ page }) => {
   await signInAs(page, 'manager');
   await openForm(page);
+  await expect(page).toHaveURL(new RegExp(`/houses/${HOUSE}/drug-tests/new$`));
   await fill(page, 'Negative');
   await submit(page);
   await expect.poll(async () => (await drugTests('guest-a')).length, { timeout: 15_000 }).toBe(1);
@@ -139,4 +140,8 @@ test("history shows only this resident's tests", async ({ page }) => {
   );
   await expect(page.getByText('Negative', { exact: true })).toHaveCount(1, { timeout: 15_000 });
   await expect(page.getByText('Positive', { exact: true })).toHaveCount(0);
+  // A URL of its own: a reload used to land on All houses.
+  await expect(page).toHaveURL(new RegExp(`/houses/${HOUSE}/drug-tests/history/guest-a$`));
+  await page.reload();
+  await expect(page.getByText('Negative', { exact: true })).toHaveCount(1, { timeout: 20_000 });
 });

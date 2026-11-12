@@ -81,6 +81,14 @@ test('an existing document is listed, and opening it asks the server for a link'
   await expect(page.getByRole('alertdialog')).toContainText("Couldn't open the document. Try again.");
 });
 
+// A URL of its own: a reload used to land on All houses.
+test("a resident's documents keep their place through a reload", async ({ page }) => {
+  await open(page);
+  await expect(page).toHaveURL(/\/houses\/test-house-123\/residents\/guest-a\/documents$/);
+  await page.reload();
+  await expect(page.getByTestId('upload-document-button')).toBeVisible({ timeout: 20_000 });
+});
+
 test('cancelling the picker shows no error', async ({ page }) => {
   await open(page);
   const chooser = page.waitForEvent('filechooser');

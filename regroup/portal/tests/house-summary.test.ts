@@ -55,7 +55,10 @@ test('a credit does not reduce what others owe', () => {
 test('an unreadable balance makes the total unknown, not smaller', () => {
   expect(rentOverdue([{ rentOwed: 1000 }, { rentOwed: '1000' }])).toBeNull();
   expect(rentOverdue([{ rentOwed: NaN }])).toBeNull();
-  expect(rentOverdue([{ rentOwed: null }])).toBeNull();
+});
+// The phone reads a null balance as nothing owed (paymentQueries, owedNowCents).
+test('a null balance counts as nothing owed, as on the phone', () => {
+  expect(rentOverdue([{ rentOwed: null }, { rentOwed: 1000 }])).toBe(1000);
 });
 test('what discharged residents owe is known separately', () => {
   const guests = [{ rentOwed: 1000, status: 'active' }, { rentOwed: 500, status: 'discharged' }, { status: 'discharged' }];

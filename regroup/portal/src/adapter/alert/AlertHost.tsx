@@ -1,6 +1,6 @@
 import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { Modal } from 'react-native-web';
-import { cancelButton, closeAlert, currentAlert, subscribe } from './alert-store';
+import { closeAlert, currentAlert, dismissButton, subscribe } from './alert-store';
 
 // Built on react-native-web's Modal, so it stacks above a screen's open Modal
 // and takes over focus from that Modal's focus trap.
@@ -8,7 +8,8 @@ export function AlertHost() {
   const alert = useSyncExternalStore(subscribe, currentAlert);
   const firstButton = useRef<HTMLButtonElement>(null);
   const dismiss = () => {
-    if (alert) closeAlert(alert.id, cancelButton(alert.buttons));
+    const button = alert && dismissButton(alert.buttons);
+    if (alert && button) closeAlert(alert.id, button);
   };
 
   // Handled here because react-native-web's Modal only responds to Escape once

@@ -160,13 +160,19 @@ test('sensitive fields show, and a probation officer shows only as on file', asy
   await expect(legal).not.toContainText('Officer Name');
 });
 
-test('a peer leader sees the balance but not the legal fields', async ({ page }) => {
+// Owner, 2026-11-11: no resident balances for a peer leader either.
+test('a peer leader sees neither the balance nor the legal fields', async ({ page }) => {
   await admin().doc('guests/guest-a').update({ legalStatus: 'parole' });
   await makePeerLeader('manager');
   await page.goto(record('guest-a'));
+  // Both stay hidden while the tier is checked, so assert only once it has answered.
+  const tiers = page.waitForResponse((r) => r.url().includes('myHouseTiers'));
   await fillSignIn(page, 'test-manager@rats-e2e.com');
-  await expect(page.getByTestId('record-payments')).toContainText('$150.00');
+  await tiers;
   const recovery = page.getByTestId('record-recovery');
+  await expect(recovery).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('record-payments')).toHaveCount(0);
+  await expect(page.getByText('$150.00')).toHaveCount(0);
   await expect(recovery).toContainText('Jan 1, 2025');
   await expect(recovery).not.toContainText(/parole|legal status|probation/i);
 });

@@ -102,10 +102,17 @@ test('a peer leader sees no payment money by URL', async ({ page }) => {
   await expect(page.locator('#nav-balances')).toHaveCount(0);
   expect(calls).toEqual([]);
 
+  // Nor a resident's own balance or payment history (owner, 2026-11-11). The record
+  // hides its money until the tier check answers, so assert only once it has.
+  const tiers = page.waitForResponse((r) => r.url().includes('myHouseTiers'));
   await page.goto(`/houses/${HOUSE}/residents/guest-a`);
-  await page.getByTestId('record-payments').getByText('Payment history').click();
-  await expect(page).toHaveURL(new RegExp(`/houses/${HOUSE}/residents/guest-a/payments$`));
-  await expect(page.getByTestId('payment-history-screen')).toBeVisible();
+  await tiers;
+  await expect(page.getByTestId('record-header')).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('record-recovery')).toBeVisible();
+  await expect(page.getByTestId('record-payments')).toHaveCount(0);
+  await page.goto(`/houses/${HOUSE}/residents/guest-a/payments`);
+  await expect(page.getByText("This page isn't available for your role.")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('payment-history-screen')).toHaveCount(0);
 });
 
 // Peer leaders hold the same admin claim as managers, so the house-roles tier is

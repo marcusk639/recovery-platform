@@ -124,3 +124,27 @@ test('the note gives the reason each house is left out', () => {
   expect(note).toContain("1 that couldn't be read");
   expect(note).not.toContain('loading');
 });
+
+// A peer leader's houses show no money, so the overdue total leaves them out and says so.
+test('the overdue total names the houses it leaves out for the role', () => {
+  render(<HouseTable summaries={[summary(), summary({ houseId: 'h2', name: 'Two', rentOverdueCents: { state: 'hidden' } })]} />);
+  const card = screen.getByTestId('total-overdue');
+  expect(card.textContent).toContain('$10.00');
+  expect(card.textContent).toContain('Leaves out 1 house your role');
+});
+test('one house unreadable and one hidden never shows the overdue total as $0.00', () => {
+  render(
+    <HouseTable
+      summaries={[summary({ rentOverdueCents: { state: 'error' } }), summary({ houseId: 'h2', name: 'Two', rentOverdueCents: { state: 'hidden' } })]}
+    />,
+  );
+  const card = screen.getByTestId('total-overdue');
+  expect(card.textContent).not.toContain('$0.00');
+  expect(within(card).getByLabelText('Not counted')).toBeTruthy();
+});
+test('a total with nothing left to load says Not counted, not Loading', () => {
+  render(<HouseTable summaries={[summary({ subscription: 'lapsed' })]} manageSubscriptionUrl="https://x" />);
+  const card = screen.getByTestId('total-disputes');
+  expect(within(card).queryByLabelText('Loading')).toBeNull();
+  expect(within(card).getByLabelText('Not counted')).toBeTruthy();
+});

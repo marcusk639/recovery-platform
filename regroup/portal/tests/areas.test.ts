@@ -51,7 +51,8 @@ test('payments, reports and balances need the full view, even by URL', () => {
   expect(needsFullView('route-AdminReport')).toBe(true);
   expect(needsFullView('route-BalanceDashboard')).toBe(true);
   expect(needsFullView('route-HouseDisputes')).toBe(false);
-  expect(needsFullView('route-PaymentHistory')).toBe(false);
+  // A resident's own payments too (owner, 2026-11-11).
+  expect(needsFullView('route-PaymentHistory')).toBe(true);
 });
 test('the house page offers the shift log', () => {
   expect(areasFor({}).map((a) => a.label)).toEqual(['Add a resident', 'Shift log']);

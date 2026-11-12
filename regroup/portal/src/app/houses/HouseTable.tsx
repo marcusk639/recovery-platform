@@ -119,33 +119,49 @@ function notCountedReasons(summaries: HouseSummary[]): string[] {
   ].filter((reason): reason is string => !!reason);
 }
 
+type TotalField = 'beds' | 'rentOverdueCents' | 'applicationsWaiting' | 'openDisputes';
+
 function Totals({ summaries }: { summaries: HouseSummary[] }) {
   const totals = totalsFor(summaries);
   // Shown once some house has a known amount, so a peer leader never sees it flash
   // while their role is checked.
   const showOverdue = summaries.some((s) => s.rentOverdueCents.state === 'ready' || s.rentOverdueCents.state === 'error');
-  const total = (label: string, value: string, missing: number, testId: string) => (
-    <div style={card} data-testid={testId}>
-      <div style={cardLabel}>{label}</div>
-      <div style={cardValue}>
-        {missing > 0 && missing >= summaries.length ? (
-          <span aria-label="Loading" style={muted}>
-            …
-          </span>
-        ) : (
-          value
+  const total = (label: string, value: string, field: TotalField, testId: string) => {
+    // A house hidden from the role is neither added nor missing, so it can't count
+    // towards "every house is missing": with one unreadable and one hidden, this read $0.00.
+    const hidden = summaries.filter((s) => s[field].state === 'hidden').length;
+    const { missing } = totals[field];
+    const noneCounted = missing > 0 && missing >= summaries.length - hidden;
+    const loading = summaries.some(
+      (s) => s[field].state === 'loading' || (s[field].state !== 'hidden' && rowStateOf(s) === 'loading'),
+    );
+    return (
+      <div style={card} data-testid={testId}>
+        <div style={cardLabel}>{label}</div>
+        <div style={cardValue}>
+          {noneCounted ? (
+            <span aria-label={loading ? 'Loading' : 'Not counted'} style={muted}>
+              {loading ? '…' : '—'}
+            </span>
+          ) : (
+            value
+          )}
+        </div>
+        {hidden > 0 && (
+          <div style={{ ...muted, fontSize: 12 }}>
+            Leaves out {hidden} {hidden === 1 ? 'house' : 'houses'} your role can't see.
+          </div>
         )}
       </div>
-    </div>
-  );
+    );
+  };
   return (
     <>
       <div style={cards}>
-        {total('Beds filled', `${totals.beds.value.used} / ${totals.beds.value.max}`, totals.beds.missing, 'total-beds')}
-        {showOverdue &&
-          total('Rent overdue', formatCents(totals.rentOverdueCents.value), totals.rentOverdueCents.missing, 'total-overdue')}
-        {total('Applications waiting', String(totals.applicationsWaiting.value), totals.applicationsWaiting.missing, 'total-applications')}
-        {total('Open disputes', String(totals.openDisputes.value), totals.openDisputes.missing, 'total-disputes')}
+        {total('Beds filled', `${totals.beds.value.used} / ${totals.beds.value.max}`, 'beds', 'total-beds')}
+        {showOverdue && total('Rent overdue', formatCents(totals.rentOverdueCents.value), 'rentOverdueCents', 'total-overdue')}
+        {total('Applications waiting', String(totals.applicationsWaiting.value), 'applicationsWaiting', 'total-applications')}
+        {total('Open disputes', String(totals.openDisputes.value), 'openDisputes', 'total-disputes')}
       </div>
       {totals.housesNotCounted > 0 && (
         <p role="status" style={{ ...warning, margin: '0 0 12px' }}>

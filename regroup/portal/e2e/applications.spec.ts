@@ -116,6 +116,19 @@ test('home counts one fewer application waiting after a review', async ({ page }
   await expect(page.getByRole('row', { name: /E2E Test House/ }).getByRole('cell').nth(4)).toHaveText('0');
 });
 
+// Escape used to close the success alert without its OK, leaving the filled form
+// open to submit the same resident again.
+test('Escape on the admitted alert closes the form, as OK does', async ({ page }) => {
+  await approveIntoIntake(page);
+  await fillIntake(page, 'escape@rats-e2e.invalid');
+  await page.getByTestId('intake-submit-button').click();
+  await expect(dialog(page)).toContainText('has been admitted.');
+  await page.keyboard.press('Escape');
+  await expect(dialog(page)).toHaveCount(0);
+  await expect(page.getByTestId('intake-form-screen')).toHaveCount(0, { timeout: 15_000 });
+  expect(await guestsWithEmail('escape@rats-e2e.invalid')).toBe(1);
+});
+
 test('double-submitting intake admits one resident (#217)', async ({ page }) => {
   await approveIntoIntake(page);
   await fillIntake(page, 'twice@rats-e2e.invalid');

@@ -57,7 +57,41 @@ test('Escape with only confirm buttons leaves the choice open', async () => {
   show('Choose a category', undefined, [{ text: 'Lease', onPress: choose }, { text: 'ID', onPress: choose }]);
   await userEvent.keyboard('{Escape}');
   expect(choose).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alertdialog')).not.toBeNull();
+});
+
+// Intake's success alert is a lone OK that closes the filled form: dismissing it
+// without running OK left the form open to submit the same resident again.
+test('Escape on a lone OK presses it', async () => {
+  const ok = vi.fn();
+  show('Resident added', undefined, [{ text: 'OK', onPress: ok }]);
+  await userEvent.keyboard('{Escape}');
+  expect(ok).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole('alertdialog')).toBeNull();
+});
+
+test('clicking outside a lone OK presses it', async () => {
+  const ok = vi.fn();
+  show('Resident added', undefined, [{ text: 'OK', onPress: ok }]);
+  await userEvent.click(screen.getByTestId('alert-backdrop'));
+  expect(ok).toHaveBeenCalledTimes(1);
+});
+
+test('a lone destructive button is never pressed by Escape or a click outside', async () => {
+  const remove = vi.fn();
+  show('Remove?', undefined, [{ text: 'Remove', style: 'destructive', onPress: remove }]);
+  await userEvent.keyboard('{Escape}');
+  await userEvent.click(screen.getByTestId('alert-backdrop'));
+  expect(remove).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alertdialog')).not.toBeNull();
+});
+
+test('clicking outside with only confirm buttons leaves the choice open', async () => {
+  const choose = vi.fn();
+  show('Choose a category', undefined, [{ text: 'Lease', onPress: choose }, { text: 'ID', onPress: choose }]);
+  await userEvent.click(screen.getByTestId('alert-backdrop'));
+  expect(choose).not.toHaveBeenCalled();
+  expect(screen.queryByRole('alertdialog')).not.toBeNull();
 });
 
 test('clicking outside does not confirm', async () => {

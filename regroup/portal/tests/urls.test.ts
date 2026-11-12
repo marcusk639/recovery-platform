@@ -62,3 +62,14 @@ test('Balances is a tab right after Payments, under the payments path', () => {
   const order = Object.keys(SECTIONS);
   expect(order[order.indexOf('payments') + 1]).toBe('balances');
 });
+
+// Without a path these became /DrugTestHistory and so on, and a reload lost the house.
+test('documents and the drug-test screens have paths, under their tabs', () => {
+  const { screens } = linkingConfig('http://x').config;
+  expect(screens['route-Documents']).toBe('houses/:houseId/residents/:guestId/documents');
+  expect(screens['route-DrugTestForm']).toBe('houses/:houseId/drug-tests/new');
+  expect(screens['route-DrugTestHistory']).toBe('houses/:houseId/drug-tests/history/:guestId');
+  expect(sectionForRoute('route-Documents')).toBe('residents');
+  expect(sectionForRoute('route-DrugTestForm')).toBe('drugTests');
+  expect(sectionForRoute('route-DrugTestHistory')).toBe('drugTests');
+});

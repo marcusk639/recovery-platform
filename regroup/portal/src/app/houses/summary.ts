@@ -69,7 +69,7 @@ const isReadableBalance = (value: unknown): value is number =>
 export function rentOverdue(guests: { rentOwed?: unknown }[]): number | null {
   let total = 0;
   for (const { rentOwed } of guests) {
-    if (rentOwed === undefined) continue;
+    if (rentOwed === undefined || rentOwed === null) continue; // the phone reads null as 0
     if (!isReadableBalance(rentOwed)) return null;
     if (rentOwed > 0) total += rentOwed;
   }
