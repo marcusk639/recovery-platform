@@ -678,6 +678,54 @@ describe("Splash (withSplash HOC)", () => {
 
         expect(mockUpdateUser).not.toHaveBeenCalled();
       });
+
+      // Regression coverage (2026-11-11, found by push.sh on the staging
+      // build): on a real launch the user is null at mount and arrives after
+      // autoLogin. The token handlers kept the mount-time closure, saw no
+      // user and returned, so no token was ever saved.
+      describe("when the signed-in user arrives after mount", () => {
+        const signedIn = { uid: "user-123", email: "test@example.com" } as any;
+
+        function signInAfterMount(rerender: (el: React.ReactElement) => void) {
+          (global as any).__splashTestUserState = {
+            ...baseUserState,
+            user: signedIn,
+          };
+          rerender(<SplashHOC navigation={{} as any} />);
+        }
+
+        it("persists the FCM token for that user", async () => {
+          const { rerender } = renderSplash({ user: null });
+          await act(async () => {});
+          expect(mockUpdateUser).not.toHaveBeenCalled();
+
+          signInAfterMount(rerender);
+          await act(async () => {});
+
+          expect(mockUpdateUser).toHaveBeenCalledWith({
+            user: signedIn,
+            updates: { messagingToken: ["mock-fcm-token"] },
+          });
+        });
+
+        it("persists a refreshed FCM token for that user", async () => {
+          const { rerender } = renderSplash({ user: null });
+          await act(async () => {});
+          const onRefresh = (mockOnTokenRefresh.mock.calls[0] as any[])[0];
+
+          signInAfterMount(rerender);
+          await act(async () => {});
+          mockUpdateUser.mockClear();
+          await act(async () => {
+            await onRefresh("refreshed-token");
+          });
+
+          expect(mockUpdateUser).toHaveBeenCalledWith({
+            user: signedIn,
+            updates: { messagingToken: ["refreshed-token"] },
+          });
+        });
+      });
     });
   });
 
