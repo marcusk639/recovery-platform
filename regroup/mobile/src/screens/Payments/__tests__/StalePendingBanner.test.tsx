@@ -4,8 +4,12 @@ import { render, fireEvent } from '@testing-library/react-native';
 // ─── Mocks ───────────────────────────────────────────────────────────────────
 
 jest.mock('react-native/Libraries/Linking/Linking', () => ({
-  openURL: jest.fn().mockResolvedValue(undefined),
-  canOpenURL: jest.fn().mockResolvedValue(true),
+  // RN 0.88's root export reads this module's default export.
+  __esModule: true,
+  default: {
+    openURL: jest.fn().mockResolvedValue(undefined),
+    canOpenURL: jest.fn().mockResolvedValue(true),
+  },
 }));
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────

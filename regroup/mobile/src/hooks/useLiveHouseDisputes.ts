@@ -8,7 +8,12 @@
  * copies), so the app no longer reads it for disputes.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import {
+  collection,
+  doc,
+  onSnapshot,
+  type DocumentSnapshot,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { Dispute } from '../entities/Dispute';
 import { logException } from '../util/logging';
@@ -35,21 +40,19 @@ export function useLiveHouseDisputes(houseId: string | undefined): LiveHouseDisp
     if (!houseId) {
       return;
     }
-    const unsubscribe = firestore
-      .collection(LIVE_DISPUTES)
-      .doc(houseId)
-      .onSnapshot(
-        (snapshot: FirebaseFirestoreTypes.DocumentSnapshot) => {
-          const data = snapshot.exists ? snapshot.data() : undefined;
-          setDisputes((data?.disputes ?? {}) as { [key: string]: Dispute });
-          setError(null);
-        },
-        (err: Error) => {
-          logException(err);
-          setDisputes({});
-          setError(err);
-        },
-      );
+    const unsubscribe = onSnapshot(
+      doc(collection(firestore, LIVE_DISPUTES), houseId),
+      (snapshot: DocumentSnapshot) => {
+        const data = snapshot.exists() ? snapshot.data() : undefined;
+        setDisputes((data?.disputes ?? {}) as { [key: string]: Dispute });
+        setError(null);
+      },
+      (err: Error) => {
+        logException(err);
+        setDisputes({});
+        setError(err);
+      },
+    );
     return () => unsubscribe();
   }, [houseId, attempt]);
 

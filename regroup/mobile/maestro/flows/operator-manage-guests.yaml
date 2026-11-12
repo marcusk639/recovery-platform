@@ -17,8 +17,26 @@ tags:
     visible:
       id: "main-app-screen"
     timeout: 30000
-- assertVisible:
-    id: "manage-guests-button"
+# The guest tab opens on a resident. It used to read "No guests in this house"
+# until the operator picked one elsewhere, because nothing was selected.
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+- tapOn:
+    id: "house-tab"
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+# Below the fold, and a tap near the bottom edge lands on the tab bar instead.
+- scrollUntilVisible:
+    element:
+      id: "manage-guests-button"
+    direction: DOWN
+    centerElement: true
 - tapOn:
     id: "manage-guests-button"
 - extendedWaitUntil:

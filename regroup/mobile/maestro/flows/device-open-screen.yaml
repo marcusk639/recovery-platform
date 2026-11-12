@@ -1,0 +1,221 @@
+# Device pass (#160): opens ONE screen, chosen by SCREEN, and stays on it, so a
+# driver can inspect it: maestro/scripts/edge-to-edge.sh (row 6, nothing under
+# the system bars, check-insets.js) and maestro/scripts/rent-reminder.sh (row 3).
+# Not a standalone scenario: run it through a driver.
+# SCREEN: landing, guest-home, activities, dispute-modal, profile, my-profile,
+#         chat, stat-summary, rent-payment, manager-house, house-settings,
+#         payment-dashboard, managers-modal (House Settings > Managers: a
+#         full-screen form modal); guest-home-again (relaunch, still signed in, and
+#         open the guest tab: no sign-in)
+# Run: maestro/scripts/edge-to-edge.sh --device emulator-5554
+appId: ${APP_ID}
+tags:
+  - device
+  - layout
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    when:
+      true: ${SCREEN === 'landing'}
+    commands:
+      - launchApp:
+          clearState: true
+          arguments:
+            IS_E2E_TEST: "1"
+      - extendedWaitUntil:
+          visible:
+            id: "initial-landing-screen"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${SCREEN === 'guest-home-again'}
+    commands:
+      - stopApp
+      - launchApp:
+          arguments:
+            IS_E2E_TEST: "1"
+      - extendedWaitUntil:
+          visible:
+            id: "guest-tab"
+          timeout: 30000
+      - tapOn:
+          id: "guest-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "guest-overview-screen"
+          timeout: 30000
+# Resident screens: sign in as guest-a.
+- runFlow:
+    when:
+      true: ${['guest-home', 'activities', 'dispute-modal', 'profile', 'my-profile', 'chat', 'stat-summary', 'rent-payment'].includes(SCREEN)}
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- runFlow:
+    when:
+      true: ${SCREEN === 'guest-home' || SCREEN === 'stat-summary'}
+    commands:
+      - tapOn:
+          id: "guest-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "guest-overview-screen"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${SCREEN === 'stat-summary'}
+    commands:
+      # The chart draws once guest-a's week summary exists; the functions
+      # emulator writes it a few seconds after the seed.
+      - retry:
+          maxRetries: 10
+          commands:
+            - extendedWaitUntil:
+                visible: "never-shown-delay-marker"
+                timeout: 3000
+                optional: true
+            - runScript:
+                file: ../scripts/maestro-js/week-summary-exists.js
+                env:
+                  GUEST_ID: guest-a
+            - assertTrue: ${output.weekSummaryExists}
+      - tapOn:
+          id: "chores-card"
+      - extendedWaitUntil:
+          visible: "LAST TWO MONTHS"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${SCREEN === 'activities' || SCREEN === 'dispute-modal'}
+    commands:
+      - tapOn:
+          id: "activities-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "activity-screen"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${SCREEN === 'dispute-modal'}
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: "dispute-activity-button-test-activity-b1"
+          direction: DOWN
+          timeout: 20000
+      - tapOn:
+          id: "dispute-activity-button-test-activity-b1"
+      - extendedWaitUntil:
+          visible: "Dispute Activity"
+          timeout: 15000
+- runFlow:
+    when:
+      true: ${SCREEN === 'profile' || SCREEN === 'my-profile'}
+    commands:
+      - tapOn:
+          id: "profile-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "profile-screen"
+          timeout: 20000
+- runFlow:
+    when:
+      true: ${SCREEN === 'my-profile'}
+    commands:
+      - tapOn: ".*My Profile.*"
+      - extendedWaitUntil:
+          visible:
+            id: "save-profile-button"
+          timeout: 20000
+- runFlow:
+    when:
+      true: ${SCREEN === 'chat'}
+    commands:
+      - tapOn:
+          id: "chat-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "chat-composer"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${SCREEN === 'rent-payment'}
+    commands:
+      - tapOn:
+          id: "guest-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "guest-overview-screen"
+          timeout: 30000
+      - scrollUntilVisible:
+          element:
+            id: "pay-rent-card"
+          direction: DOWN
+          centerElement: true
+          timeout: 20000
+      - tapOn:
+          id: "pay-rent-card"
+      - extendedWaitUntil:
+          visible:
+            id: "rent-payment-screen"
+          timeout: 30000
+# Operator screens: sign in as the manager.
+- runFlow:
+    when:
+      true: ${['manager-house', 'house-settings', 'payment-dashboard', 'managers-modal'].includes(SCREEN)}
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- runFlow:
+    when:
+      true: ${SCREEN === 'manager-house'}
+    commands:
+      - extendedWaitUntil:
+          visible:
+            id: "main-app-screen"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${['house-settings', 'payment-dashboard', 'managers-modal'].includes(SCREEN)}
+    commands:
+      - tapOn:
+          id: "house-settings-button"
+      - extendedWaitUntil:
+          visible:
+            id: "house-settings-screen"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${SCREEN === 'managers-modal'}
+    commands:
+      - tapOn:
+          id: "managers-section"
+      - extendedWaitUntil:
+          visible:
+            id: "add-manager-button"
+          timeout: 30000
+- runFlow:
+    when:
+      true: ${SCREEN === 'payment-dashboard'}
+    commands:
+      - scrollUntilVisible:
+          element:
+            text: ".*Payment Dashboard.*"
+          direction: DOWN
+          centerElement: true
+          timeout: 20000
+      - tapOn:
+          text: ".*Payment Dashboard.*"
+      - extendedWaitUntil:
+          visible:
+            id: "manual-payment-fab"
+          timeout: 60000
+      # Rows scroll under the navigation bar by design; what must clear it is
+      # the end of the list and the FAB, so check it scrolled to the end.
+      - repeat:
+          times: 4
+          commands:
+            - scroll
+- waitForAnimationToEnd

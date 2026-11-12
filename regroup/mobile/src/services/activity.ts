@@ -1,5 +1,21 @@
 import { firestore } from '../../firebase-setup';
-import FirebaseFirestore from '@react-native-firebase/firestore';
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit as limitTo,
+  onSnapshot,
+  orderBy,
+  query,
+  runTransaction,
+  serverTimestamp,
+  startAfter,
+  updateDoc,
+  where,
+  type QueryConstraint,
+} from '@react-native-firebase/firestore';
 import {
   Activity,
   ActivityType,
@@ -51,7 +67,7 @@ export async function logActivity(
       timestamp: activityTimestamp,
       data,
       loggedBy,
-      loggedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
+      loggedAt: serverTimestamp() as any,
       verified: false,
       status: ActivityStatus.ACTIVE,
       // The resident it is for, stamped at create (immutable afterwards; the
@@ -66,7 +82,7 @@ export async function logActivity(
     // log used to save the activity and then throw here.
     let docRef;
     try {
-      docRef = await firestore.collection('activities').add(activity);
+      docRef = await addDoc(collection(firestore, 'activities'), activity);
     } catch (error: any) {
       // The guest doc's account changed since we read it: let the server
       // stamp it instead.
@@ -74,7 +90,7 @@ export async function logActivity(
         throw error;
       }
       delete activity.residentUid;
-      docRef = await firestore.collection('activities').add(activity);
+      docRef = await addDoc(collection(firestore, 'activities'), activity);
     }
 
     // Return activity with ID
@@ -93,8 +109,8 @@ export async function logActivity(
 /** The guest doc's account (guests.userId), or undefined if unknown. */
 async function residentUidOf(guestId: string): Promise<string | undefined> {
   try {
-    const guest = await firestore.collection('guests').doc(guestId).get();
-    const uid = guest.exists ? guest.data()?.userId : undefined;
+    const guest = await getDoc(doc(collection(firestore, 'guests'), guestId));
+    const uid = guest.exists() ? guest.data()?.userId : undefined;
     return typeof uid === 'string' && uid !== '' ? uid : undefined;
   } catch {
     return undefined;
@@ -122,26 +138,28 @@ export async function getActivities(
   type?: ActivityType,
 ): Promise<Activity[]> {
   try {
-    let query = firestore
-      .collection('activities')
-      .where('guestId', '==', guestId)
-      .where('houseId', '==', houseId)
-      .where('timestamp', '>=', startDate)
-      .where('timestamp', '<', endDate)
-      .where('status', 'in', LISTED_ACTIVITY_STATUSES);
+    const constraints: QueryConstraint[] = [
+      where('guestId', '==', guestId),
+      where('houseId', '==', houseId),
+      where('timestamp', '>=', startDate),
+      where('timestamp', '<', endDate),
+      where('status', 'in', LISTED_ACTIVITY_STATUSES),
+    ];
 
     // Add type filter if specified
     if (type) {
-      query = query.where('type', '==', type);
+      constraints.push(where('type', '==', type));
     }
 
-    const snapshot = await query.orderBy('timestamp', 'desc').get();
+    const snapshot = await getDocs(
+      query(collection(firestore, 'activities'), ...constraints, orderBy('timestamp', 'desc')),
+    );
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
-      loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
+    return snapshot.docs.map(activityDoc => ({
+      id: activityDoc.id,
+      ...activityDoc.data(),
+      timestamp: activityDoc.data().timestamp?.toDate?.() || activityDoc.data().timestamp,
+      loggedAt: activityDoc.data().loggedAt?.toDate?.() || activityDoc.data().loggedAt,
     })).filter(countsTowardStats) as Activity[];
   } catch (error) {
     logException(error, 'getActivities');
@@ -199,39 +217,39 @@ export async function getActivitiesPage(
   type?: ActivityType,
 ): Promise<ActivityPage> {
   try {
-    let query = firestore
-      .collection('activities')
-      .where('guestId', '==', guestId)
-      .where('houseId', '==', houseId)
-      .where('timestamp', '>=', startDate)
-      .where('timestamp', '<', endDate)
-      .where('status', 'in', LISTED_ACTIVITY_STATUSES);
+    const constraints: QueryConstraint[] = [
+      where('guestId', '==', guestId),
+      where('houseId', '==', houseId),
+      where('timestamp', '>=', startDate),
+      where('timestamp', '<', endDate),
+      where('status', 'in', LISTED_ACTIVITY_STATUSES),
+    ];
 
     if (type) {
-      query = query.where('type', '==', type);
+      constraints.push(where('type', '==', type));
     }
 
-    query = query.orderBy('timestamp', 'desc');
+    constraints.push(orderBy('timestamp', 'desc'));
 
     // Apply cursor for subsequent pages
     if (cursor) {
-      query = query.startAfter(cursor);
+      constraints.push(startAfter(cursor));
     }
 
     // Fetch one extra doc to detect whether another page exists
-    query = query.limit(pageSize + 1);
+    constraints.push(limitTo(pageSize + 1));
 
-    const snapshot = await query.get();
+    const snapshot = await getDocs(query(collection(firestore, 'activities'), ...constraints));
     const docs = snapshot.docs;
 
     const hasMore = docs.length > pageSize;
     const pageDocs = hasMore ? docs.slice(0, pageSize) : docs;
 
-    const activities = pageDocs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
-      loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
+    const activities = pageDocs.map(activityDoc => ({
+      id: activityDoc.id,
+      ...activityDoc.data(),
+      timestamp: activityDoc.data().timestamp?.toDate?.() || activityDoc.data().timestamp,
+      loggedAt: activityDoc.data().loggedAt?.toDate?.() || activityDoc.data().loggedAt,
     })).filter(countsTowardStats) as Activity[];
 
     const nextCursor = hasMore ? pageDocs[pageDocs.length - 1] : null;
@@ -255,19 +273,21 @@ export async function getHouseActivities(
   limit: number = 50,
 ): Promise<Activity[]> {
   try {
-    const snapshot = await firestore
-      .collection('activities')
-      .where('houseId', '==', houseId)
-      .where('status', 'in', LISTED_ACTIVITY_STATUSES)
-      .orderBy('timestamp', 'desc')
-      .limit(limit)
-      .get();
+    const snapshot = await getDocs(
+      query(
+        collection(firestore, 'activities'),
+        where('houseId', '==', houseId),
+        where('status', 'in', LISTED_ACTIVITY_STATUSES),
+        orderBy('timestamp', 'desc'),
+        limitTo(limit),
+      ),
+    );
 
-    return snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-      timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
-      loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
+    return snapshot.docs.map(activityDoc => ({
+      id: activityDoc.id,
+      ...activityDoc.data(),
+      timestamp: activityDoc.data().timestamp?.toDate?.() || activityDoc.data().timestamp,
+      loggedAt: activityDoc.data().loggedAt?.toDate?.() || activityDoc.data().loggedAt,
     })).filter(countsTowardStats) as Activity[];
   } catch (error) {
     logException(error, 'getHouseActivities');
@@ -289,15 +309,15 @@ export async function getWeekSummary(
 ): Promise<WeekSummary | null> {
   try {
     const docId = `${guestId}_${weekStart}`;
-    const doc = await firestore.collection('week-summaries').doc(docId).get();
+    const summary = await getDoc(doc(collection(firestore, 'week-summaries'), docId));
 
-    if (!doc.exists) {
+    if (!summary.exists()) {
       return null;
     }
 
-    const data = doc.data();
+    const data = summary.data();
     return {
-      id: doc.id,
+      id: summary.id,
       ...data,
       // eslint-disable-next-line no-restricted-syntax -- WeekSummary Firestore schema field
       lastUpdated: data?.lastUpdated?.toDate?.() || data?.lastUpdated,
@@ -319,17 +339,17 @@ export async function updateActivity(
   updates: Partial<Activity>,
 ): Promise<void> {
   try {
-    const activityRef = firestore.collection('activities').doc(activityId);
-    const activity = await activityRef.get();
+    const activityRef = doc(collection(firestore, 'activities'), activityId);
+    const activity = await getDoc(activityRef);
 
-    if (!activity.exists) {
+    if (!activity.exists()) {
       throw new Error('Activity not found');
     }
 
     // Update activity. The week summary is recomputed server-side.
-    await activityRef.update({
+    await updateDoc(activityRef, {
       ...updates,
-      loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+      loggedAt: serverTimestamp(),
     });
   } catch (error: any) {
     if (error?.message === 'Activity not found') throw error;
@@ -349,10 +369,10 @@ export const DISPUTED_NOT_DELETABLE =
  */
 export async function deleteActivity(activityId: string): Promise<void> {
   try {
-    const activityRef = firestore.collection('activities').doc(activityId);
-    const activity = await activityRef.get();
+    const activityRef = doc(collection(firestore, 'activities'), activityId);
+    const activity = await getDoc(activityRef);
 
-    if (!activity.exists) {
+    if (!activity.exists()) {
       throw new Error('Activity not found');
     }
     // Owner rule: a disputed activity is never deleted; its dispute ends by
@@ -362,9 +382,9 @@ export async function deleteActivity(activityId: string): Promise<void> {
     }
 
     // Soft delete. The server trigger drops it from the week summary.
-    await activityRef.update({
+    await updateDoc(activityRef, {
       status: ActivityStatus.DELETED,
-      loggedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+      loggedAt: serverTimestamp(),
     });
   } catch (error: any) {
     if (error?.message === 'Activity not found' || error?.message === DISPUTED_NOT_DELETABLE) {
@@ -388,7 +408,7 @@ export async function disputeActivity(
   disputedBy: string,
 ): Promise<void> {
   try {
-    await firestore.collection('activities').doc(activityId).update({
+    await updateDoc(doc(collection(firestore, 'activities'), activityId), {
       status: ActivityStatus.DISPUTED,
       disputeReason: reason,
       // disputeResolvedBy has always held the disputer (and is overwritten
@@ -399,7 +419,7 @@ export async function disputeActivity(
       // When this dispute was raised (the rules pin it to the server time):
       // tells it apart from an earlier dispute on the same activity.
       // loggedAt is left alone: it is not the disputer's to rewrite.
-      disputedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+      disputedAt: serverTimestamp(),
     });
   } catch (error) {
     logException(error, 'disputeActivity');
@@ -452,19 +472,19 @@ export async function resolveDispute(
       ...(approved ? { disputeOutcome: DISPUTE_OUTCOME_INCOMPLETE } : {}),
       disputeResult: approved ? 'success' : 'fail',
       disputeResolvedBy: resolvedBy,
-      disputeResolvedAt: FirebaseFirestore.FieldValue.serverTimestamp() as any,
+      disputeResolvedAt: serverTimestamp() as any,
       // loggedAt is left alone: a decision does not change when the
       // activity was logged (the court export dates a timestamp-less
       // activity by it; older builds still stamp the server time here).
     };
 
-    const activityRef = firestore.collection('activities').doc(activityId);
+    const activityRef = doc(collection(firestore, 'activities'), activityId);
 
     // In a transaction, so two admins resolving at once cannot both win (the
     // rules also refuse a resolution unless the dispute is still open).
-    await firestore.runTransaction(async (tx: any) => {
+    await runTransaction(firestore, async (tx: any) => {
       const activity = await tx.get(activityRef);
-      if (!activity.exists) {
+      if (!activity.exists()) {
         throw new Error('Activity not found');
       }
       const status = (activity.data() as Activity | undefined)?.status;
@@ -506,7 +526,7 @@ export async function verifyActivity(
     // loggedAt is left alone: verifying does not change when the activity
     // was logged, and the rules refuse it on a disputed activity with no
     // timestamp (the court export dates those by loggedAt).
-    await firestore.collection('activities').doc(activityId).update({
+    await updateDoc(doc(collection(firestore, 'activities'), activityId), {
       verified: true,
       verifiedBy,
     });
@@ -529,20 +549,23 @@ export function subscribeToHouseActivities(
   onUpdate: (activities: Activity[]) => void,
   limit: number = 50,
 ): () => void {
-  return firestore
-    .collection('activities')
-    .where('houseId', '==', houseId)
-    .where('status', 'in', LISTED_ACTIVITY_STATUSES)
-    .orderBy('timestamp', 'desc')
-    .limit(limit)
-    .onSnapshot(snapshot => {
-      const activities = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-        timestamp: doc.data().timestamp?.toDate?.() || doc.data().timestamp,
-        loggedAt: doc.data().loggedAt?.toDate?.() || doc.data().loggedAt,
+  return onSnapshot(
+    query(
+      collection(firestore, 'activities'),
+      where('houseId', '==', houseId),
+      where('status', 'in', LISTED_ACTIVITY_STATUSES),
+      orderBy('timestamp', 'desc'),
+      limitTo(limit),
+    ),
+    snapshot => {
+      const activities = snapshot.docs.map(activityDoc => ({
+        id: activityDoc.id,
+        ...activityDoc.data(),
+        timestamp: activityDoc.data().timestamp?.toDate?.() || activityDoc.data().timestamp,
+        loggedAt: activityDoc.data().loggedAt?.toDate?.() || activityDoc.data().loggedAt,
       })).filter(countsTowardStats) as Activity[];
 
       onUpdate(activities);
-    });
+    },
+  );
 }

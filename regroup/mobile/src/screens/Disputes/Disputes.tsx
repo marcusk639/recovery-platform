@@ -39,7 +39,7 @@ const Disputes: React.FC = () => {
   const admins = useAppSelector(state => state.admin.admins);
 
   // Get current and previous week dates for activity queries
-  const { startDate, endDate } = useCurrentWeek();
+  const { startDate, endDate } = useCurrentWeek(house?.timezone);
   const previousWeekStart = useMemo(() => {
     const date = new Date(startDate + 'T00:00:00Z');
     date.setUTCDate(date.getUTCDate() - 7);
@@ -54,6 +54,7 @@ const Disputes: React.FC = () => {
     refetch: refetchDisputed,
   } = useActivities({
     houseId: house?.id,
+    timeZone: house?.timezone,
     startDate: previousWeekStart, // Start from previous week
     endDate, // End at current week
     status: ActivityStatus.DISPUTED, // Only disputed activities
@@ -67,6 +68,7 @@ const Disputes: React.FC = () => {
     refetch: refetchDecided,
   } = useActivities({
     houseId: house?.id,
+    timeZone: house?.timezone,
     startDate: previousWeekStart,
     endDate,
     status: ActivityStatus.RESOLVED,
@@ -81,6 +83,7 @@ const Disputes: React.FC = () => {
     refetch: refetchDeleted,
   } = useActivities({
     houseId: house?.id,
+    timeZone: house?.timezone,
     startDate: previousWeekStart,
     endDate,
     status: ActivityStatus.DELETED,

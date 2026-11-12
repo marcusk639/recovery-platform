@@ -5,7 +5,7 @@
  * Use these hooks instead of HOCs for cleaner, more maintainable code.
  */
 
-export { ModalProvider, useModal } from './ModalContext';
+export { ModalProvider, ScreenModalHost, useModal } from './ModalContext';
 export { NotificationProvider, useNotification } from './NotificationContext';
 export { DataProvider, useData } from './DataContext';
 

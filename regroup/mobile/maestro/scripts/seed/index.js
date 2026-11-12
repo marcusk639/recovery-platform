@@ -41,9 +41,15 @@ async function resetEmulators({ projectId, firestoreHost, authHost }) {
     `http://${authHost}/emulator/v1/projects/${projectId}/accounts`,
   ];
   for (const url of urls) {
-    const res = await fetch(url, { method: 'DELETE' });
-    if (!res.ok) {
-      throw new Error(`Emulator reset failed (${res.status}) for ${url}`);
+    // The Firestore emulator now and then answers a reset with 499 while the
+    // functions emulator's triggers are still writing; a retry clears it.
+    for (let attempt = 1; ; attempt++) {
+      const res = await fetch(url, { method: 'DELETE' });
+      if (res.ok) break;
+      if (attempt >= 3) {
+        throw new Error(`Emulator reset failed (${res.status}) for ${url}`);
+      }
+      await sleep(1000 * attempt);
     }
   }
 }
@@ -61,7 +67,9 @@ async function main() {
   const oxford = d.operator('oxford-operator', d.OXFORD, true, now);
   const guestA = d.resident('guest-a', Number(process.env.E2E_RENT_CENTS || 15000));
   const guestB = d.resident('guest-b', 0);
-  const people = [manager, oxford, guestA, guestB];
+  // Not onboarded yet, for oxford-onboarding.yaml. The other Oxford house has finished.
+  const oxfordNew = d.operator('oxford-new-operator', d.OXFORD_NEW, true, now);
+  const people = [manager, oxford, oxfordNew, guestA, guestB];
 
   // 1. Accounts, claims and users docs, before houses: the subscription trigger reads them.
   for (const p of people) {
@@ -74,7 +82,7 @@ async function main() {
     await auth.setCustomUserClaims(p.uid, p.claims);
     await db.doc(`users/${p.uid}`).set(p.user);
   }
-  for (const p of [manager, oxford]) {
+  for (const p of [manager, oxford, oxfordNew]) {
     await db.doc(`admins/${p.uid}`).set(p.admin);
   }
   await sleep(1500);
@@ -103,6 +111,15 @@ async function main() {
   };
   await db.doc(`house-roles/${d.HOUSE}_${manager.uid}`).set(ownerRole);
   await db.doc(`house-roles/${d.OXFORD}_${oxford.uid}`).set(ownerRole);
+  await db.doc(`houses/${d.OXFORD_NEW}`).set(
+    d.house(d.OXFORD_NEW, 'E2E New Oxford House', oxfordNew.uid, now, {
+      houseType: 'oxford',
+      oxfordOnboardingComplete: false,
+      oxfordEnabled: true,
+      currentCapacity: 0,
+    }),
+  );
+  await db.doc(`house-roles/${d.OXFORD_NEW}_${oxfordNew.uid}`).set(ownerRole);
 
   // 3. Residents.
   for (const g of [guestA, guestB]) {
@@ -130,6 +147,8 @@ async function main() {
   for (const p of d.payments(Timestamp, now)) {
     await db.doc(`payments/${p.id}`).set(p);
   }
+
+  await db.doc(`houses/${d.HOUSE}/applications/test-app-1`).set(d.application(now));
 
   // 6. After the dispute-mirror trigger runs, pin the entry the operator flow looks for.
   await sleep(4000);

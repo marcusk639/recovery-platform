@@ -1,6 +1,6 @@
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import React, { ReactNode } from 'react';
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import FontAwesome5 from '../rats-icon/font-awesome-5';
 import {
   TouchableWithoutFeedback,
   View,

@@ -68,7 +68,7 @@ describe('PaymentDashboard — CSV Export', () => {
   beforeEach(() => {
     jest
       .spyOn(Share, 'share')
-      .mockResolvedValue({ action: Share.sharedAction });
+      .mockResolvedValue({ action: Share.sharedAction, activityType: undefined });
   });
 
   afterEach(() => {
@@ -91,7 +91,7 @@ describe('PaymentDashboard — CSV Export', () => {
       expect(Share.share).toHaveBeenCalledWith(
         expect.objectContaining({
           message: expect.stringContaining(
-            'Date,Guest Name,Amount,Status,Type',
+            'Date,Guest Name,Amount,Refunded,Status,Type',
           ),
         }),
       );

@@ -5,7 +5,7 @@ import { Invitation } from "../../entities/Invite";
 import * as userService from "../../services/users";
 import { getFirebaseUserFromUserCredential } from "../../util/user";
 import { subscriptionStatus } from "../../util/subscription";
-import { FirebaseAuthTypes } from "@react-native-firebase/auth";
+import type { User as FirebaseUser, UserCredential } from "@react-native-firebase/auth";
 import { navigationRef } from "../../navigation/service";
 import { CommonActions } from "@react-navigation/native";
 import { Routes } from "../../navigation/types";
@@ -100,14 +100,14 @@ export const anonymouslyLogin = createAsyncThunk(
 
 export const autoLogin = createAsyncThunk(
   "user/autoLogin",
-  async (signedInUser: FirebaseAuthTypes.User, { dispatch }) => {
+  async (signedInUser: FirebaseUser, { dispatch }) => {
     let { user: userEntity, setupRecoveryFailed } =
       await userService.getUserFinishingSetup(signedInUser.uid);
     if (!userEntity) {
       // Convert Firebase user to our User entity
       const convertedUser = userService.convertFirebaseUserToRatsUser({}, {
         user: signedInUser,
-      } as FirebaseAuthTypes.UserCredential);
+      } as UserCredential);
       userEntity = await userService.createAnonUser(convertedUser);
     }
     const token = await userService.getAuthUser(true);
@@ -240,6 +240,7 @@ const userSlice = createSlice({
         state.error = null;
       })
       .addCase(login.fulfilled, (state, action) => {
+        state.loggingOutSuccessful = false;
         state.user = action.payload.user;
         state.setupRecoveryFailed = action.payload.setupRecoveryFailed;
         state.token = action.payload.token;
@@ -286,6 +287,7 @@ const userSlice = createSlice({
         state.loading = false;
       })
       .addCase(autoLogin.fulfilled, (state, action) => {
+        state.loggingOutSuccessful = false;
         state.user = action.payload.user;
         state.setupRecoveryFailed = action.payload.setupRecoveryFailed;
         state.token = action.payload.token;
@@ -353,6 +355,7 @@ const userSlice = createSlice({
         state.creatingUser = true;
       })
       .addCase(createUser.fulfilled, (state, action) => {
+        state.loggingOutSuccessful = false;
         state.user = action.payload;
         state.creatingUser = false;
         state.loggedIn = true;

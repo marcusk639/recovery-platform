@@ -4,11 +4,13 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   StyleSheet,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import RatsScrollView, {
+  IQ_SCROLL_VIEW_PROPS,
+} from '../../components/rats-scroll-view';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { color } from '../../styles/theme';
 import { useSubmitApplication } from '../../state/queries/applicationQueries';
@@ -76,7 +78,7 @@ export default function ApplyScreen() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RatsScrollView {...IQ_SCROLL_VIEW_PROPS} style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.title}>Apply to {houseName ?? 'this house'}</Text>
       <Text style={styles.stepLabel}>
         Step {STEPS.indexOf(step) + 1} of {STEPS.length}
@@ -212,7 +214,7 @@ export default function ApplyScreen() {
           </TouchableOpacity>
         )}
       </View>
-    </ScrollView>
+    </RatsScrollView>
   );
 }
 

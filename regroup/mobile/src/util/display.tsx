@@ -64,7 +64,7 @@ export const STAT_MAP: StatMap = {
     icon: 'dolly',
     label: 'Chore',
     color: color.dark_purple,
-    activityLabel: 'Chore changed',
+    activityLabel: 'Chore completed',
   },
   choreCompleted: {
     icon: 'dolly',

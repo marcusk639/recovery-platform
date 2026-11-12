@@ -47,7 +47,7 @@ const ActivityScreen: React.FC = () => {
   const admins = useAppSelector(state => state.admin.admins);
 
   // Get current and previous week dates for activity queries
-  const { startDate, endDate } = useCurrentWeek();
+  const { startDate, endDate } = useCurrentWeek(house?.timezone);
   const previousWeekStart = useMemo(() => {
     const date = new Date(startDate + 'T00:00:00Z');
     date.setUTCDate(date.getUTCDate() - 7);
@@ -62,6 +62,7 @@ const ActivityScreen: React.FC = () => {
     refetch: refetchActivities,
   } = useActivities({
       houseId: house?.id,
+      timeZone: house?.timezone,
       startDate: previousWeekStart, // Start from previous week
       endDate, // End at current week
       limit: 500, // Increase limit to get more activities

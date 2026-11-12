@@ -121,9 +121,10 @@ jest.mock("../../../components/rats-text", () => ({
 }));
 
 // ─── Keyboard-aware scroll view ───────────────────────────────────────────────
-jest.mock("react-native-keyboard-aware-scroll-view", () => {
+jest.mock("react-native-keyboard-controller", () => {
   const { ScrollView } = require("react-native");
   return {
+    ...jest.requireActual("react-native-keyboard-controller/jest"),
     KeyboardAwareScrollView: (props: any) => <ScrollView {...props} />,
   };
 });

@@ -1,6 +1,5 @@
 # Flow 22 — Guest: payment history (read-only)
-# Persona: guest-a. No payments are seeded, so the empty state is expected;
-# the assertion is that the screen renders in E2E mode.
+# Persona: guest-a, who has seeded payments of their own. Another resident's must not show.
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/guest-payment-history.yaml
 appId: ${APP_ID}
 tags:
@@ -19,15 +18,31 @@ tags:
     visible:
       id: "guest-overview-screen"
     timeout: 30000
+# Below the fold once this week's compliance breakdown shows, and a tap near the
+# bottom edge lands on the tab bar instead.
+- scrollUntilVisible:
+    element:
+      id: "payment-history-card"
+    direction: DOWN
+    centerElement: true
 - tapOn:
     id: "payment-history-card"
 - extendedWaitUntil:
     visible:
       id: "payment-history-screen"
     timeout: 30000
-# With no seeded payments, the empty state shows; a row appears once payments exist.
+# This resident's two seeded payments, and not another resident's.
 - assertVisible:
+    id: "payment-row-e2e-pay-a-latest"
+- assertVisible:
+    text: ".*22[.]22.*"
+- assertVisible:
+    id: "payment-row-e2e-pay-a-old"
+- assertVisible:
+    text: ".*11[.]11.*"
+- assertNotVisible:
+    id: "payment-row-e2e-pay-b"
+- assertNotVisible:
     id: "payment-history-empty"
-    optional: true
 - runFlow:
     file: ../subflows/logout.yaml

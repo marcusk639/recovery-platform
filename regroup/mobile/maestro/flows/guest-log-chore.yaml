@@ -30,18 +30,24 @@ tags:
     id: "complete-chore-button"
 - tapOn:
     id: "complete-chore-button"
-# Photo prompt is a native Alert — choose the no-photo option if offered.
+# Photo prompt is a native Alert. Required: an optional tap here passed without
+# logging the chore.
+- extendedWaitUntil:
+    visible:
+      text: "Skip"
+    timeout: 15000
 - tapOn:
     text: "Skip"
-    index: 1
-    optional: true
+- extendedWaitUntil:
+    visible:
+      text: "Chore marked as complete!"
+    timeout: 30000
 - tapOn:
-    text: "No"
-    index: 1
-    optional: true
-- tapOn:
-    text: "Without Photo"
-    index: 1
-    optional: true
+    text: "OK"
+# The server updates the weekly count after the write.
+- extendedWaitUntil:
+    visible:
+      text: "[1-9][0-9]* of 1"
+    timeout: 60000
 - runFlow:
     file: ../subflows/logout.yaml

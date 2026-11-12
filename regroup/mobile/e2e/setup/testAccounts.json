@@ -13,8 +13,8 @@
     {
       "id": "guest-b",
       "email": "test-guest-b@rats-e2e.com",
-      "firstName": "Test",
-      "lastName": "GuestB",
+      "firstName": "Bob",
+      "lastName": "Rivera",
       "role": "guest",
       "houseId": "test-house-123",
       "phone": "555-0002"
@@ -47,6 +47,18 @@
       "role": "admin",
       "houseId": "test-house-oxford",
       "phone": "555-0400",
+      "subscriptionMetadata": {
+        "oxfordEnabled": true
+      }
+    },
+    {
+      "id": "oxford-new-operator",
+      "email": "test-oxford-new@rats-e2e.com",
+      "firstName": "Oxford",
+      "lastName": "Newcomer",
+      "role": "admin",
+      "houseId": "test-house-oxford-new",
+      "phone": "555-0500",
       "subscriptionMetadata": {
         "oxfordEnabled": true
       }

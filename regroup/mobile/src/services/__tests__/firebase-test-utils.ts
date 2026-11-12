@@ -4,8 +4,8 @@
  * Utilities for connecting to Firebase Emulator in tests
  */
 
-import { firestore } from '../../../firebase-setup';
-import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+// Admin handle: clearing data is not something a signed-in user may do.
+import { adminDb } from '../../integration/firebase-admin-setup';
 
 // Track if we've already connected to emulator
 let emulatorConnected = false;
@@ -43,12 +43,12 @@ export function connectToEmulator() {
 export async function clearEmulatorData() {
   try {
     // Clear activities collection
-    const activitiesSnapshot = await (firestore as any).collection('activities').get();
-    const activityDeletes = activitiesSnapshot.docs.map((doc: any) => doc.ref.delete());
+    const activitiesSnapshot = await adminDb.collection('activities').get();
+    const activityDeletes = activitiesSnapshot.docs.map((doc) => doc.ref.delete());
 
     // Clear week-summaries collection
-    const summariesSnapshot = await (firestore as any).collection('week-summaries').get();
-    const summaryDeletes = summariesSnapshot.docs.map((doc: any) => doc.ref.delete());
+    const summariesSnapshot = await adminDb.collection('week-summaries').get();
+    const summaryDeletes = summariesSnapshot.docs.map((doc) => doc.ref.delete());
 
     await Promise.all([...activityDeletes, ...summaryDeletes]);
   } catch (error) {

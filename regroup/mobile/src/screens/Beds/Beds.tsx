@@ -110,7 +110,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
   const { showPopover: showPopoverHelp, setPopoverRef } = useNotification();
 
   const renderBedItem = useCallback(
-    (bed: Bed, room: Room, content?: JSX.Element): JSX.Element => {
+    (bed: Bed, room: Room, content?: React.JSX.Element): React.JSX.Element => {
       return (
         <ActivityItem
           key={room.id + bed.id}
@@ -180,7 +180,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
   const showAssignGuest = useCallback(
     (
       currentlyAssignedGuest: Guest | undefined,
-      bedItem?: JSX.Element,
+      bedItem?: React.JSX.Element,
       selectedBed?: SelectedBed,
     ) => {
       if (!house) return;
@@ -315,7 +315,7 @@ const BedsScreen: React.FC<Props> = ({ navigation }) => {
         <RoomForm
           action={room ? "edit" : "add"}
           notify={notify}
-          renderBedItem={(bed: Bed, room: Room, content?: JSX.Element) =>
+          renderBedItem={(bed: Bed, room: Room, content?: React.JSX.Element) =>
             renderBedItem(bed, room, content)
           }
           room={room || new Room("", {})}

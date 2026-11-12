@@ -63,7 +63,7 @@ interface ActivityItemProps {
   isAdmin?: boolean;
   avatarUrl?: string;
   avatarName?: string;
-  content?: JSX.Element;
+  content?: React.JSX.Element;
   onPress?: () => void;
   headerStyle?: TextStyle;
   descriptionStyle?: TextStyle;
@@ -301,7 +301,7 @@ interface CardItemProps {
   iconName?: string;
   key?: any;
   container?: ViewStyle;
-  activityItems?: JSX.Element;
+  activityItems?: React.JSX.Element;
   leftButtonProps?: Partial<RatsButtonProps>;
   rightButtonProps?: Partial<RatsButtonProps>;
   avatarName?: string;

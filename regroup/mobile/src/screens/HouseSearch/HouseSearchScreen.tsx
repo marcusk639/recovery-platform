@@ -26,6 +26,7 @@ import {
   fontFamily,
 } from '../../styles/theme';
 import { checkAndRequestLocationPermissions } from '../../util/permissions';
+import { getCurrentPosition } from '../../util/geolocation';
 import RatsSearchFilter from '../../components/rats-search-filter';
 import RatsScrollView from '../../components/rats-scroll-view';
 import RatsSearchBar from '../../components/rats-search-bar';
@@ -44,7 +45,6 @@ import { RatsIcon } from '../../components/rats-icon';
 import HealthConstants from '../../constants/health';
 import { getAddressDisplay } from '../../util/address';
 import EmptyScreen from '../../components/empty-screen';
-import Geolocation from '@react-native-community/geolocation';
 import isEqual from 'lodash/isEqual';
 
 import { useAppSelector, useAppDispatch } from '../../state/store';
@@ -298,7 +298,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
   const renderStars = useCallback((house: House) => {
     const phaseNumber = size(house.phases);
     const number = house.rating || 3;
-    const stars: JSX.Element[] = [];
+    const stars: React.JSX.Element[] = [];
     for (let i = 1; i <= number; i++) {
       stars.push(
         <RatsIcon
@@ -454,7 +454,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
     const initialize = async () => {
       const permission = await checkAndRequestLocationPermissions();
       if (permission) {
-        Geolocation.getCurrentPosition(
+        getCurrentPosition(
           position => {
             setCoords(
               {

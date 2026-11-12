@@ -9,13 +9,14 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format } from 'date-fns';
 import { toDateSafe } from '../../util/firestore';
+import { recordAmountLabel } from '../../util/paymentDisplay';
 
 import RatsScrollView from '../../components/rats-scroll-view';
 import ScreenHeader from '../../components/screen-header';
 import { RatsText } from '../../components/rats-text';
 import RatsButton from '../../components/rats-button/rats-button';
 
-import { listPayments, PaymentRecord } from '../../services/payments';
+import { getGuestPayments, getPaymentHistory, RentPayment } from '../../services/payments';
 import { exportPaymentHistoryCSV } from '../../services/reportExport';
 import { logException } from '../../util/logging';
 import {
@@ -26,9 +27,11 @@ import {
   fontFamily,
 } from '../../styles/theme';
 import { RootStackParamList } from '../../navigation/types';
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import FontAwesome5 from '../../components/rats-icon/font-awesome-5';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useSelectedHouse } from '../../hooks/useSelectedHouse';
+import { useAppSelector } from '../../state/store';
+import { PAYMENT_TONE_COLOR, paymentDisplayStatus } from '../../util/paymentStatus';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -42,8 +45,9 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
   // selected ids through React Query instead.
   const { guest } = useSelectedGuest();
   const { house } = useSelectedHouse();
+  const signedInUid = useAppSelector(s => s.user.user?.id);
 
-  const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [payments, setPayments] = useState<RentPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,7 +78,14 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
         return;
       }
       try {
-        const data = await listPayments(guest.id, house.id);
+        // Firestore is the history of record (owner decision D4). The rules let a
+        // resident list only by their own uid. Anyone else here is staff, who need
+        // the guest record's full history: cash for a resident with no account, and
+        // payments from before the account linked, carry no uid.
+        const data =
+          guest.userId && guest.userId === signedInUid
+            ? await getPaymentHistory({ houseId: house.id, guestUserId: guest.userId })
+            : await getGuestPayments({ houseId: house.id, guestId: guest.id });
         setPayments(data);
       } catch (err: any) {
         logException(err);
@@ -85,10 +96,11 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
     };
 
     fetchPayments();
-  }, [guest?.id, house?.id]);
+  }, [guest?.id, guest?.userId, house?.id, signedInUid]);
 
-  const renderItem = useCallback(({ item }: { item: PaymentRecord }) => {
-    const succeeded = item.status === 'succeeded';
+  const renderItem = useCallback(({ item }: { item: RentPayment }) => {
+    const { label, tone } = paymentDisplayStatus(item);
+    const refundedCents = item.refundedAmountCents ?? 0;
     const createdMs = toDateSafe(item.createdAt)?.getTime();
     const isStale =
       item.status === 'pending' &&
@@ -101,13 +113,13 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
         style={[
           CARD_STYLE,
           styles.paymentCard,
-          { borderLeftColor: succeeded ? color.green : color.red },
+          { borderLeftColor: PAYMENT_TONE_COLOR[tone] },
         ]}>
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
             <RatsText
               translate={false}
-              text={item.description}
+              text={item.description || 'Payment'}
               style={styles.description}
             />
             <RatsText
@@ -122,19 +134,26 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
           <View style={styles.rightColumn}>
             <RatsText
               translate={false}
-              text={`$${(item.amount / 100).toFixed(2)}`}
+              text={recordAmountLabel(item)}
               style={styles.amount}
             />
+            {refundedCents > 0 && refundedCents < item.amount && (
+              <RatsText
+                translate={false}
+                text={`$${(refundedCents / 100).toFixed(2)} refunded`}
+                style={styles.date}
+              />
+            )}
             <View style={styles.statusRow}>
               <View
                 style={[
                   styles.statusBadge,
-                  { backgroundColor: succeeded ? color.green : color.red },
+                  { backgroundColor: PAYMENT_TONE_COLOR[tone] },
                 ]}>
                 <RatsText
                   translate={false}
-                  text={item.status.toUpperCase()}
-                  style={styles.statusText}
+                  text={label.toUpperCase()}
+                  style={[styles.statusText, tone === 'warning' && { color: color.black }]}
                 />
               </View>
               {isStale && (

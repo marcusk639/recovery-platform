@@ -158,9 +158,11 @@ describe("ManagerSettings", () => {
           { ...GUEST_ADMIN, isAdmin: false },
         ]),
       );
+      // isAdmin is authoritative, or the merge ORs it back to true (#228).
       expect(mockMutateAsync).toHaveBeenCalledWith({
         guest: { ...GUEST_ADMIN, isAdmin: false },
         updatedGuest: { id: GUEST_ADMIN.id, isAdmin: false },
+        authoritativeFields: ['isAdmin'],
       });
       expect(mockDispatch).toHaveBeenCalled();
     });

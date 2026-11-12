@@ -1,6 +1,6 @@
 # Flow 09 — Operator: applications review -> approve -> intake
 # Persona: manager (admin of test-house-123). Seeded: pending application
-# test-app-1 (see e2e/setup/seedTestData.js seedTestApplications()).
+# test-app-1 (maestro/scripts/seed/docs.js application()).
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/operator-applications.yaml
 appId: ${APP_ID}
 tags:
@@ -19,8 +19,13 @@ tags:
       id: "main-app-screen"
     timeout: 30000
 # The "Applications" section has no testID — tap by its label text.
+- scrollUntilVisible:
+    element:
+      text: ".*Review resident applications.*"
+    direction: DOWN
+    centerElement: true
 - tapOn:
-    text: "Applications"
+    text: ".*Review resident applications.*"
 # ApplicationListScreen renders one row per seeded application.
 - extendedWaitUntil:
     visible:
@@ -33,6 +38,13 @@ tags:
     id: "btn-approve"
 - tapOn:
     id: "btn-approve"
+# Approve asks for confirmation in a native alert.
+- extendedWaitUntil:
+    visible:
+      text: "Approve"
+    timeout: 15000
+- tapOn:
+    text: "Approve"
 # Approval routes the operator into the resident intake form.
 - extendedWaitUntil:
     visible:

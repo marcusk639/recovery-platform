@@ -56,7 +56,9 @@ jest.mock("../../util/user", () => ({
 
 // ─── Imports (after mocks) ───────────────────────────────────────────────────
 
-import { firestore } from "../../../firebase-setup";
+import { firestore as setupFirestore } from "../../../firebase-setup";
+// The firebase-setup mock is namespaced-shaped; the real module's types are modular.
+const firestore = setupFirestore as any;
 import * as crud from "../crud";
 import * as houseService from "../house";
 import { uploadUserAvatar } from "../storage";
@@ -77,7 +79,7 @@ import {
   userCollection,
 } from "../users";
 import { User } from "../../entities/User";
-import auth from "@react-native-firebase/auth";
+import { getAuth } from "@react-native-firebase/auth";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -110,8 +112,8 @@ const makeFirebaseUserCredential = (overrides: any = {}): any => ({
   },
 });
 
-/** Retrieves the mock auth instance returned by the auth() call */
-const getMockAuth = () => (auth as unknown as jest.Mock)();
+/** Retrieves the mock auth instance (the object auth() and getAuth() return) */
+const getMockAuth = () => getAuth() as any;
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 

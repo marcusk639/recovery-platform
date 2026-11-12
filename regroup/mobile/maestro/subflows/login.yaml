@@ -38,15 +38,20 @@ appId: ${APP_ID}
 - tapOn:
     id: "email-input"
 - inputText: ${EMAIL}
-# Dismiss the keyboard so the layout settles before tapping the password field.
-# Without this, the tap on password-input races the keyboard/scroll and fails to
-# focus the field, so inputText lands nowhere and login submits empty.
-- hideKeyboard
+# Let the layout settle before tapping the password field. Without this, the tap
+# on password-input races the keyboard/scroll and fails to focus the field, so
+# inputText lands nowhere and login submits empty. Not hideKeyboard: on iOS it
+# fails intermittently with "Couldn't hide the keyboard" and ends the flow.
+- waitForAnimationToEnd
 # Tap by testID — RatsTextInput forwards testID to the inner native TextInput
 # (accessibilityIdentifier on iOS). Under E2E the field is non-secure
 # (secureTextEntry gated on IS_E2E_TEST) so Maestro can type into it.
+# The retry covers a first tap lost to the same race: the password then lands in
+# the email field and login fails on "Required".
 - tapOn:
     id: "password-input"
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
 - inputText: ${PASSWORD}
 - tapOn:
     id: "login-button"

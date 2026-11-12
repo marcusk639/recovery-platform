@@ -47,7 +47,6 @@ jest.mock('react-native-permissions', () => ({
 // The react-native preset already mocks the whole package. We only need to
 // override PermissionsAndroid so its individual methods are jest.fn().
 jest.mock('react-native', () => {
-  const preset = jest.requireMock('react-native/jest/setup');
   // jest preset for react-native provides a module mock without TurboModules
   // We extend it with jest.fn() versions of PermissionsAndroid methods.
   const RN = jest.genMockFromModule('react-native') as any;

@@ -136,6 +136,30 @@ service firebase.storage {
     }
 
     // =========================================================================
+    // 8. Documents: houses/{houseId}/documents/{docId} and
+    //    houses/{houseId}/guests/{guestId}/documents/{docId}
+    //    Read/write: house admins only, as for the documents collection in
+    //    firestore.rules. Residents have no access. PDFs and images only (the
+    //    picker offers no others); max 25 MB.
+    // =========================================================================
+    function isValidDocumentWrite() {
+      return (request.resource == null)
+        || ((request.resource.contentType == 'application/pdf'
+             || request.resource.contentType.matches('image/.*'))
+            && request.resource.size <= 25 * 1024 * 1024);
+    }
+
+    match /houses/{houseId}/documents/{docId} {
+      allow read: if isHouseAdmin(houseId);
+      allow write: if isHouseAdmin(houseId) && isValidDocumentWrite();
+    }
+
+    match /houses/{houseId}/guests/{guestId}/documents/{docId} {
+      allow read: if isHouseAdmin(houseId);
+      allow write: if isHouseAdmin(houseId) && isValidDocumentWrite();
+    }
+
+    // =========================================================================
     // CATCH-ALL DENY
     // Any path not matched above is denied. Firebase denies by default but
     // we make it explicit for auditability.

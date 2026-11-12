@@ -80,15 +80,8 @@ jest.mock('../../../services/message', () => ({
 }));
 
 // ─── Native module mocks ──────────────────────────────────────────────────────
-jest.mock('react-native-keyboard-manager', () => ({
-  setEnable: jest.fn(),
-  setEnableAutoToolbar: jest.fn(),
-  setToolbarDoneBarButtonItemText: jest.fn(),
-  setLayoutIfNeededOnUpdate: jest.fn(),
-  setKeyboardDistanceFromTextField: jest.fn(),
-  setPreventShowingBottomBlankSpace: jest.fn(),
-  setShouldResignOnTouchOutside: jest.fn(),
-}));
+// react-native-keyboard-manager is gone (plan Task 15); jest.setup.js mocks
+// its replacement, react-native-keyboard-controller.
 
 jest.mock('react-native-iphone-x-helper', () => ({
   getBottomSpace: jest.fn(() => 0),

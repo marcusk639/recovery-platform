@@ -1,0 +1,155 @@
+{
+  "verdict": "CHANGES_REQUESTED",
+  "summary": "4 reviewers, 17 blocking findings (12 distinct after de-duplication), ~50 warnings/recommendations. Every distinct item is resolved in plan v2 (same file) and the spec revision of 2026-10-30.",
+  "plan_file": "regroup/mobile/docs/superpowers/plans/2026-10-30-react-native-0.88-upgrade.md",
+  "reviewed_at": "2026-10-30T00:50:00Z",
+  "blocking_issues": [
+    {
+      "id": "B1",
+      "source": "architecture, quality",
+      "issue": "react-native-modal is not mocked globally and breaks on RN 0.88; its patch lands in Task 7, after Task 3 must be green.",
+      "priority_score": 12,
+      "resolution": "Characterize modal behaviour on 0.72 first; pin 13.0.2 and apply the patch in the same install as RN 0.88."
+    },
+    {
+      "id": "B2",
+      "source": "architecture, reality, systems",
+      "issue": "The CI regroup-mobile job runs the typecheck ratchet before Jest; the plan defers the ratchet to Task 18, so CI is red and Jest unobserved for most of the PR. The spec requires the ratchet per phase.",
+      "priority_score": 12,
+      "resolution": "Keep the ratchet green at every commit: fix new errors in the task that causes them, and allow no baseline entries in Firebase-migrated files."
+    },
+    {
+      "id": "B3",
+      "source": "architecture, quality, reality, systems",
+      "issue": "The Task 10 file groups name non-existent files (offlineQueue.ts, invites.ts) and omit integrity files (reopenDispute.ts, guestBatch.ts, useLiveHouseDisputes.ts, crud.tsx, account.ts, EnhancedAuthService.ts, invitations.ts, setup-wizard-photos.ts, useSubscriptionGate.ts).",
+      "priority_score": 12,
+      "resolution": "Regenerate the groups from call shapes plus imports; integrity files go to the integrity group; add a union check."
+    },
+    {
+      "id": "B4",
+      "source": "architecture",
+      "issue": "Collection refs and crud.tsx are shared across groups, so the groups cannot each land green with modular {path,type} mock refs.",
+      "priority_score": 9,
+      "resolution": "Dual-shape mock refs (modular refs also expose namespaced methods; namespaced refs carry path) until the last group lands."
+    },
+    {
+      "id": "B5",
+      "source": "quality",
+      "issue": "Money and integrity characterization tests are rewritten together with the code, so a mapping mistake can be copied into the test.",
+      "priority_score": 12,
+      "resolution": "A normalized operation log shared by both mock shapes; tests are written against the log before the rewrite and stay byte-identical through it."
+    },
+    {
+      "id": "B6",
+      "source": "quality",
+      "issue": "The completeness grep misses this codebase's call forms (firestore.collection, firestore.batch, FieldValue, messaging()).",
+      "priority_score": 9,
+      "resolution": "An ESLint ban on default @react-native-firebase imports plus an extended grep including ref-method chains."
+    },
+    {
+      "id": "B7",
+      "source": "quality",
+      "issue": "The new async notification functions have no error observability and could log PII.",
+      "priority_score": 9,
+      "resolution": "Wrap with logException using a static context, never reject, never log payloads; test it."
+    },
+    {
+      "id": "B8",
+      "source": "quality, systems",
+      "issue": "The release-guard and e2e Gradle wiring is unverified and fails open.",
+      "priority_score": 12,
+      "resolution": "Required CI assertions, plus fail-closed configuration-time checks in app/build.gradle."
+    },
+    {
+      "id": "B9",
+      "source": "quality, architecture, systems",
+      "issue": "The test-change-approved label disables the whole CI test-tamper gate for the entire PR.",
+      "priority_score": 9,
+      "resolution": "Run the whole-branch verify-diff before applying the label, attach the output to the PR, and apply the label last."
+    },
+    {
+      "id": "B10",
+      "source": "systems",
+      "issue": "iOS foreground banners for server pushes that carry a notification block disappear once AppDelegate stops being the UNUserNotificationCenter delegate.",
+      "priority_score": 12,
+      "resolution": "Set messaging_ios_foreground_presentation_options in firebase.json; add a checkpoint test."
+    },
+    {
+      "id": "B11",
+      "source": "systems",
+      "issue": "AppDelegate loses its window property, crashing RNFB messaging at launch and breaking date-picker modals.",
+      "priority_score": 16,
+      "resolution": "Declare and assign the window property; add a static check and a checkpoint item."
+    },
+    {
+      "id": "B12",
+      "source": "systems",
+      "issue": "IQKeyboardManager's Prev/Next/Done toolbar is the only way to dismiss iOS numeric pads (19 fields, including rent amount) and is lost with the library.",
+      "priority_score": 12,
+      "resolution": "An app-wide KeyboardToolbar behind a wrapper; audit column, tests, checkpoint item."
+    }
+  ],
+  "warnings": [
+    "Native tracer bullet is too late (Android project should follow the JS bump, with a draft PR then).",
+    "Sentry v8 glue must land before the Mac checkpoint, including the Hermes source maps.",
+    "Snapshot updates must go in the same commit as the change that causes them.",
+    "Integration mapping: give it its own setup file, export JS SDK instances, keep an admin handle for seeding, normalize error codes, initialize before connecting, assert a demo- project, shim putFile, pin rules-unit-testing 5.0.2.",
+    "firebase-setup: extend the existing test, decide on the type re-exports, pass instances to the emulator wiring, test the ordering.",
+    "Wrapper pattern for notify-kit and keyboard-controller with ESLint allowlists; displayRemoteMessage in services/notifications.",
+    "Pending iOS reminders survive the upgrade: keep the same identifier and verify cancel by identifier.",
+    "Channels: await them via a memoized promise; declare POST_NOTIFICATIONS; decide on notify-kit's merged permissions; Android reminders now fire (new behaviour).",
+    "SceneDelegate: keep the start-once factory on AppDelegate and forward URLs on reconnect.",
+    "Edge-to-edge: the Android status-bar spacer and bottom insets need an explicit task.",
+    "Keyboard audit columns: FlatList nesting, pinned footers, Android, resetScrollToCoords, HouseSetup's Android height.",
+    "Path rule: docs/ and .claude/rules/ paths are under regroup/mobile.",
+    "Ratchet: no entries in migrated files; 1:1 mapping appendix.",
+    "Smaller items: permissions setup.rb require; rnvi-update-plist arguments and keeping Oswald/Roboto; DayTimeWidget path; RatsIcon solid mapping; geolocation HouseSearchScreen plus explicit options; document-picker edge cases; Sentry PII options; e2e sourceSets; firebase.md rule; baselines reconciled; engines; @types/react-test-renderer; reanimated override; split mocks under 300 lines; no it.each/merging; per-task mock lists; checkpoint additions (upgrade in place, 3DS, Hermes Intl/DST, Android 16 back, API 30, Maestro suite, E2EStaging, variant scripts, datepicker modal, scene disconnect, phone-auth URL)."
+  ],
+  "reviewer_summaries": {
+    "reality": {
+      "status": "ISSUES_FOUND",
+      "blocking": 3
+    },
+    "architecture": {
+      "status": "ISSUES_FOUND",
+      "blocking": 4
+    },
+    "quality": {
+      "status": "ISSUES_FOUND",
+      "blocking": 6
+    },
+    "systems": {
+      "status": "ISSUES_FOUND",
+      "blocking": 4
+    }
+  },
+  "re_review_v2": {
+    "reviewed_at": "2026-10-30T01:20:00Z",
+    "verdict": "CHANGES_REQUESTED",
+    "resolved": [
+      "B1",
+      "B3",
+      "B5",
+      "B7",
+      "B9"
+    ],
+    "partial": [
+      "B4",
+      "B6",
+      "B8",
+      "B10",
+      "B11",
+      "B12"
+    ],
+    "not_resolved": [
+      "B2"
+    ],
+    "new_blocking": [
+      "N1 RNFirebase 26 has no namespaced types: ratchet red from Task 9 to 10e",
+      "N2 fix-vector-icons.gradle deleted while still applied",
+      "N3 guestCRUD integration can't pass at 10b (house.tsx load-time collection)",
+      "N4 Task 9 file list missed integration tests and helpers"
+    ],
+    "v3_resolution": "Migration on RNFirebase 25.1.0 (both APIs typed; probe: +15 errors, fixed in the bump commit), 26.4.1 at Task 10f; fix-vector-icons removed with its apply in Task 5; integration suites mapped by load-time import graph; Task 9 lists integration files; exact inventory commands; .exists$ in grep; lazy Sentry task check; firebase.json block in both files; strong RN factory delegate and reconnect order; keyboard toolbar inside native Modals; temporary AGP9 patches deleted with their packages; xcode npm parser for pbxproj; iOS foreground options in notify-kit; RemoteMessage type; test-tamper red until label noted; revert before final gate run; Splash duplicate-listener fix and index.js console.log removal recorded."
+  }
+}

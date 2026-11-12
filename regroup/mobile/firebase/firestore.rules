@@ -165,8 +165,10 @@ service cloud.firestore {
       //  - update: the doc's own user or an admin of its houses; the user
       //    stays the same and houses can only be removed (profile edits,
       //    house settings removing an admin), never added.
-      //  - delete: unchanged (request.resource is null on delete, so this
-      //    has always denied; the app's AdminManagement delete fails today).
+      //  - delete: an owner or manager of the doc's one house removing a
+      //    manager. Never the owner's own doc, and never a doc for several
+      //    houses (the app deletes the whole doc). The old rule read
+      //    request.resource, which is null on a delete, so it refused all (#196).
       function staffRecord(houseId) {
         let snap = get(/databases/$(database)/documents/house-roles/$(houseId + '_' + request.auth.uid));
         return snap != null && snap.data.get('tier', '') in ['owner', 'manager'];
@@ -179,8 +181,25 @@ service cloud.firestore {
       allow update: if (isAdmin(resource.data.houseIds) || isSameUser(resource.data.userId)) &&
         request.resource.data.userId == resource.data.userId &&
         resource.data.get('houseIds', []).hasAll(request.resource.data.get('houseIds', [])) &&
-        resource.data.get('superAdmin', []).hasAll(request.resource.data.get('superAdmin', []));
-      allow delete: if isAdmin(request.resource.data.houseIds);
+        // superAdmin can't change from a client: stripping it was step one of
+        // deleting the owner's doc (security review). No app path writes it.
+        request.resource.data.get('superAdmin', []) == resource.data.get('superAdmin', []);
+      // Rank, from house-roles: the caller must outrank the doc's user, as the
+      // deleteAdminAuthorization callable requires. A user whose access was
+      // already revoked has no record and ranks 0.
+      function tierRank(tier) {
+        return tier == 'owner' ? 3 : tier == 'manager' ? 2 : tier == 'peerLeader' ? 1 : 0;
+      }
+      function rankIn(houseId, uid) {
+        let path = /databases/$(database)/documents/house-roles/$(houseId + '_' + uid);
+        return exists(path) ? tierRank(get(path).data.get('tier', '')) : 0;
+      }
+      allow delete: if resource.data.get('houseIds', []).size() == 1 &&
+        isAdmin(resource.data.houseIds) &&
+        staffRecord(resource.data.houseIds[0]) &&
+        resource.data.get('superAdmin', []).size() == 0 &&
+        rankIn(resource.data.houseIds[0], resource.data.userId) <
+          rankIn(resource.data.houseIds[0], request.auth.uid);
     }
     
     match /guests/{guestId} {
@@ -1215,7 +1234,9 @@ service cloud.firestore {
       // Only house admins and super-admins can read or write documents.
       // Residents (guests) have zero access.
       allow read: if signedIn() && isAdmin([resource.data.houseId]);
-      allow create: if signedIn() && isAdmin([request.resource.data.houseId]);
+      // No permanent download link: documents open through getDocumentLink.
+      allow create: if signedIn() && isAdmin([request.resource.data.houseId])
+        && !('storageUrl' in request.resource.data);
       allow delete: if signedIn() && isAdmin([resource.data.houseId]);
       allow update: if false;
     }

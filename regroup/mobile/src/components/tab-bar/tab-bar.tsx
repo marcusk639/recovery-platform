@@ -44,8 +44,8 @@ const Tab = (props: {
 };
 
 export interface TabBarProps extends NativeStackScreenProps<any> {
-  children: JSX.Element[];
-  navBar?: (props: NavBarProps) => JSX.Element;
+  children: React.JSX.Element[];
+  navBar?: (props: NavBarProps) => React.JSX.Element;
 }
 
 const TabBar = (props: TabBarProps) => {

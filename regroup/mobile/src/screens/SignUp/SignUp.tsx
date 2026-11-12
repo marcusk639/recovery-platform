@@ -34,7 +34,7 @@ type SignUpScreenProps = CompositeScreenProps<
   NativeStackScreenProps<AuthStackParamList, Routes.Signup>,
   NativeStackScreenProps<RootStackParamList>
 > & {
-  renderHeader?: () => JSX.Element;
+  renderHeader?: () => React.JSX.Element;
   containerStyle?: ViewStyle;
   customRoute?: keyof AuthStackParamList;
   renderNameFields?: boolean;

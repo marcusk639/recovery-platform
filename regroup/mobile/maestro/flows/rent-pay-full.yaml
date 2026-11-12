@@ -1,0 +1,54 @@
+# A resident pays the full balance with a test card, through the real PaymentSheet.
+# Persona: guest-a, who owes rent in the seeded, Stripe-connected house.
+# Needs a fresh seed each UTC day: paying the same amount again that day replays the
+# finished intent (RENT-012), and no webhook lowers the balance in the emulators.
+# The server suite (regroup/e2e rentLedger) proves the balance and record that follow.
+# Run: E2E_TEST_PASSWORD=... maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/rent-pay-full.yaml
+appId: ${APP_ID}
+tags:
+  - guest
+  - payments
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "pay-rent-card"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "pay-rent-card"
+- extendedWaitUntil:
+    visible:
+      id: "rent-payment-screen"
+    timeout: 30000
+- assertVisible:
+    id: "balance-card"
+- scrollUntilVisible:
+    element:
+      id: "pay-now-button"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "pay-now-button"
+- runFlow:
+    file: ../subflows/payment-sheet-card.yaml
+    env:
+      CARD_NUMBER: "4242424242424242"
+# The sheet closes and the screen confirms. No optional steps: this has to really pay.
+- extendedWaitUntil:
+    visible:
+      id: "payment-success-banner"
+    timeout: 60000
+- assertNotVisible:
+    id: "payment-error-banner"

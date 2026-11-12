@@ -14,7 +14,7 @@
 
 | Layer     | Technology                                                                                                  |
 | --------- | ----------------------------------------------------------------------------------------------------------- |
-| Mobile    | React Native 0.72, TypeScript, Redux Toolkit, Firebase SDK                                                  |
+| Mobile    | React Native 0.88.1, TypeScript, Redux Toolkit, RNFirebase 26 (modular)                                     |
 | Functions | Firebase Cloud Functions v2 (firebase-functions ^7), TypeScript, Stripe, SendGrid (some v1 legacy triggers) |
 | Web       | Angular 9 (EOL — see web/CLAUDE.md), TypeScript, Firebase Hosting                                           |
 
@@ -24,7 +24,7 @@
 
 Per-area commands, architecture, and domain rules live in subdirectory CLAUDE.md files, lazy-loaded by Claude Code when working in those directories:
 
-- [`mobile/CLAUDE.md`](mobile/CLAUDE.md) — RN 0.72 app: commands, Redux architecture, navigation, Firestore models, patch-package notes, iOS/Android build details.
+- [`mobile/CLAUDE.md`](mobile/CLAUDE.md) — RN 0.88.1 app: commands, Redux architecture, navigation, Firestore models, patch-package notes, iOS/Android build details.
 - [`functions/CLAUDE.md`](functions/CLAUDE.md) — Cloud Functions: callable/http/trigger architecture, Stripe webhooks, subscription model, secret management.
 - [`web/CLAUDE.md`](web/CLAUDE.md) — Angular web portal: commands, Firebase Hosting deploy, structure.
 

@@ -65,12 +65,17 @@ jest.mock('../../../../firebase-setup', () => {
   };
 });
 
-jest.mock('@react-native-firebase/firestore', () => ({
-  __esModule: true,
-  default: {
-    FieldValue: { serverTimestamp: jest.fn(() => '__SERVER_TIMESTAMP__') },
-  },
-}));
+// Modular functions delegate to the firebase-setup mock above (namespaced-adapter);
+// serverTimestamp() is the same spy as FieldValue.serverTimestamp.
+jest.mock('@react-native-firebase/firestore', () => {
+  const FieldValue = { serverTimestamp: jest.fn(() => '__SERVER_TIMESTAMP__') };
+  return {
+    __esModule: true,
+    ...require('../../../../__mocks__/firebase-modular/namespaced-adapter'),
+    serverTimestamp: (...args: unknown[]) => FieldValue.serverTimestamp(...(args as [])),
+    default: { FieldValue },
+  };
+});
 
 jest.mock('@tanstack/react-query', () => ({
   useMutation: jest.fn(),

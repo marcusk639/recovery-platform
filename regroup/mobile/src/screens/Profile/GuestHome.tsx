@@ -11,6 +11,7 @@ import { useAppSelector } from "../../state/store";
 import { useModal } from "../../context";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { useSelectedGuest } from "../../hooks/useSelectedGuest";
+import { useDefaultGuestSelection } from "../../hooks/useDefaultGuestSelection";
 import { useCurrentWeek } from "../../hooks/activity/useCurrentWeek";
 import {
   useComplianceCheck,
@@ -73,7 +74,10 @@ import { exportWeeklyReportPDF } from "../../services/reportExport";
 import DischargeGuestModal from "./DischargeGuestModal";
 
 // Notifications
-import { scheduleRentReminder } from "../../services/notifications/rentReminder";
+import {
+  cancelRentReminder,
+  scheduleRentReminder,
+} from "../../services/notifications/rentReminder";
 
 // Styles
 import styles from "./ProfileStyles";
@@ -216,6 +220,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
     useSelectedHouse();
   const house = selectedHouseRaw as House | null;
   const user = useAppSelector((state: any) => state.user.user) as User | null;
+  const { isLoading: loadingGuestList } = useDefaultGuestSelection();
 
   // Optionally fetch guest via React Query so we always have the freshest
   // server copy for read-through scenarios.
@@ -229,20 +234,28 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
   // listener fired alongside useComplianceCheck below (which also calls the RQ
   // useWeekSummary internally), doubling reads on every profile mount and
   // letting the two state stores diverge. See .full-review [P2].
-  const { startDate } = useCurrentWeek();
+  const { startDate } = useCurrentWeek(house?.timezone);
   const { data: summary = null } = useWeekSummary(
     currentGuest?.id ?? "",
     startDate,
     !!currentGuest?.id && !!startDate
   );
 
-  // Schedule a rent reminder for guests with an outstanding balance.
+  // Schedule a rent reminder for guests with an outstanding balance, and
+  // cancel it once nothing is owed (rent settled outside the app must not
+  // leave a reminder pending). Both resolve and log their own failures.
   // Deps are stable primitives so we avoid a stale-closure over currentGuest.
   const _guestId = currentGuest?.id;
   const _rentOwed = currentGuest?.rentOwed ?? 0;
   React.useEffect(() => {
-    if (currentGuest && _rentOwed > 0) {
+    // Staff also view residents here; the reminder is only for the person who owes.
+    if (!currentGuest || currentGuest.userId !== user?.id) {
+      return;
+    }
+    if (_rentOwed > 0) {
       scheduleRentReminder(currentGuest as Guest);
+    } else {
+      cancelRentReminder(currentGuest as Guest);
     }
   }, [_guestId, _rentOwed]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -265,7 +278,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
       : null;
 
   // Loading state
-  const loading = requestingGuests || requestingHouse;
+  const loading = requestingGuests || requestingHouse || loadingGuestList;
   if (loading || !house) {
     return <RatsLoadingIndicator />;
   }
@@ -420,7 +433,10 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
       </AuthConsumer>
 
       {/******************************* HEALTH SCORE ********************************/}
-      <View testID="week-summary-card">
+      {/* The container's alignItems: "flex-start" shrinks this wrapper to its
+          content, and RN 0.88 then resolves the card's width: "100%" against
+          that, collapsing it. Stretch the wrapper to the screen width. */}
+      <View testID="week-summary-card" style={{ alignSelf: "stretch" }}>
         <WeekStatSummary
           percentage={overallPercentage}
           header="HEALTH SCORE"

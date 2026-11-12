@@ -83,21 +83,24 @@ export const useUpdateGuest = () => {
       updatedGuest,
       retryCount = 3,
       authoritativeFields = [],
+      moneyEdits = {},
     }: {
       guest: Partial<Guest>;
       updatedGuest: Partial<Guest>;
       retryCount?: number;
       authoritativeFields?: ReadonlyArray<keyof Guest>;
+      moneyEdits?: guestService.MoneyEdits;
     }) =>
       guestService.updateGuest(
         guest,
         updatedGuest,
         retryCount,
         authoritativeFields,
+        moneyEdits,
       ),
 
     // Optimistic update
-    onMutate: async ({ updatedGuest }) => {
+    onMutate: async ({ updatedGuest, moneyEdits = {} }) => {
       if (!updatedGuest.id) return;
 
       // Cancel outgoing refetches
@@ -108,13 +111,19 @@ export const useUpdateGuest = () => {
         guestKeys.detail(updatedGuest.id),
       );
 
-      // Optimistically update. Merged, not replaced: callers send only the fields that
-      // changed, and a partial guest in the cache blanks every other field until the
-      // refetch.
+      // Optimistically update. Merged over the cached guest, not replaced: callers
+      // send only the fields that changed and never the balance, and a partial guest
+      // in the cache blanks every other field until the refetch (and showed $0 owed).
+      // Balance edits are applied on top.
       const id = updatedGuest.id;
-      queryClient.setQueryData<Partial<Guest>>(guestKeys.detail(id), (old) =>
-        old ? { ...old, ...updatedGuest } : updatedGuest,
-      );
+      const withEdits = (cached: Partial<Guest> | undefined): Partial<Guest> => {
+        const next: Partial<Guest> = { ...(cached ?? {}), ...updatedGuest };
+        for (const [field, edit] of Object.entries(moneyEdits)) {
+          if (edit) (next as any)[field] = edit.to;
+        }
+        return next;
+      };
+      queryClient.setQueryData<Partial<Guest>>(guestKeys.detail(id), (old) => withEdits(old));
 
       // Also update in the list if it exists
       let previousGuests: Guests | undefined;
@@ -126,7 +135,7 @@ export const useUpdateGuest = () => {
         if (previousGuests?.[id]) {
           queryClient.setQueryData(guestKeys.list(updatedGuest.houseId), {
             ...previousGuests,
-            [id]: { ...previousGuests[id], ...updatedGuest } as Guest,
+            [id]: withEdits(previousGuests[id]) as Guest,
           });
         }
       }

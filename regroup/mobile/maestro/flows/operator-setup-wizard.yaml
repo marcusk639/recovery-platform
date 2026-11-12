@@ -38,15 +38,21 @@ tags:
     id: "profile-tab"
 - assertVisible:
     id: "profile-screen"
+- scrollUntilVisible:
+    element:
+      text: ".*Add Home.*"
+    direction: DOWN
+    centerElement: true
 - tapOn:
-    text: "Add Home"
+    text: ".*Add Home.*"
 - extendedWaitUntil:
     visible:
       id: "org-setup-screen"
     timeout: 30000
 # The operator's existing house renders as an editable item.
+# Add Home starts a new setup, so it lists no existing house and can't finish yet.
 - assertVisible:
-    id: "edit-house-button-test-house-123"
+    id: "complete-setup-button"
 # Add a second house: opens the house wizard.
 - tapOn:
     id: "add-house-button"

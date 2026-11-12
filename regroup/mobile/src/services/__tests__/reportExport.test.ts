@@ -5,7 +5,7 @@ const makePayment = (overrides: Partial<RentPayment> = {}): RentPayment => ({
   id: 'pay-1',
   guestId: 'guest-1',
   houseId: 'house-1',
-  amount: 500,
+  amount: 50000,
   status: 'succeeded',
   description: 'Rent Payment',
   createdAt: '2026-05-01T10:00:00.000Z',
@@ -31,6 +31,25 @@ describe('exportPaymentHistoryCSV', () => {
     expect(lines[1]).toContain('succeeded');
   });
 
+  // The Firestore records this exports hold cents and a Timestamp. A Timestamp threw
+  // here, so one card payment broke the whole export.
+  it('exports a Firestore Timestamp date', () => {
+    const createdAt = { toDate: () => new Date(2026, 10, 3, 12) } as unknown as RentPayment['createdAt'];
+    const csv = exportPaymentHistoryCSV([makePayment({ createdAt })], {});
+    expect(csv.split('\n')[1]).toMatch(/^2026-11-03,/);
+  });
+
+  it('exports dollars under the dollar heading', () => {
+    const csv = exportPaymentHistoryCSV([makePayment({ amount: 50000 })], {});
+    expect(csv.split('\n')[1]).toContain(',500.00,');
+  });
+
+  it('exports a refunded payment as refunded', () => {
+    const csv = exportPaymentHistoryCSV([makePayment({ refundedAmountCents: 50000 })], {});
+    expect(csv.split('\n')[1]).toContain(',refunded,');
+    expect(csv).not.toContain('succeeded');
+  });
+
   it('handles unknown guest IDs gracefully', () => {
     const csv = exportPaymentHistoryCSV([makePayment()], {});
     expect(csv).toContain('guest-1');
@@ -52,6 +71,19 @@ describe('exportPaymentHistoryCSV', () => {
     const guestNames = { 'guest-1': 'Jane "JJ" Smith' };
     const csv = exportPaymentHistoryCSV([makePayment()], guestNames);
     expect(csv).toContain('"Jane ""JJ"" Smith"');
+  });
+
+  // Payment History exports Firestore records, whose createdAt is a Timestamp
+  // (the webhook's serverTimestamp, the app's newPaymentCreatedAt, #168).
+  it('dates a row whose createdAt is a Firestore Timestamp', () => {
+    const timestamp = { toDate: () => new Date('2026-05-01T10:00:00.000Z') };
+    const csv = exportPaymentHistoryCSV([makePayment({ createdAt: timestamp as any })], {});
+    expect(csv.split('\n')[1]).toMatch(/^2026-05-01,/);
+  });
+
+  it('leaves the date empty when createdAt cannot be read', () => {
+    const csv = exportPaymentHistoryCSV([makePayment({ createdAt: { bogus: true } as any })], {});
+    expect(csv.split('\n')[1]).toMatch(/^,/);
   });
 });
 
@@ -76,5 +108,17 @@ describe('exportEESHistoryCSV', () => {
   it('returns only header for empty array', () => {
     const csv = exportEESHistoryCSV([], {});
     expect(csv.trim().split('\n')).toHaveLength(1);
+  });
+});
+
+describe('exportPaymentHistoryCSV safety (review)', () => {
+  it('stops a description from running as a formula', () => {
+    const csv = exportPaymentHistoryCSV([makePayment({ description: '=cmd' } as any)], {});
+    expect(csv.split('\n')[1]).toContain("'=cmd");
+  });
+
+  it('leaves the amount empty for a record with no dollar amount', () => {
+    const csv = exportPaymentHistoryCSV([makePayment({ amount: 900, currency: 'eur' } as any)], {});
+    expect(csv.split('\n')[1].split(',')[2]).toBe('');
   });
 });

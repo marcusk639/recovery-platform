@@ -17,7 +17,7 @@ interface MiscellanousHouseFormProps extends MiscellaneousFormProps {
 
 export const MiscellaneousHouseForm = (props: MiscellanousHouseFormProps) => {
   const { fieldName, fieldPlaceholder } = props;
-  const renderView = (field: JSX.Element) => {
+  const renderView = (field: React.JSX.Element) => {
     return <View style={{ marginVertical: normalize(5) }}>{field}</View>;
   };
   const fields = (

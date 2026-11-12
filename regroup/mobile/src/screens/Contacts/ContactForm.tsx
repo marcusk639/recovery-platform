@@ -27,7 +27,7 @@ const userTypeItems = {
 };
 
 export const ContactFilterForm = (props: Props) => {
-  const renderField = (field: JSX.Element) => {
+  const renderField = (field: React.JSX.Element) => {
     return <View style={{ marginVertical: normalize(10) }}>{field}</View>;
   };
   const fields = (

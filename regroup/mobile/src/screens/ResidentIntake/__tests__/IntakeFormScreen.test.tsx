@@ -1,5 +1,6 @@
 import React from 'react';
 import { Alert } from 'react-native';
+import { keyboardAncestor } from '../../../components/rats-keyboard/__tests__/keyboardAncestor';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import IntakeFormScreen from '../IntakeFormScreen';
@@ -97,5 +98,13 @@ describe('IntakeFormScreen', () => {
     expect(guest.createdBy).toBe('admin-1');
     expect(guest.intakeCompletedBy).toBe('admin-1');
     expect(guest.userId).toBeFalsy();
+  });
+});
+
+// ─── Keyboard (plan Task 15) ──────────────────────────────────────────────────
+describe('IntakeFormScreen keyboard', () => {
+  it('keeps its fields in a RatsScrollView (IQKeyboardManager-only before)', () => {
+    const { getByPlaceholderText } = render(<IntakeFormScreen />, { wrapper });
+    expect(keyboardAncestor(getByPlaceholderText('Email'))).toBe('RatsScrollView');
   });
 });

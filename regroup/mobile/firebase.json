@@ -1,4 +1,7 @@
 {
+  "react-native": {
+    "messaging_ios_foreground_presentation_options": ["badge", "sound", "banner", "list"]
+  },
   "emulators": {
     "firestore": {
       "port": 8080

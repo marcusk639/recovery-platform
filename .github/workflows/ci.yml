@@ -291,9 +291,10 @@ jobs:
   # debug APK, whose google-services.json is production (phoenix-cleanhouse): every
   # launch signs in anonymously there. Maestro may only drive .e2e.emu/.e2e.stg
   # builds (regroup launch design §3.4, §4.3); the suite moves to CI later. The
-  # build stays because it is CI's only regroup Android compile check.
+  # job stays because it is CI's only regroup Android compile check, and it carries
+  # the permanent release/e2e guard-wiring assertion below (RN 0.88 upgrade).
   regroup-android-build:
-    name: regroup/mobile — Android debug build
+    name: regroup/mobile — Android build and guard wiring
     needs: [recovery-api, homegroups-functions, regroup-functions, detox-recovery]
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'e2e-fix/')
@@ -301,6 +302,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      # The RN 0.88 upgrade replaced the binary gradle-wrapper.jar, and every ./gradlew
+      # below executes it. Validate every wrapper jar in the checkout against Gradle's
+      # published checksums before running any of them (pinned by commit SHA, v6.4.1).
+      - name: Validate Gradle wrapper jars
+        uses: gradle/actions/wrapper-validation@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
 
       - name: Set up Node 22
         uses: actions/setup-node@v4
@@ -337,6 +344,45 @@ jobs:
           # so re-measure and consider lowering this once that lands.
           GRADLE_OPTS: "-Dorg.gradle.daemon=false -Dorg.gradle.jvmargs=-Xmx6g"
 
+      # Permanent. The release guard and the e2e bundle settings are attached to Gradle tasks
+      # by name (regroup/mobile/android/app/build.gradle), so an AGP, React Native plugin or
+      # Sentry rename would drop them silently. app/build.gradle fails the configuration if a
+      # name stops matching; this proves the wiring end to end: the guard runs before the
+      # release bundle, the e2e bundle gets its own env stamp and no release guard, and the
+      # guard refuses a test Stripe key with its own message (not a values.xml parse error).
+      - name: Assert regroup Android release and e2e guard wiring
+        run: |
+          set -euo pipefail
+          cd regroup/mobile/android
+          release=$(./gradlew :app:assembleRelease --dry-run --no-daemon)
+          guard=$(grep -n '^:app:regroupReleaseGuard SKIPPED' <<<"$release" | head -1 | cut -d: -f1 || true)
+          bundle=$(grep -n '^:app:createBundleReleaseJsAndAssets SKIPPED' <<<"$release" | head -1 | cut -d: -f1 || true)
+          if [ -z "$guard" ] || [ -z "$bundle" ] || [ "$guard" -ge "$bundle" ]; then
+            echo "::error::assembleRelease must run regroupReleaseGuard before createBundleReleaseJsAndAssets (guard line '${guard}', bundle line '${bundle}')"
+            exit 1
+          fi
+          e2e=$(./gradlew :app:assembleE2eEmulator --dry-run --no-daemon)
+          if ! grep -q '^:app:regroupBundledEnvStampE2eEmulator SKIPPED' <<<"$e2e"; then
+            echo "::error::assembleE2eEmulator must run regroupBundledEnvStampE2eEmulator"
+            exit 1
+          fi
+          if grep -q '^:app:regroupReleaseGuard SKIPPED' <<<"$e2e"; then
+            echo "::error::assembleE2eEmulator must not run the release guard"
+            exit 1
+          fi
+          set +e
+          refusal=$(STRIPE_PUBLISHABLE_KEY=pk_test_x ./gradlew :app:regroupReleaseGuard --no-daemon 2>&1)
+          code=$?
+          set -e
+          tail -n 20 <<<"$refusal"
+          if [ "$code" -eq 0 ]; then
+            echo "::error::the release guard accepted a pk_test_ Stripe key"
+            exit 1
+          fi
+          if ! grep -q 'Release guard failed' <<<"$refusal" || ! grep -q 'a release build requires a pk_live_ key' <<<"$refusal"; then
+            echo "::error::the release guard failed, but not with its Stripe-key refusal"
+            exit 1
+          fi
 
   homegroups-maestro-smoke:
     name: Maestro Cloud — smoke tests (homegroups Android)

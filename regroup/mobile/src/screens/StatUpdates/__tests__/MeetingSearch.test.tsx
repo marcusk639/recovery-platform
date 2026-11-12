@@ -193,6 +193,7 @@ jest.mock('../../../util/display', () => ({
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, fireEvent, act } from '@testing-library/react-native';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
@@ -748,6 +749,32 @@ describe('MeetingSearch', () => {
           navigation: expect.anything(),
         }),
       );
+    });
+  });
+  // A negative zIndex draws content behind its parent on RN 0.88. On this screen
+  // it hid the results, the spinner and both empty and error messages.
+  describe('layering', () => {
+    const zIndexesAbove = (node: any): number[] => {
+      const found: number[] = [];
+      for (let n = node; n; n = n.parent) {
+        const z = StyleSheet.flatten(n.props?.style)?.zIndex;
+        if (typeof z === 'number') found.push(z);
+      }
+      return found;
+    };
+
+    it.each([
+      ['the empty message', {}, 'No meetings found. Try changing the search filters.'],
+      ['the error message', { searchFailed: true }, "Couldn't load meetings. Please try again."],
+    ])('never draws %s behind its parent', (_name, hook, message) => {
+      const { getByText } = renderScreen({}, hook);
+      expect(zIndexesAbove(getByText(message)).filter(z => z < 0)).toEqual([]);
+    });
+
+    it('keeps the search bar, with its address dropdown, above the results', () => {
+      const { getByTestId } = renderScreen();
+      const zIndexes = zIndexesAbove(getByTestId('meeting-search-bar'));
+      expect(Math.max(...zIndexes)).toBeGreaterThan(0);
     });
   });
 });

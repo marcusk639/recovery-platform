@@ -19,6 +19,7 @@ import { Routes } from "../../navigation/types";
 import { fontFamily } from "../../styles/theme";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAppSelector } from "../../state/hooks";
+import { relaxUiForE2E } from '../../util/e2e';
 
 const SignUpFormView: React.FC<
   SignUpFormProps & FormikProps<SignUpFormValues>
@@ -181,7 +182,7 @@ const SignUpFormView: React.FC<
         testID="signup-password-input"
         styleType="secondary"
         autoCapitalize="none"
-        secureTextEntry={true}
+        secureTextEntry={!relaxUiForE2E()}
       />
       <Field
         style={IOS ? { textInput: { paddingTop: normalize(5) } } : {}}
@@ -190,7 +191,7 @@ const SignUpFormView: React.FC<
         testID="signup-confirm-password-input"
         styleType="secondary"
         autoCapitalize="none"
-        secureTextEntry={true}
+        secureTextEntry={!relaxUiForE2E()}
       />
       <Field
         styleType="secondary"

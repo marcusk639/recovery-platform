@@ -63,6 +63,9 @@ jest.mock(
 // ─── Imports ──────────────────────────────────────────────────────────────────
 
 import React from 'react';
+import { StyleSheet as InsetStyleSheet } from 'react-native';
+// The module object itself: an `import * as` namespace is a copy, which a spy would miss.
+const SafeArea = require('react-native-safe-area-context');
 import { render, fireEvent } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TreasuryDashboard from '../TreasuryDashboard';
@@ -228,6 +231,24 @@ describe('TreasuryDashboard', () => {
     expect(mockNavigation.navigate).toHaveBeenCalledWith(
       Routes.FinancialRecordForm,
       { houseId: 'house-1' },
+    );
+  });
+});
+
+describe('TreasuryDashboard bottom inset (Android edge-to-edge)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('lifts the FAB by the bottom safe-area inset', () => {
+    jest
+      .spyOn(SafeArea, 'useSafeAreaInsets')
+      .mockReturnValue({ top: 0, right: 0, bottom: 48, left: 0 });
+    setupDefaults({ canCreate: true, role: 'comptroller' }, null, []);
+    const { getByTestId } = renderScreen();
+
+    expect(InsetStyleSheet.flatten(getByTestId('treasury-fab').props.style)).toEqual(
+      expect.objectContaining({ position: 'absolute', marginBottom: 48 }),
     );
   });
 });

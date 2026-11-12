@@ -36,14 +36,23 @@ import {
   waitForWrites,
   isUsingEmulator,
 } from './firebase-test-utils';
+import { adminDb } from '../../integration/firebase-admin-setup';
+import { adminOf, signInAs } from '../../integration/actors';
 
 // Skip these tests if emulator is not running
 const describeIfEmulator = isUsingEmulator() ? describe : describe.skip;
 
 describeIfEmulator('Activity Service - Firebase Emulator Integration', () => {
-  beforeAll(() => {
+  beforeAll(async () => {
     // Connect to emulator
     connectToEmulator();
+    // The service runs as a house admin, for a guest of that house.
+    await adminDb.doc('guests/guest123').set({ id: 'guest123', houseId: 'house456' });
+    await signInAs('emulator-admin-1', adminOf('house456'));
+  });
+
+  afterAll(async () => {
+    await adminDb.doc('guests/guest123').delete();
   });
 
   afterEach(async () => {

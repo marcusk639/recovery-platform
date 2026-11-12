@@ -13,6 +13,7 @@ import {
   useFailedPayments,
   useMarkPaymentResolved,
   useStalePendingPayments,
+  useGuestBalances,
   paymentKeys,
 } from '../paymentQueries';
 import * as paymentService from '../../../services/payments';
@@ -592,5 +593,45 @@ describe('paymentQueries', () => {
       expect(result.current.error).toEqual(error);
       expect(loggingModule.logException).toHaveBeenCalledWith(error);
     });
+  });
+});
+
+// ─── #192: a balance is what's owed, from the guest doc ─────────────────────
+describe('useGuestBalances', () => {
+  const client = () => new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const balancesFor = async (guests: any[], records: any[]) => {
+    (paymentService.getHousePaymentRecords as jest.Mock).mockResolvedValue(records);
+    const qc = client();
+    const { result } = renderHook(() => useGuestBalances('house-1', guests), {
+      wrapper: ({ children }: { children: React.ReactNode }) =>
+        React.createElement(QueryClientProvider, { client: qc }, children),
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    return result.current.data!;
+  };
+
+  it('shows a resident who owes $150 as overdue, though they paid $150 before (#192)', async () => {
+    const [alice] = await balancesFor(
+      [{ id: 'g1', firstName: 'Alice', lastName: 'Smith', rentOwed: 15000, choreFees: 0 }],
+      [{ id: 'p1', guestId: 'g1', amount: 15000, status: 'succeeded', createdAt: '2026-11-01T00:00:00Z' }],
+    );
+    expect(alice.totalBalance).toBe(15000);
+    expect(alice.status).toBe('overdue');
+    expect(alice.totalPaid).toBe(15000);
+  });
+
+  it('adds chore fees, nets refunds from what was paid, and treats credit as current', async () => {
+    const [bob, cara] = await balancesFor(
+      [
+        { id: 'g2', firstName: 'Bob', lastName: 'Jones', rentOwed: 1000, choreFees: 500 },
+        { id: 'g3', firstName: 'Cara', lastName: 'Lee', rentOwed: -5000, choreFees: 0 },
+      ],
+      [{ id: 'p2', guestId: 'g2', amount: 10000, status: 'succeeded', refundedAmountCents: 4000,
+         createdAt: '2026-11-01T00:00:00Z' }],
+    );
+    expect(bob.totalBalance).toBe(1500);
+    expect(bob.totalPaid).toBe(6000);
+    expect(cara.totalBalance).toBe(0);
+    expect(cara.status).toBe('current');
   });
 });

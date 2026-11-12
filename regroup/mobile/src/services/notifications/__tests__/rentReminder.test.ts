@@ -5,9 +5,9 @@
  * nextFridayAt9am date calculation (tested both directly and indirectly via
  * scheduleRentReminder).
  *
- * Platform.OS is set to 'android' via Object.defineProperty so that
- * doSchedule() is invoked synchronously without the iOS checkPermissions
- * callback path.
+ * The reminder is a react-native-notify-kit trigger notification. Platform.OS
+ * is set to 'android' via Object.defineProperty so that scheduling skips the
+ * iOS permission check; the iOS cases switch it to 'ios' and back.
  *
  * Day-of-week coverage verified against the formula:
  *   daysToMonday = (1 - day + 7) % 7 || 7
@@ -18,19 +18,28 @@
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before any imports
 // ---------------------------------------------------------------------------
-jest.mock('react-native-push-notification', () => ({
-  localNotificationSchedule: jest.fn(),
-  cancelLocalNotification: jest.fn(),
-  checkPermissions: jest.fn(),
+jest.mock('react-native-notify-kit', () => require('react-native-notify-kit/jest-mock'));
+jest.mock('../channels', () => ({
+  ...jest.requireActual('../channels'),
+  ensureNotificationChannels: jest.fn(),
 }));
+jest.mock('../../../util/logging', () => ({ logException: jest.fn() }));
 
 // ---------------------------------------------------------------------------
 // Imports (after mocks)
 // ---------------------------------------------------------------------------
 import { Platform } from 'react-native';
-import PushNotification from 'react-native-push-notification';
+import notifee, { AuthorizationStatus, TriggerType } from 'react-native-notify-kit';
+import { ensureNotificationChannels } from '../channels';
+import { logException } from '../../../util/logging';
 import { scheduleRentReminder, cancelRentReminder, nextFridayAt9am } from '../rentReminder';
 import { Guest } from '../../../entities/Guest';
+
+const createTrigger = notifee.createTriggerNotification as jest.Mock;
+const cancelTrigger = notifee.cancelTriggerNotification as jest.Mock;
+const getSettings = notifee.getNotificationSettings as jest.Mock;
+const ensureChannels = ensureNotificationChannels as jest.Mock;
+const log = logException as jest.Mock;
 
 // ---------------------------------------------------------------------------
 // Platform — force android so doSchedule() is called synchronously
@@ -71,6 +80,13 @@ function mockToday(isoString: string): void {
     });
 }
 
+beforeEach(() => {
+  createTrigger.mockResolvedValue('trigger-id');
+  cancelTrigger.mockResolvedValue(undefined);
+  getSettings.mockResolvedValue({ authorizationStatus: AuthorizationStatus.AUTHORIZED });
+  ensureChannels.mockResolvedValue(undefined);
+});
+
 afterEach(() => {
   jest.restoreAllMocks();
   jest.clearAllMocks();
@@ -80,42 +96,64 @@ afterEach(() => {
 // Helpers used across tests
 // ---------------------------------------------------------------------------
 function getScheduledDate(): Date {
-  const mock = PushNotification.localNotificationSchedule as jest.Mock;
-  expect(mock).toHaveBeenCalledTimes(1);
-  return mock.mock.calls[0][0].date as Date;
+  expect(createTrigger).toHaveBeenCalledTimes(1);
+  return new RealDate(createTrigger.mock.calls[0][1].timestamp as number);
 }
 
 // ---------------------------------------------------------------------------
 // 1. Shape of the scheduled notification
 // ---------------------------------------------------------------------------
 describe('scheduleRentReminder — notification shape', () => {
-  it('calls PushNotification.localNotificationSchedule with required fields', () => {
-    scheduleRentReminder(mockGuest);
+  it('calls notifee.createTriggerNotification with required fields', async () => {
+    await scheduleRentReminder(mockGuest);
 
-    expect(PushNotification.localNotificationSchedule).toHaveBeenCalledTimes(1);
-    expect(PushNotification.localNotificationSchedule).toHaveBeenCalledWith(
+    expect(createTrigger).toHaveBeenCalledTimes(1);
+    expect(createTrigger).toHaveBeenCalledWith(
       expect.objectContaining({
         title: 'Rent Reminder',
-        message: expect.any(String),
-        date: expect.any(Date),
-        allowWhileIdle: true,
+        body: 'Your rent payment is due in 3 days. Tap to pay now.',
+        data: { screen: 'residentPayment', guestId: 'guest-abc' },
+        android: expect.objectContaining({ channelId: 'default-channel-id' }),
+        ios: {
+          foregroundPresentationOptions: { banner: true, sound: true, badge: true, list: true },
+        },
       }),
+      {
+        type: TriggerType.TIMESTAMP,
+        timestamp: expect.any(Number),
+        alarmManager: { allowWhileIdle: true },
+      },
     );
   });
 
-  it('uses a deterministic string ID derived from the guest ID', () => {
-    scheduleRentReminder(mockGuest);
+  it('uses a deterministic string ID derived from the guest ID', async () => {
+    await scheduleRentReminder(mockGuest);
 
-    const call = (PushNotification.localNotificationSchedule as jest.Mock)
-      .mock.calls[0][0];
+    const call = createTrigger.mock.calls[0][0];
     expect(typeof call.id).toBe('string');
 
     // Calling again must produce the same ID
     jest.clearAllMocks();
-    scheduleRentReminder(mockGuest);
-    const call2 = (PushNotification.localNotificationSchedule as jest.Mock)
-      .mock.calls[0][0];
+    await scheduleRentReminder(mockGuest);
+    const call2 = createTrigger.mock.calls[0][0];
     expect(call.id).toBe(call2.id);
+  });
+
+  it('schedules only after the Android channels exist', async () => {
+    let channelsReady: () => void = () => {};
+    ensureChannels.mockReturnValue(
+      new Promise<void>((resolve) => {
+        channelsReady = resolve;
+      }),
+    );
+
+    const pending = scheduleRentReminder(mockGuest);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(createTrigger).not.toHaveBeenCalled();
+
+    channelsReady();
+    await pending;
+    expect(createTrigger).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -123,14 +161,14 @@ describe('scheduleRentReminder — notification shape', () => {
 // 2. Scheduled date is a Friday at 9am in the future
 // ---------------------------------------------------------------------------
 describe('scheduleRentReminder — scheduled date properties', () => {
-  it('schedules on a Friday (getDay() === 5)', () => {
-    scheduleRentReminder(mockGuest);
+  it('schedules on a Friday (getDay() === 5)', async () => {
+    await scheduleRentReminder(mockGuest);
     const date = getScheduledDate();
     expect(date.getDay()).toBe(5);
   });
 
-  it('schedules at exactly 9:00:00.000', () => {
-    scheduleRentReminder(mockGuest);
+  it('schedules at exactly 9:00:00.000', async () => {
+    await scheduleRentReminder(mockGuest);
     const date = getScheduledDate();
     expect(date.getHours()).toBe(9);
     expect(date.getMinutes()).toBe(0);
@@ -138,14 +176,14 @@ describe('scheduleRentReminder — scheduled date properties', () => {
     expect(date.getMilliseconds()).toBe(0);
   });
 
-  it('schedules in the future relative to now', () => {
-    scheduleRentReminder(mockGuest);
+  it('schedules in the future relative to now', async () => {
+    await scheduleRentReminder(mockGuest);
     const date = getScheduledDate();
     expect(date.getTime()).toBeGreaterThan(Date.now());
   });
 
-  it('schedules exactly 3 days before the next Monday rent due date', () => {
-    scheduleRentReminder(mockGuest);
+  it('schedules exactly 3 days before the next Monday rent due date', async () => {
+    await scheduleRentReminder(mockGuest);
     const friday = getScheduledDate();
     const mondayAfterFriday = new RealDate(friday);
     mondayAfterFriday.setDate(friday.getDate() + 3);
@@ -157,28 +195,106 @@ describe('scheduleRentReminder — scheduled date properties', () => {
 // 3. cancelRentReminder
 // ---------------------------------------------------------------------------
 describe('cancelRentReminder', () => {
-  it('calls cancelLocalNotification with a string argument', () => {
-    cancelRentReminder(mockGuest);
-    expect(PushNotification.cancelLocalNotification).toHaveBeenCalledTimes(1);
-    expect(PushNotification.cancelLocalNotification).toHaveBeenCalledWith(
-      expect.any(String),
-    );
+  it('calls cancelTriggerNotification with a string argument', async () => {
+    await cancelRentReminder(mockGuest);
+    expect(cancelTrigger).toHaveBeenCalledTimes(1);
+    expect(cancelTrigger).toHaveBeenCalledWith(expect.any(String));
   });
 
-  it('uses the same deterministic ID that scheduleRentReminder uses', () => {
-    scheduleRentReminder(mockGuest);
-    const scheduleId = (
-      PushNotification.localNotificationSchedule as jest.Mock
-    ).mock.calls[0][0].id as string;
+  it('uses the same deterministic ID that scheduleRentReminder uses', async () => {
+    await scheduleRentReminder(mockGuest);
+    const scheduleId = createTrigger.mock.calls[0][0].id as string;
 
     jest.clearAllMocks();
 
-    cancelRentReminder(mockGuest);
-    const cancelId = (
-      PushNotification.cancelLocalNotification as jest.Mock
-    ).mock.calls[0][0] as string;
+    await cancelRentReminder(mockGuest);
+    const cancelId = cancelTrigger.mock.calls[0][0] as string;
 
     expect(cancelId).toBe(scheduleId);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3b. iOS permission gate (authorizationStatus from getNotificationSettings)
+// ---------------------------------------------------------------------------
+describe('scheduleRentReminder — iOS permission', () => {
+  beforeEach(() => {
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
+  });
+
+  it('skips scheduling when notifications are DENIED', async () => {
+    getSettings.mockResolvedValue({ authorizationStatus: AuthorizationStatus.DENIED });
+    await scheduleRentReminder(mockGuest);
+    expect(createTrigger).not.toHaveBeenCalled();
+  });
+
+  it('skips scheduling when permission is NOT_DETERMINED', async () => {
+    getSettings.mockResolvedValue({ authorizationStatus: AuthorizationStatus.NOT_DETERMINED });
+    await scheduleRentReminder(mockGuest);
+    expect(createTrigger).not.toHaveBeenCalled();
+  });
+
+  it('schedules when permission is PROVISIONAL', async () => {
+    getSettings.mockResolvedValue({ authorizationStatus: AuthorizationStatus.PROVISIONAL });
+    await scheduleRentReminder(mockGuest);
+    expect(createTrigger).toHaveBeenCalledTimes(1);
+  });
+
+  it('schedules when permission is AUTHORIZED', async () => {
+    getSettings.mockResolvedValue({ authorizationStatus: AuthorizationStatus.AUTHORIZED });
+    await scheduleRentReminder(mockGuest);
+    expect(createTrigger).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not check permission on Android', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
+    await scheduleRentReminder(mockGuest);
+    expect(getSettings).not.toHaveBeenCalled();
+    expect(createTrigger).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3c. Native failures are logged (without the notification or the guest) and
+//     never reject, so fire-and-forget callers stay safe.
+// ---------------------------------------------------------------------------
+describe('rent reminder — native failures', () => {
+  const expectLoggedWithoutPayload = () => {
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith(expect.any(Error), expect.any(String));
+    const logged = JSON.stringify(log.mock.calls[0]);
+    expect(logged).not.toContain('Rent Reminder');
+    expect(logged).not.toContain('Your rent payment');
+    expect(logged).not.toContain('guest-abc');
+    expect(logged).not.toContain('Jane');
+  };
+
+  it('logs a scheduling rejection and resolves', async () => {
+    createTrigger.mockRejectedValueOnce(new Error('native failure'));
+    await expect(scheduleRentReminder(mockGuest)).resolves.toBeUndefined();
+    expectLoggedWithoutPayload();
+  });
+
+  it('logs an iOS permission-check rejection, schedules nothing and resolves', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true });
+    getSettings.mockRejectedValueOnce(new Error('native failure'));
+    try {
+      await expect(scheduleRentReminder(mockGuest)).resolves.toBeUndefined();
+    } finally {
+      Object.defineProperty(Platform, 'OS', { value: 'android', configurable: true });
+    }
+    expect(createTrigger).not.toHaveBeenCalled();
+    expectLoggedWithoutPayload();
+  });
+
+  it('logs a cancel rejection and resolves', async () => {
+    cancelTrigger.mockRejectedValueOnce(new Error('native failure'));
+    await expect(cancelRentReminder(mockGuest)).resolves.toBeUndefined();
+    expectLoggedWithoutPayload();
   });
 });
 
@@ -227,11 +343,11 @@ describe('nextFridayAt9am — day-of-week coverage (via scheduleRentReminder)', 
 
   test.each(cases)(
     '%s → scheduled Friday is correct',
-    (_label, isoString, expectedDaysAway) => {
+    async (_label, isoString, expectedDaysAway) => {
       mockToday(isoString);
       const now = new RealDate(isoString);
 
-      scheduleRentReminder(mockGuest);
+      await scheduleRentReminder(mockGuest);
       const friday = getScheduledDate();
 
       // a) Must be a Friday

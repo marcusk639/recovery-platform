@@ -6,6 +6,8 @@ import { RentPayment } from '../../services/payments';
 
 export interface PaymentStatusBadgeProps {
   status: RentPayment['status'];
+  /** What a refund or dispute changed this to; `status` stays "succeeded" after one. */
+  adjusted?: { label: string; color: string };
 }
 
 const STATUS_COLORS: Record<RentPayment['status'], string> = {
@@ -22,23 +24,20 @@ const STATUS_LABELS: Record<RentPayment['status'], string> = {
   resolved_offline: 'Resolved',
 };
 
-const PaymentStatusBadge: React.FC<PaymentStatusBadgeProps> = ({ status }) => (
-  <View
-    style={[
-      styles.badge,
-      {
-        backgroundColor: STATUS_COLORS[status] + '22',
-        borderColor: STATUS_COLORS[status],
-      },
-    ]}
-    testID={`payment-status-badge-${status}`}>
-    <RatsText
-      translate={false}
-      text={STATUS_LABELS[status]}
-      style={[styles.badgeText, { color: STATUS_COLORS[status] }]}
-    />
-  </View>
-);
+const PaymentStatusBadge: React.FC<PaymentStatusBadgeProps> = ({ status, adjusted }) => {
+  const badgeColor = adjusted?.color ?? STATUS_COLORS[status];
+  return (
+    <View
+      style={[styles.badge, { backgroundColor: badgeColor + '22', borderColor: badgeColor }]}
+      testID={`payment-status-badge-${status}`}>
+      <RatsText
+        translate={false}
+        text={adjusted?.label ?? STATUS_LABELS[status]}
+        style={[styles.badgeText, { color: badgeColor }]}
+      />
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   badge: {

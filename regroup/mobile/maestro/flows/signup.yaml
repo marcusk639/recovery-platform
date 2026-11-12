@@ -3,8 +3,13 @@
 # Emulator is reset by reset-and-seed.sh before each run, so the email is free.
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/signup.yaml
 #
-# NOTE: Inputs are inside KeyboardAwareScrollView which does not expose testIDs
-# to the iOS accessibility tree. Use text-label selectors for form fields.
+# Fills every field by testID (RN 0.88 + react-native-keyboard-controller expose
+# them on iOS too), ticks the terms box, and requires landing on NewAccount or
+# OrgSetup. Before 2026-11-06 the flow filled two fields by label, never ticked
+# the terms box, and made the landing optional, so it never proved signup.
+# The new account's password is E2E_TEST_PASSWORD, so it must meet the app's
+# password rules (8+ characters, upper and lower case, a number;
+# services/password.ts). With a weaker one SIGN UP stays disabled.
 appId: ${APP_ID}
 tags:
   - auth
@@ -34,22 +39,88 @@ tags:
     visible:
       text: "Let's Get Started"
     timeout: 10000
-# Fill the signup form by label text (testIDs not accessible inside KeyboardAwareScrollView on iOS).
-# Tap the next field to dismiss the keyboard — never hideKeyboard.
+# Fill every field by testID. Wait out the keyboard-controller scroll before typing,
+# and dismiss the keyboard before the next field so taps land where they aim.
+- scrollUntilVisible:
+    element:
+      id: "signup-email-input"
+    direction: DOWN
+    timeout: 5000
 - tapOn:
-    text: "Email"
+    id: "signup-email-input"
+- waitForAnimationToEnd
 - inputText: "e2e-signup@rats-e2e.com"
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      id: "signup-password-input"
+    direction: DOWN
+    timeout: 5000
 - tapOn:
-    text: "Password"
+    id: "signup-password-input"
+- waitForAnimationToEnd
 - inputText: ${E2E_TEST_PASSWORD}
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      id: "signup-confirm-password-input"
+    direction: DOWN
+    timeout: 5000
 - tapOn:
-    text: "SIGN UP"
-# Guest/admin signup routes to NewAccount; manager routes to OrgSetup. Accept either.
+    id: "signup-confirm-password-input"
+- waitForAnimationToEnd
+- inputText: ${E2E_TEST_PASSWORD}
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      id: "signup-first-name-input"
+    direction: DOWN
+    timeout: 5000
+- tapOn:
+    id: "signup-first-name-input"
+- waitForAnimationToEnd
+- inputText: "Emma"
+- waitForAnimationToEnd
+# Close the keyboard (iOS toolbar Done): with First Name focused, Last Name sits
+# under the keyboard, and Maestro doesn't count the keyboard as covering it, so
+# the tap typed into First Name instead.
+- tapOn:
+    text: "Done"
+    optional: true
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      id: "signup-last-name-input"
+    direction: DOWN
+    timeout: 5000
+# The retry covers a first tap lost while the keyboard settles (Android typed
+# both names into First Name), as in login.yaml.
+- tapOn:
+    id: "signup-last-name-input"
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+- inputText: "Tester"
+- waitForAnimationToEnd
+# Close the keyboard before the checkbox: with the checkbox already on screen,
+# scrollUntilVisible doesn't drag (the drag is what dismisses the keyboard), so
+# the tap landed on the iOS keyboard and typed into Last Name. iOS's keyboard
+# toolbar has Done. Not hideKeyboard: on Android, with the keyboard already
+# closed, it pressed back and left signup.
+- tapOn:
+    text: "Done"
+    optional: true
+- waitForAnimationToEnd
+- scrollUntilVisible:
+    element:
+      id: "terms-of-service-checkbox"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "terms-of-service-checkbox"
+- tapOn:
+    id: "signup-button"
+# Guest/admin signup routes to NewAccount; manager routes to OrgSetup. One of them must appear.
 - extendedWaitUntil:
     visible:
-      id: "new-account-screen"
+      id: "new-account-screen|org-setup-screen"
     timeout: 60000
-    optional: true
-- assertVisible:
-    id: "org-setup-screen"
-    optional: true

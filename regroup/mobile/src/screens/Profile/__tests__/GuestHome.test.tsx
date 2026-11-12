@@ -22,6 +22,10 @@ jest.mock("../../../hooks/useSelectedHouse", () => ({
 jest.mock("../../../hooks/useSelectedGuest", () => ({
   useSelectedGuest: () => mockUseSelectedGuest(),
 }));
+let mockGuestListLoading = false;
+jest.mock("../../../hooks/useDefaultGuestSelection", () => ({
+  useDefaultGuestSelection: () => ({ isLoading: mockGuestListLoading }),
+}));
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock("@react-navigation/native-stack", () => ({}));
@@ -109,16 +113,10 @@ jest.mock("react-native-html-to-pdf", () => ({
   generatePDF: jest.fn(() => Promise.resolve({ filePath: "/tmp/report.pdf" })),
 }));
 
-// ─── Push notification mocks ─────────────────────────────────────────────────
-jest.mock("react-native-push-notification", () => ({
-  localNotificationSchedule: jest.fn(),
-  cancelLocalNotification: jest.fn(),
-  getApplicationIconBadgeNumber: jest.fn(),
-  setApplicationIconBadgeNumber: jest.fn(),
-  getChannels: jest.fn(),
-  createChannel: jest.fn(),
-  checkPermissions: jest.fn(),
-}));
+// ─── Notification library mock ───────────────────────────────────────────────
+jest.mock("react-native-notify-kit", () =>
+  require("react-native-notify-kit/jest-mock")
+);
 
 const mockScheduleRentReminder = jest.fn();
 const mockCancelRentReminder = jest.fn();
@@ -492,6 +490,14 @@ describe("GuestHome", () => {
       expect(getByTestId("loading-indicator")).toBeTruthy();
     });
 
+    it("shows loading, not the empty message, while the guest list loads", () => {
+      mockGuestListLoading = true;
+      const { getByTestId, queryByTestId } = renderScreen({ selectedGuest: null });
+      mockGuestListLoading = false;
+      expect(getByTestId("loading-indicator")).toBeTruthy();
+      expect(queryByTestId("empty-screen")).toBeNull();
+    });
+
     it("does not render the overview screen while loading", () => {
       const { queryByTestId } = renderScreen({ requestingGuests: true });
       expect(queryByTestId("guest-overview-screen")).toBeNull();
@@ -675,19 +681,57 @@ describe("GuestHome", () => {
 });
 
 describe("Rent reminder notification scheduling", () => {
+  // The store's signed-in user is "admin-1".
+  const OWN_GUEST = { ...BASE_GUEST, userId: "admin-1" };
+
   beforeEach(() => {
     mockScheduleRentReminder.mockClear();
+    mockCancelRentReminder.mockClear();
   });
 
   it("schedules a rent reminder when guest has rentOwed > 0", () => {
-    renderScreen({ selectedGuest: { ...BASE_GUEST, rentOwed: 5000 } });
+    renderScreen({ selectedGuest: { ...OWN_GUEST, rentOwed: 5000 } });
     expect(mockScheduleRentReminder).toHaveBeenCalledWith(
       expect.objectContaining({ id: BASE_GUEST.id })
     );
   });
 
-  it("does not schedule a reminder when rentOwed === 0", () => {
-    renderScreen({ selectedGuest: { ...BASE_GUEST, rentOwed: 0 } });
+  it("does not remind an operator viewing a resident who owes rent", () => {
+    renderScreen({ selectedGuest: { ...BASE_GUEST, userId: "someone-else", rentOwed: 5000 } });
     expect(mockScheduleRentReminder).not.toHaveBeenCalled();
+    expect(mockCancelRentReminder).not.toHaveBeenCalled();
+  });
+
+  it("does not schedule a reminder when rentOwed === 0", () => {
+    renderScreen({ selectedGuest: { ...OWN_GUEST, rentOwed: 0 } });
+    expect(mockScheduleRentReminder).not.toHaveBeenCalled();
+  });
+
+  // Spec 5.3: reminders now fire on Android too, so a balance settled outside
+  // the app must not leave a reminder pending.
+  it("cancels the reminder when rentOwed drops to 0", () => {
+    const { rerender } = renderScreen({
+      selectedGuest: { ...OWN_GUEST, rentOwed: 5000 },
+    });
+    expect(mockCancelRentReminder).not.toHaveBeenCalled();
+
+    const store = buildStore({ selectedGuest: { ...OWN_GUEST, rentOwed: 0 } });
+    rerender(
+      <Provider store={store}>
+        <QueryClientProvider client={buildQueryClient()}>
+          <GuestHome navigation={mockNavigation} />
+        </QueryClientProvider>
+      </Provider>
+    );
+
+    expect(mockCancelRentReminder).toHaveBeenCalledTimes(1);
+    expect(mockCancelRentReminder).toHaveBeenCalledWith(
+      expect.objectContaining({ id: BASE_GUEST.id })
+    );
+  });
+
+  it("does not cancel the reminder while rent is owed", () => {
+    renderScreen({ selectedGuest: { ...OWN_GUEST, rentOwed: 5000 } });
+    expect(mockCancelRentReminder).not.toHaveBeenCalled();
   });
 });
