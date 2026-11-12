@@ -177,6 +177,8 @@ One order for #141 and #145, the same as `regroup/CLAUDE.md` ("Deploy order (#14
 
 Subscription events (`customer.subscription.created`/`updated`) re-read the subscription from Stripe and write that state, not the payload's, to the `subscriptions` doc, the operator's houses and `users/{uid}.subscriptionMetadata.status` (`webhooks/subscriptionState.ts`), so a late or out-of-order event can't move it backwards. `cancelling` there means set to cancel at period end. A subscription with no `subscriptions` doc is skipped before any Stripe call.
 
+Subscription events `stripeEvents` handles: `customer.subscription.created`/`updated`/`deleted`/`trial_will_end`, `invoice.payment_succeeded`/`payment_failed`/`payment_action_required`. The live endpoint's event list must include every one. `trial_will_end` and `payment_action_required` only push to the operator (`webhooks/subscriptionNotices.ts`). A subscription whose metadata has `regroup_launch_cancel: "true"` is canceled everywhere with no push: the launch cancellations are explained by the owner's notice.
+
 ### Cross-product access (meetings, referrals)
 
 Never add direct Firestore cross-queries to another product's database — route through recovery-api with service-key auth (`X-Service-Key`/`X-App-Id`/`X-User-Uid`). Firebase Auth ID tokens are project-scoped, so recovery-api (`recovery-platform`) cannot verify a `phoenix-cleanhouse` end-user token — cross-product calls are server-to-server, not end-user. (The former `callable/homegroups.ts` attendance bridge was removed as dead code — zero callers; regroup tracks attendance natively. Meeting **discovery** is being consolidated into recovery-api: see `docs/launch-readiness/recovery-api-meetings-stabilization-plan.md`.)

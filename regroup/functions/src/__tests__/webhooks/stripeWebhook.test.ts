@@ -2534,6 +2534,151 @@ describe("invoice events apply Stripe's current state", () => {
   });
 });
 
+// ===========================================================================
+// Trial-ending and payment-confirmation notices, and launch cancellations
+// ===========================================================================
+
+describe("subscription notices reach the operator", () => {
+  const operatorUid = "uid_notice";
+  const houseId = "house_notice";
+
+  const wire = (tokens: string[] = ["tok_operator"]) => {
+    const houseRef = { update: jest.fn(), set: jest.fn() };
+    mockCollectionFn.mockImplementation(
+      wireHousesForOperator(
+        operatorUid,
+        houseId,
+        houseRef,
+        createdHouse(operatorUid),
+        { subscriptionId: "sub_b8" },
+        { operatorTokens: tokens },
+      ),
+    );
+    return houseRef;
+  };
+
+  const pushed = (title: string, body?: string) =>
+    expect(mockMessagingSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: "tok_operator",
+        notification: expect.objectContaining(body ? { title, body } : { title }),
+      }),
+    );
+
+  it("trial_will_end tells the operator when the trial ends", async () => {
+    wire();
+    mockConstructEvent.mockReturnValue({
+      id: "evt_notice_trial",
+      type: "customer.subscription.trial_will_end",
+      account: undefined,
+      data: { object: { id: "sub_b8", trial_end: 1767225600, metadata: { userId: operatorUid } } },
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockMessagingSend).toHaveBeenCalledTimes(1);
+    pushed(
+      "Your free trial ends soon",
+      "Your Regroup free trial ends on January 1. Your card will be charged then unless you cancel.",
+    );
+  });
+
+  it("invoice.payment_action_required asks the operator to confirm the payment", async () => {
+    wire();
+    mockConstructEvent.mockReturnValue({
+      id: "evt_notice_action",
+      type: "invoice.payment_action_required",
+      account: undefined,
+      data: {
+        object: {
+          id: "in_notice",
+          parent: { type: "subscription_details", subscription_details: { subscription: "sub_b8" } },
+        },
+      },
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockMessagingSend).toHaveBeenCalledTimes(1);
+    pushed(
+      "Confirm your payment",
+      "Your bank needs you to confirm your Regroup payment. Open billing in Regroup to finish it.",
+    );
+  });
+
+  it.each([
+    [
+      "customer.subscription.trial_will_end",
+      { id: "sub_other", trial_end: 1767225600, metadata: {} },
+    ],
+    [
+      "invoice.payment_action_required",
+      {
+        id: "in_other",
+        parent: { type: "subscription_details", subscription_details: { subscription: "sub_other" } },
+      },
+    ],
+  ])("%s for a subscription Regroup has no record of sends nothing", async (type, object) => {
+    wireCollection({});
+    mockConstructEvent.mockReturnValue({ id: `evt_notice_none_${type}`, type, account: undefined, data: { object } });
+    const res = makeRes();
+
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockMessagingSend).not.toHaveBeenCalled();
+    expect(mockSubscriptionsRetrieve).not.toHaveBeenCalled();
+  });
+
+  it("a launch cancellation cancels everywhere but sends no push", async () => {
+    const houseRef = wire();
+    mockConstructEvent.mockReturnValue({
+      id: "evt_notice_launch_cancel",
+      type: "customer.subscription.deleted",
+      account: undefined,
+      data: {
+        object: {
+          id: "sub_b8",
+          status: "canceled",
+          canceled_at: 1767225600,
+          items: { data: [] },
+          metadata: { userId: operatorUid, regroup_launch_cancel: "true" },
+        },
+      },
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "canceled" }),
+    );
+    expect(mockMessagingSend).not.toHaveBeenCalled();
+  });
+
+  it("any other cancellation still tells the operator", async () => {
+    wire();
+    mockConstructEvent.mockReturnValue({
+      id: "evt_notice_cancel",
+      type: "customer.subscription.deleted",
+      account: undefined,
+      data: {
+        object: {
+          id: "sub_b8",
+          status: "canceled",
+          canceled_at: 1767225600,
+          items: { data: [] },
+          metadata: { userId: operatorUid },
+        },
+      },
+    });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    pushed("Subscription Canceled");
+  });
+});
+
 describe("B8 — house.subscriptionStatus propagation", () => {
   it("invoice.payment_succeeded sets house subscriptionStatus to active", async () => {
     const operatorUid = "uid_b8_1";

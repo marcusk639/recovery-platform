@@ -41,6 +41,11 @@ import {
 import { sendFcmToHouseAdmins } from "../util/notifications";
 import { syncOperatorTier } from "./syncOperatorTier";
 import { syncOperatorStatus } from "./subscriptionState";
+import {
+  isLaunchCancellation,
+  PAYMENT_ACTION_NOTICE,
+  trialEndingNotice,
+} from "./subscriptionNotices";
 import { operatorStatusToHouseStatus } from "../util/entitlement";
 import { graceDeadline, invoiceFinalizedAt } from "../util/grace";
 import { periodEndSeconds } from "../util/subscriptionPeriod";
@@ -1121,11 +1126,14 @@ async function handleSubscriptionDeleted(
   // Deletion is terminal, so the payload is Stripe's current state.
   const operatorUid = await resolveOperatorUid(subscription);
   if (operatorUid) {
-    await sendFcmToUser(
-      operatorUid,
-      "Subscription Canceled",
-      `Your Regroup subscription has been canceled as of ${canceledAt}. Contact support to reactivate.`,
-    );
+    // A launch cancellation is explained by the owner's notice, not a push.
+    if (!isLaunchCancellation(subscription)) {
+      await sendFcmToUser(
+        operatorUid,
+        "Subscription Canceled",
+        `Your Regroup subscription has been canceled as of ${canceledAt}. Contact support to reactivate.`,
+      );
+    }
     await updateHouseSubscriptionStatus(operatorUid, subscription.id, "canceled");
     await syncOperatorStatus(operatorUid, subscription);
   } else {
@@ -1133,6 +1141,53 @@ async function handleSubscriptionDeleted(
       "customer.subscription.deleted: could not resolve operator uid for house update",
       { stripeSubscriptionId: subscription.id },
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Event handlers: customer.subscription.trial_will_end and
+// invoice.payment_action_required. Notices only: the status change arrives
+// through customer.subscription.updated.
+// ---------------------------------------------------------------------------
+
+/** The operator for one of Regroup's subscriptions, or null when it isn't ours. */
+async function operatorForSubscription(
+  stripeSubscriptionId: string,
+  resolve: () => Promise<Stripe.Subscription>,
+): Promise<string | null> {
+  const subSnap = await admin
+    .firestore()
+    .collection("subscriptions")
+    .where("stripeSubscriptionId", "==", stripeSubscriptionId)
+    .limit(1)
+    .get();
+  if (subSnap.empty) {
+    logger.warn("subscription notice: subscription not found", { stripeSubscriptionId });
+    return null;
+  }
+  const subData = subSnap.docs[0].data() as SubscriptionDoc;
+  return subData.userId || (await resolveOperatorUid(await resolve()));
+}
+
+async function handleTrialWillEnd(subscription: Stripe.Subscription): Promise<void> {
+  const operatorUid = await operatorForSubscription(subscription.id, async () => subscription);
+  const notice = trialEndingNotice(subscription);
+  if (operatorUid && notice) {
+    await sendFcmToUser(operatorUid, notice.title, notice.body);
+  }
+}
+
+async function handlePaymentActionRequired(
+  invoice: Stripe.Invoice,
+  stripeClient: Stripe,
+): Promise<void> {
+  const stripeSubscriptionId = getSubscriptionIdFromInvoice(invoice);
+  if (!stripeSubscriptionId) return;
+  const operatorUid = await operatorForSubscription(stripeSubscriptionId, () =>
+    stripeClient.subscriptions.retrieve(stripeSubscriptionId),
+  );
+  if (operatorUid) {
+    await sendFcmToUser(operatorUid, PAYMENT_ACTION_NOTICE.title, PAYMENT_ACTION_NOTICE.body);
   }
 }
 
@@ -1720,6 +1775,17 @@ export const stripeWebhook = onRequest(
 
         case "invoice.payment_failed":
           await handleInvoicePaymentFailed(
+            event.data.object as Stripe.Invoice,
+            getStripe(),
+          );
+          break;
+
+        case "customer.subscription.trial_will_end":
+          await handleTrialWillEnd(event.data.object as Stripe.Subscription);
+          break;
+
+        case "invoice.payment_action_required":
+          await handlePaymentActionRequired(
             event.data.object as Stripe.Invoice,
             getStripe(),
           );
