@@ -1,0 +1,48 @@
+# Regroup Operator Portal: Roadmap of Plans
+
+> **For agentic workers:** this file sequences the sub-plans and is not executed itself. Execute one sub-plan at a time with superpowers:subagent-driven-development or superpowers:executing-plans. Each sub-plan has its own header and tasks.
+
+**Goal:** A web portal where operators and admins do their core desk work across all their houses, reusing the phone app's screens and data code.
+
+**Why a roadmap:** P1 is a go/no-go check whose result decides how the rest is built, so later plans can't be written accurately yet. The launch roadmap uses the same approach: each plan is written just before its phase, against the code as it is then.
+
+**Spec:** `docs/superpowers/specs/2026-11-08-regroup-operator-portal-design.md`
+
+## Sub-plans
+
+| #   | Plan                                                                                                           | Spec         | Status                                  |
+| --- | -------------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------- |
+| P1  | Foundation and go/no-go on React Native 0.88: `2026-11-08-regroup-portal-p1-foundation.md`                     | §4, §7, §8.1 | Written                                 |
+| P2  | Sign-in, permissions, subscription gate, idle sign-out, desktop shell: `2026-11-09-regroup-portal-p2-shell.md` | §6, §7, §8.2 | Written; P1 go given 2026-11-09         |
+| P3  | All houses, one house, resident list and record: `2026-11-09-regroup-portal-p3-houses-residents.md`            | §5, §8.3     | Done                              |
+| P4  | Resident actions, applications with intake, staff notes, activities: `2026-11-09-regroup-portal-p4-actions-applications-activities.md` | §5, §8.4     | Done                                        |
+| P5  | Payments, with the independent money review: `2026-11-10-regroup-portal-p5-payments.md`                       | §7, §8.5     | Done; lands after #231, #232, #233      |
+| P6  | Disputes, against the rules tests                                                                              | §7, §8.6     | Done (lands after #231, #232, #233) |
+| P7  | Production release of the core, after launch day                                                               | §6, §8.9     | When P6 is done and launch has finished |
+| P8  | Beds, drug tests, documents, issues, complaints, reports                                                       | §5, §8.7     | Done (lands after #231, #232, #233 and #250) |
+| P9  | Desktop polish on the reused screens that need it most                                                         | §8.8         | Before or after P7                      |
+
+P7 sits before P8 and P9 so the owner's "ship the core first if running late" decision needs no replanning. If the work is on time, run P8 and P9 first and release everything together.
+
+## Gates
+
+- **P1 → P2:** the owner reads the go/no-go report and says go.
+- **Any production deploy:** launch has finished (launch roadmap P10), and the owner says yes.
+- **Launch work wins.** Pause this roadmap whenever launch needs the owner's attention.
+
+## Writing the next sub-plan
+
+- Re-verify every file and line the spec cites. They will have moved.
+- Carry forward P1's replacement list and any findings from its report.
+- Keep each plan's Global Constraints identical to P1's, plus anything P1 added.
+- **P2 must remove the harness,** including `window.__portalTest`, and make `check-bundle` refuse it in any non-emulator build. P1's `firebase-setup` has no production config, and P7 adds one.
+- **P5 starts from P1's answer on manual payments and the dashboard,** which may need a server or phone decision first.
+- P4 moves discharge and phase advancement from GuestHome to the record's header, adds Staff notes once #196 lets them load, maps Documents and StaffNotes to URLs if their params allow it, and revisits losing a form on a tab click. P5 decides what a direct /payments URL does for a peer leader, and checks a real invited manager against listHousePayments, whose assertHouseAdmin reads the house doc's adminIds rather than house-roles, so it may refuse them.
+- P9: the reused ComplianceBreakdown on the resident record keeps phone-sized type.
+- P5: intake doesn't link the new resident to the approved application, so an approved applicant can be admitted twice by hand (phone behaviour); #217 is the double-submit case. Discharge copy is #221.
+- P9: intake's step indicator is sized from the window, so its last step runs past the right edge.
+- P5 ran on the launch-fix phone code (#231, #232, #233 merged locally), so #210 lands after them. Found and fixed during P5: managers refused by the payment callables (#232, isHouseMoneyStaff), $NaN for a non-dollar record and the payment screens disagreeing on what's owed (#233), and a ?guestId= query that skipped the role gate (portal). Filed: #238 (failed-payment banner), #239 (late payment_failed).
+- P6: disputes never affect money (owner, 2026-11-10). The document-open journey can't sign links on the emulator; check real links on staging.
+- P6: every dispute write the portal can make (raise, approve, reject, undo) is proven through the phone's own services against the rules and functions, for owners, invited managers, peer leaders, a manager who is the resident, the logger and another house's admin, and none changes money. Filed: #244 (open disputes older than two weeks are counted but not listed).
+- P8: beds, drug tests, issues, complaints and document delete are proven through the phone's own screens against the rules, including refusals and invited peer leaders. The phone fixes they need (failed bed, room and complaint writes said nothing or claimed success; removing a closed issue always failed; a visible Dismiss) are in #250, stacked on #160, so P8 lands after it too.
+- P8: the compliance export prints the phone's own report HTML in a sandboxed print view, for owners and managers only, and treats every report field as untrusted. Filed: #249, the Admin Report's 4-week compliance always reads 0% (it looks summaries up by Sunday, but they are keyed by Monday), pinned with test.fail.

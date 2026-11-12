@@ -1,0 +1,75 @@
+import { vi } from 'vitest';
+
+// Mobile's tsconfig extends a package the portal doesn't install, so the real enum
+// can't load here. The browser journeys in e2e/shell.spec.ts use the real one.
+vi.mock('@mobile/navigation/types', () => ({
+  Routes: new Proxy({}, { get: (_target, key) => `route-${String(key)}` }),
+}));
+
+import { houseIdFromPath, HOME_ROUTE, linkingConfig, residentPath, SECTIONS, sectionForRoute, sectionPath, SHIFT_LOG_ROUTE, stripQuery } from '../src/app/urls';
+
+test('sectionPath builds the scheme', () => {
+  expect(sectionPath('h1', 'residents')).toBe('/houses/h1/residents');
+  expect(sectionPath('h1', 'applications')).toBe('/houses/h1/applications');
+  expect(sectionPath('h1', 'summary')).toBe('/houses/h1');
+});
+test('houseIdFromPath finds the house', () => {
+  expect(houseIdFromPath('/houses/h1/payments')).toBe('h1');
+  expect(houseIdFromPath('/houses/h1')).toBe('h1');
+  expect(houseIdFromPath('/')).toBeNull();
+  expect(houseIdFromPath('/housesx/h1')).toBeNull();
+});
+test('every section has a real route name and a linking path', () => {
+  const { screens } = linkingConfig('http://x').config;
+  for (const section of Object.values(SECTIONS)) {
+    expect(section.route).toMatch(/^route-/);
+    expect(screens[section.route]).toBe(section.path);
+  }
+  expect(screens[HOME_ROUTE]).toBe('');
+});
+test('resident paths carry ids only', () => {
+  expect(residentPath('h1', 'g 1')).toBe('/houses/h1/residents/g%201');
+});
+test('stripQuery removes everything after the path', () => {
+  expect(stripQuery('/Documents?title=Bob%20Documents')).toBe('/Documents');
+  expect(stripQuery('/houses/h1')).toBe('/houses/h1');
+});
+test('a malformed house URL is treated as no house rather than throwing', () => {
+  expect(houseIdFromPath('/houses/%E0%A4%A/residents')).toBeNull();
+});
+test('the record and its screens have linking paths', () => {
+  const { screens } = linkingConfig('http://x').config;
+  expect(screens['route-GuestOverview']).toBe('houses/:houseId/residents/:guestId');
+  expect(screens['route-GuestInfo']).toBe('houses/:houseId/residents/:guestId/profile');
+  expect(screens['route-Beds']).toBe('houses/:houseId/beds');
+});
+test('applications, intake, notes and the shift log have paths', () => {
+  const { screens } = linkingConfig('http://x').config;
+  expect(screens['route-ApplicationDetail']).toBe('houses/:houseId/applications/:appId');
+  expect(screens['route-ResidentIntake']).toBe('houses/:houseId/intake');
+  expect(screens['route-StaffNotes']).toBe('houses/:houseId/residents/:guestId/notes');
+  expect(screens[SHIFT_LOG_ROUTE]).toBe('houses/:houseId/shift-log');
+});
+test('notes belong to the Residents tab, and the shift log to none', () => {
+  expect(sectionForRoute('route-StaffNotes')).toBe('residents');
+  expect(sectionForRoute(SHIFT_LOG_ROUTE)).toBeNull();
+});
+
+// Balance Details has no link in the phone; the portal gives it a tab (owner, 2026-11-10).
+test('Balances is a tab right after Payments, under the payments path', () => {
+  expect(sectionForRoute('route-BalanceDashboard')).toBe('balances');
+  expect(sectionPath('h1', 'balances')).toBe('/houses/h1/payments/balances');
+  const order = Object.keys(SECTIONS);
+  expect(order[order.indexOf('payments') + 1]).toBe('balances');
+});
+
+// Without a path these became /DrugTestHistory and so on, and a reload lost the house.
+test('documents and the drug-test screens have paths, under their tabs', () => {
+  const { screens } = linkingConfig('http://x').config;
+  expect(screens['route-Documents']).toBe('houses/:houseId/residents/:guestId/documents');
+  expect(screens['route-DrugTestForm']).toBe('houses/:houseId/drug-tests/new');
+  expect(screens['route-DrugTestHistory']).toBe('houses/:houseId/drug-tests/history/:guestId');
+  expect(sectionForRoute('route-Documents')).toBe('residents');
+  expect(sectionForRoute('route-DrugTestForm')).toBe('drugTests');
+  expect(sectionForRoute('route-DrugTestHistory')).toBe('drugTests');
+});
