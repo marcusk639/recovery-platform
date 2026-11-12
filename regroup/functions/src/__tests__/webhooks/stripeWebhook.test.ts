@@ -315,7 +315,7 @@ beforeEach(() => {
     const returned = mockConstructEvent.mock.results.filter((r) => r.type === "return");
     const object = returned[returned.length - 1]?.value?.data?.object;
     if (object && object.id === id) return object;
-    return { id: "sub_default", metadata: {}, items: { data: [] } };
+    return { id: "sub_default", status: "active", metadata: {}, items: { data: [] } };
   });
 
   // A test-mode deployment with all four signing secrets bound — what both
@@ -2293,6 +2293,247 @@ describe("subscription events apply Stripe's current state", () => {
   });
 });
 
+// ===========================================================================
+// Invoice events apply Stripe's current state
+//
+// Grace runs 7 days from the failed invoice's finalized_at, which a retry or a
+// late delivery can't move. A failure Stripe has since resolved changes nothing.
+// ===========================================================================
+
+describe("invoice events apply Stripe's current state", () => {
+  const operatorUid = "uid_invoice";
+  const houseId = "house_invoice";
+  const JAN_1 = 1767225600;
+  const JAN_8 = "2026-01-08T00:00:00.000Z";
+
+  const operatorTx = () => {
+    const txUpdate = jest.fn();
+    mockRunTransaction.mockImplementation(async (fn: (txn: any) => any) =>
+      fn({
+        get: jest.fn().mockImplementation(async (ref: any) =>
+          ref?.isOperatorDoc
+            ? ref.get()
+            : { exists: false, get: () => undefined, data: () => undefined },
+        ),
+        set: jest.fn(),
+        update: txUpdate,
+      }),
+    );
+    return txUpdate;
+  };
+
+  const operatorStatusWrite = (txUpdate: jest.Mock) =>
+    txUpdate.mock.calls
+      .map((c) => c[1])
+      .find((u) => u && "subscriptionMetadata.status" in u);
+
+  const deliverInvoice = (type: string, fields: Record<string, unknown> = {}) =>
+    mockConstructEvent.mockReturnValue({
+      id: `evt_invoice_${type}`,
+      type,
+      account: undefined,
+      data: {
+        object: {
+          id: "in_invoice_1",
+          created: JAN_1 - 60,
+          status_transitions: { finalized_at: JAN_1 },
+          attempt_count: 1,
+          next_payment_attempt: null,
+          parent: {
+            type: "subscription_details",
+            subscription_details: { subscription: "sub_b8" },
+          },
+          lines: { data: [] },
+          ...fields,
+        },
+      },
+    });
+
+  const stripeNow = (fields: Record<string, unknown>) =>
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_b8",
+      items: { data: [] },
+      metadata: { userId: operatorUid },
+      ...fields,
+    });
+
+  const wire = (
+    opts: { houseData?: Record<string, unknown>; tokens?: string[]; markerSet?: jest.Mock } = {},
+  ) => {
+    const houseRef = { update: jest.fn(), set: jest.fn() };
+    const subDocRef = { update: jest.fn().mockResolvedValue(undefined), set: jest.fn() };
+    mockCollectionFn.mockImplementation(
+      wireHousesForOperator(
+        operatorUid,
+        houseId,
+        houseRef,
+        opts.houseData ?? createdHouse(operatorUid),
+        { subscriptionId: "sub_b8" },
+        { subDocRef, operatorTokens: opts.tokens, markerSet: opts.markerSet },
+      ),
+    );
+    return { houseRef, subDocRef };
+  };
+
+  it("a first failure starts grace 7 days from the invoice's finalized_at", async () => {
+    const txUpdate = operatorTx();
+    const { houseRef } = wire();
+    deliverInvoice("invoice.payment_failed");
+    stripeNow({ status: "past_due" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "past_due", guestGraceEndsAt: JAN_8 }),
+    );
+    expect(operatorStatusWrite(txUpdate)).toMatchObject({
+      "subscriptionMetadata.status": "past_due",
+    });
+  });
+
+  it("a retry of the same invoice keeps the deadline", async () => {
+    operatorTx();
+    const { houseRef } = wire({
+      houseData: { ...createdHouse(operatorUid), subscriptionStatus: "past_due", guestGraceEndsAt: JAN_8 },
+    });
+    deliverInvoice("invoice.payment_failed", { attempt_count: 2 });
+    stripeNow({ status: "past_due" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ guestGraceEndsAt: JAN_8 }),
+    );
+  });
+
+  it("a failure Stripe has since resolved changes nothing", async () => {
+    const txUpdate = operatorTx();
+    const { subDocRef } = wire({ tokens: ["tok_operator"] });
+    deliverInvoice("invoice.payment_failed");
+    stripeNow({ status: "active" });
+    const res = makeRes();
+
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(subDocRef.update).not.toHaveBeenCalled();
+    expect(mockBatchUpdate).not.toHaveBeenCalled();
+    expect(operatorStatusWrite(txUpdate)).toBeUndefined();
+    expect(mockMessagingSend).not.toHaveBeenCalled();
+  });
+
+  it("unpaid writes the status with no grace field", async () => {
+    operatorTx();
+    const { houseRef } = wire();
+    deliverInvoice("invoice.payment_failed", { attempt_count: 1 });
+    stripeNow({ status: "unpaid" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "unpaid" }),
+    );
+    expect(mockBatchUpdate.mock.calls[0][1]).not.toHaveProperty("guestGraceEndsAt");
+  });
+
+  it("a success while Stripe still says past due keeps the houses in grace", async () => {
+    operatorTx();
+    const { houseRef } = wire({
+      houseData: { ...createdHouse(operatorUid), subscriptionStatus: "past_due", guestGraceEndsAt: JAN_8 },
+    });
+    deliverInvoice("invoice.payment_succeeded");
+    stripeNow({ status: "past_due" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "past_due" }),
+    );
+    expect(mockBatchUpdate.mock.calls[0][1]).not.toHaveProperty("guestGraceEndsAt");
+  });
+
+  it("a success Stripe confirms ends grace", async () => {
+    const txUpdate = operatorTx();
+    const { houseRef } = wire({
+      houseData: { ...createdHouse(operatorUid), subscriptionStatus: "past_due", guestGraceEndsAt: JAN_8 },
+    });
+    deliverInvoice("invoice.payment_succeeded");
+    stripeNow({ status: "active" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ subscriptionStatus: "active", guestGraceEndsAt: "__FieldValue.delete__" }),
+    );
+    expect(operatorStatusWrite(txUpdate)).toMatchObject({ "subscriptionMetadata.status": "active" });
+  });
+
+  it("a failed Stripe read on a success fails the event, so Stripe redelivers it", async () => {
+    operatorTx();
+    const markerSet = jest.fn().mockResolvedValue(undefined);
+    wire({ markerSet });
+    deliverInvoice("invoice.payment_succeeded");
+    mockSubscriptionsRetrieve.mockRejectedValue(new Error("stripe unavailable"));
+    const res = makeRes();
+
+    await (stripeWebhook as any)(makeReq(), res);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(markerSet).toHaveBeenCalledWith({ status: "failed" }, { merge: true });
+  });
+
+  it("the updated and the failed event for one invoice leave one deadline", async () => {
+    operatorTx();
+    wire();
+    mockConstructEvent.mockReturnValue({
+      id: "evt_invoice_updated_first",
+      type: "customer.subscription.updated",
+      account: undefined,
+      data: { object: { id: "sub_b8", status: "past_due", items: { data: [] }, metadata: { userId: operatorUid } } },
+    });
+    stripeNow({
+      status: "past_due",
+      latest_invoice: { id: "in_invoice_1", status_transitions: { finalized_at: JAN_1 }, created: JAN_1 - 60 },
+    });
+    await (stripeWebhook as any)(makeReq(), makeRes());
+    const fromUpdated = mockBatchUpdate.mock.calls[0][1].guestGraceEndsAt;
+
+    mockBatchUpdate.mockClear();
+    const { houseRef } = wire({
+      houseData: { ...createdHouse(operatorUid), subscriptionStatus: "past_due", guestGraceEndsAt: fromUpdated },
+    });
+    deliverInvoice("invoice.payment_failed");
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(fromUpdated).toBe(JAN_8);
+    expect(mockBatchUpdate).toHaveBeenCalledWith(
+      houseRef,
+      expect.objectContaining({ guestGraceEndsAt: JAN_8 }),
+    );
+  });
+
+  it("the failure push goes to the operator", async () => {
+    operatorTx();
+    wire({ tokens: ["tok_operator"] });
+    deliverInvoice("invoice.payment_failed");
+    stripeNow({ status: "past_due" });
+
+    await (stripeWebhook as any)(makeReq(), makeRes());
+
+    expect(mockMessagingSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: "tok_operator",
+        notification: expect.objectContaining({ title: "Subscription Payment Failed" }),
+      }),
+    );
+  });
+});
+
 describe("B8 — house.subscriptionStatus propagation", () => {
   it("invoice.payment_succeeded sets house subscriptionStatus to active", async () => {
     const operatorUid = "uid_b8_1";
@@ -2302,6 +2543,7 @@ describe("B8 — house.subscriptionStatus propagation", () => {
     // resolveOperatorUid fast path: userId in Stripe subscription metadata
     mockSubscriptionsRetrieve.mockResolvedValue({
       id: "sub_b8",
+      status: "active",
       metadata: { userId: operatorUid },
     });
 
@@ -2348,6 +2590,7 @@ describe("B8 — house.subscriptionStatus propagation", () => {
     // resolveOperatorUid fast path: userId in Stripe subscription metadata
     mockSubscriptionsRetrieve.mockResolvedValue({
       id: "sub_b8",
+      status: "active",
       metadata: { userId: operatorUid },
     });
 
@@ -2482,6 +2725,12 @@ describe("B8 — house.subscriptionStatus propagation", () => {
       },
     });
 
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_b8",
+      status: "past_due",
+      metadata: {},
+      items: { data: [] },
+    });
     mockCollectionFn.mockImplementation(
       wireHousesForOperator(operatorUid, houseId, houseRef),
     );

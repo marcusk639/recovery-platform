@@ -472,7 +472,9 @@ beforeEach(() => {
   mockSubscriptionsRetrieve.mockImplementation(async (id: string) => {
     const returned = mockConstructEvent.mock.results.filter((r) => r.type === "return");
     const object = returned[returned.length - 1]?.value?.data?.object;
-    return object && object.id === id ? object : { id, metadata: {}, items: { data: [] } };
+    return object && object.id === id
+      ? object
+      : { id, status: "active", metadata: {}, items: { data: [] } };
   });
 
   // Default idempotency: event not yet processed
@@ -1821,6 +1823,16 @@ describe("invoice.payment_succeeded", () => {
 // ===========================================================================
 
 describe("invoice.payment_failed", () => {
+  // Stripe's current state of the subscription: past due after a failure.
+  beforeEach(() => {
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_test_123",
+      status: "past_due",
+      metadata: {},
+      items: { data: [] },
+    });
+  });
+
   function setupSubLookup(houseId = "house_1", status = "active"): void {
     const subRef = {
       update: mockUpdate.mockResolvedValue(undefined),
@@ -1829,7 +1841,12 @@ describe("invoice.payment_failed", () => {
     const subSnap = buildQuerySnap([
       {
         id: "sub_doc_1",
-        data: () => ({ houseId, stripeSubscriptionId: "sub_test_123", status }),
+        data: () => ({
+          houseId,
+          stripeSubscriptionId: "sub_test_123",
+          status,
+          userId: "admin_1",
+        }),
         ref: subRef,
       },
     ]);
@@ -1857,6 +1874,9 @@ describe("invoice.payment_failed", () => {
       if (name === "houses") {
         return {
           doc: jest.fn().mockReturnValue({ get: houseAdmin.houseDocGet }),
+          where: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
         };
       }
       if (name === "users") {
@@ -1875,7 +1895,7 @@ describe("invoice.payment_failed", () => {
     });
   }
 
-  test("first failure (attempt_count=1): status → past_due", async () => {
+  test("a failure Stripe reports past due: status → past_due", async () => {
     const invoice = makeInvoice({ attempt_count: 1 });
     const event = makeStripeEvent("invoice.payment_failed", invoice);
     mockConstructEvent.mockReturnValue(event);
@@ -1888,7 +1908,13 @@ describe("invoice.payment_failed", () => {
     );
   });
 
-  test("third+ failure (attempt_count >= 3): status → unpaid", async () => {
+  test("a failure Stripe reports unpaid: status → unpaid", async () => {
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_test_123",
+      status: "unpaid",
+      metadata: {},
+      items: { data: [] },
+    });
     const invoice = makeInvoice({ attempt_count: 3 });
     const event = makeStripeEvent("invoice.payment_failed", invoice);
     mockConstructEvent.mockReturnValue(event);
@@ -1945,7 +1971,7 @@ describe("invoice.payment_failed", () => {
     );
   });
 
-  test("admin notification sent on payment failure", async () => {
+  test("operator notification sent on payment failure", async () => {
     const invoice = makeInvoice({ attempt_count: 2 });
     const event = makeStripeEvent("invoice.payment_failed", invoice);
     mockConstructEvent.mockReturnValue(event);

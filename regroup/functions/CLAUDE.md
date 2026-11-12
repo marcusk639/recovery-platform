@@ -134,7 +134,7 @@ Absent flag ⇒ sellable.
 
 ### Server-side entitlement gate (paywall)
 
-`util/entitlement.ts` (`enforceHouseEntitlement`) is the only server-side paywall. `active`/`trialing` grant, `past_due` grants until `guestGraceEndsAt`, and `canceled`/`unpaid`/unknown statuses deny. Phase A: an absent `subscriptionStatus` is still **granted** and logs `entitlement.absent_status`. The kill switch `paywall/config.enabled` fails closed. Gated: `castOxfordVote`, `setOxfordEnabled`, `createInvitation` and claim grants. Payments, claim revocations, `redeemInvitation`, the billing escape hatches and reads are deliberately ungated. Don't "fix" them. The full ladder, the reasons and the testing trap are in `.claude/rules/regroup-paywall.md`, which loads automatically when you work in `regroup/functions/src/`.
+`util/entitlement.ts` (`enforceHouseEntitlement`) is the only server-side paywall. `active`/`trialing` grant, `past_due` grants until `guestGraceEndsAt` (the first failed invoice's `finalized_at` + 7 days, `util/grace.ts`: kept across retries and late delivery, cleared once Stripe says the subscription is live), and `canceled`/`unpaid`/unknown statuses deny. Phase A: an absent `subscriptionStatus` is still **granted** and logs `entitlement.absent_status`. The kill switch `paywall/config.enabled` fails closed. Gated: `castOxfordVote`, `setOxfordEnabled`, `createInvitation` and claim grants. Payments, claim revocations, `redeemInvitation`, the billing escape hatches and reads are deliberately ungated. Don't "fix" them. The full ladder, the reasons and the testing trap are in `.claude/rules/regroup-paywall.md`, which loads automatically when you work in `regroup/functions/src/`.
 
 ### Invitations, admission tickets and house tiers
 

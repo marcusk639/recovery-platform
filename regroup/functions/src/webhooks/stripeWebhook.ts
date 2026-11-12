@@ -945,6 +945,11 @@ async function handleInvoicePaymentSucceeded(
     return;
   }
 
+  // Stripe's current state, not the event's: a success Stripe doesn't confirm
+  // (a later invoice has since failed) must not end grace. A failed read throws,
+  // so the event fails and Stripe redelivers it.
+  const fresh = await stripeClient.subscriptions.retrieve(stripeSubscriptionId);
+
   // Derive period end from the invoice line items (most accurate source in new API)
   const currentPeriodEnd =
     invoice.lines?.data?.[0]?.period?.end != null
@@ -953,7 +958,7 @@ async function handleInvoicePaymentSucceeded(
 
   // W11: include lastUpdatedAt
   await subSnap.docs[0].ref.update({
-    status: "active",
+    status: fresh.status,
     currentPeriodEnd,
     updatedAt: admin.firestore.FieldValue.serverTimestamp(),
     lastUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -964,30 +969,31 @@ async function handleInvoicePaymentSucceeded(
     currentPeriodEnd,
   });
 
-  // B10: propagate active status to all operator houses; clear grace period
-  try {
-    const subscription =
-      await stripeClient.subscriptions.retrieve(stripeSubscriptionId);
-    const operatorUid = await resolveOperatorUid(subscription);
-    if (operatorUid) {
-      await updateHouseSubscriptionStatus(
-        operatorUid,
-        stripeSubscriptionId,
-        "active",
-        "clear",
-      );
-    } else {
-      logger.warn(
-        "invoice.payment_succeeded: could not resolve operator uid for house update",
-        { stripeSubscriptionId },
-      );
-    }
-  } catch (err) {
-    logger.error(
-      "invoice.payment_succeeded: failed to update house subscription status",
-      { stripeSubscriptionId, err: (err as Error).message },
+  // B10: propagate Stripe's status to all operator houses; grace ends only when
+  // Stripe says the subscription is live again.
+  const operatorUid = await resolveOperatorUid(fresh);
+  if (!operatorUid) {
+    logger.warn(
+      "invoice.payment_succeeded: could not resolve operator uid for house update",
+      { stripeSubscriptionId },
     );
+    return;
   }
+  const houseStatus = operatorStatusToHouseStatus(fresh.status);
+  if (houseStatus) {
+    await updateHouseSubscriptionStatus(
+      operatorUid,
+      stripeSubscriptionId,
+      houseStatus,
+      houseStatus === "active" || houseStatus === "trialing" ? "clear" : undefined,
+    );
+  } else {
+    logger.warn("invoice.payment_succeeded: status houses don't know; houses unchanged", {
+      stripeSubscriptionId,
+      status: fresh.status,
+    });
+  }
+  await syncOperatorStatus(operatorUid, fresh);
 }
 
 // ---------------------------------------------------------------------------
@@ -996,6 +1002,7 @@ async function handleInvoicePaymentSucceeded(
 
 async function handleInvoicePaymentFailed(
   invoice: Stripe.Invoice,
+  stripeClient: Stripe,
 ): Promise<void> {
   const stripeSubscriptionId = getSubscriptionIdFromInvoice(invoice);
 
@@ -1020,11 +1027,18 @@ async function handleInvoicePaymentFailed(
     return;
   }
 
-  const attemptCount: number = invoice.attempt_count ?? 1;
-  const newStatus = attemptCount >= 3 ? "unpaid" : "past_due";
-
-  const nextPaymentAttempt: number | null =
-    invoice.next_payment_attempt ?? null;
+  // Stripe's current state, not the event's: a failure Stripe has since
+  // resolved (the retry or a later invoice was paid) changes nothing.
+  const fresh = await stripeClient.subscriptions.retrieve(stripeSubscriptionId);
+  if (fresh.status !== "past_due" && fresh.status !== "unpaid") {
+    logger.info("invoice.payment_failed: already resolved in Stripe", {
+      stripeSubscriptionId,
+      invoiceId: invoice.id,
+      status: fresh.status,
+    });
+    return;
+  }
+  const newStatus = fresh.status;
 
   await subSnap.docs[0].ref.update({
     status: newStatus,
@@ -1033,7 +1047,17 @@ async function handleInvoicePaymentFailed(
   });
 
   const subData = subSnap.docs[0].data() as SubscriptionDoc;
+  const operatorUid = subData.userId || (await resolveOperatorUid(fresh));
+  if (!operatorUid) {
+    logger.warn(
+      "invoice.payment_failed: could not resolve operator uid for house update",
+      { stripeSubscriptionId },
+    );
+    return;
+  }
 
+  const nextPaymentAttempt: number | null =
+    invoice.next_payment_attempt ?? null;
   let notifBody = `Your Regroup subscription payment failed.`;
   if (nextPaymentAttempt != null) {
     const retryDate = new Date(nextPaymentAttempt * 1000).toLocaleDateString();
@@ -1042,30 +1066,23 @@ async function handleInvoicePaymentFailed(
   if (newStatus === "unpaid") {
     notifBody += ` Your subscription is now unpaid. Please update your billing information immediately.`;
   }
+  await sendFcmToUser(operatorUid, "Subscription Payment Failed", notifBody);
 
-  await sendFcmToHouseAdmins(
-    subData.houseId,
-    "Subscription Payment Failed",
-    notifBody,
-  );
-
-  // B10: propagate past_due / unpaid status to all operator houses; grace runs
-  // 7 days from the invoice's finalized_at.
-  if (subData.userId) {
-    await updateHouseSubscriptionStatus(
-      subData.userId,
+  // B10: propagate past_due / unpaid to all operator houses. Grace runs 7 days
+  // from the invoice's finalized_at, which a retry or late delivery can't move.
+  if (newStatus === "past_due" && invoice.status_transitions?.finalized_at == null) {
+    logger.warn("invoice.payment_failed: no finalized_at; grace runs from the invoice's creation", {
       stripeSubscriptionId,
-      newStatus as HouseSubscriptionStatus,
-      { finalizedAt: invoiceFinalizedAt(invoice) },
-    );
-  } else {
-    logger.warn(
-      "invoice.payment_failed: userId missing from subscription doc, skipping house update",
-      {
-        stripeSubscriptionId,
-      },
-    );
+      invoiceId: invoice.id,
+    });
   }
+  await updateHouseSubscriptionStatus(
+    operatorUid,
+    stripeSubscriptionId,
+    newStatus,
+    newStatus === "past_due" ? { finalizedAt: invoiceFinalizedAt(invoice) } : undefined,
+  );
+  await syncOperatorStatus(operatorUid, fresh);
 }
 
 // ---------------------------------------------------------------------------
@@ -1702,7 +1719,10 @@ export const stripeWebhook = onRequest(
           break;
 
         case "invoice.payment_failed":
-          await handleInvoicePaymentFailed(event.data.object as Stripe.Invoice);
+          await handleInvoicePaymentFailed(
+            event.data.object as Stripe.Invoice,
+            getStripe(),
+          );
           break;
 
         case "customer.subscription.deleted":
