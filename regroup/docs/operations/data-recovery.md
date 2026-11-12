@@ -79,3 +79,14 @@ Checkout reads the sales switch on every call, so closing it stops new subscript
 ## Not covered here
 
 Stripe objects can't be restored this way. A canceled subscription can't be reactivated, and live prices can only be archived. The launch design §6.1 covers those.
+
+### Canceling the legacy subscriptions (launch)
+
+A canceled subscription can't be reactivated, so this runs only after the owner confirms the list, and before the backfill (a cancellation's webhook writes `canceled` to the operator's houses, which would overwrite the backfill's value). From `regroup/functions`, with `STRIPE_SECRET_KEY` set to a restricted live key (`rk_live_`, Subscriptions read and write only; revoke it afterwards):
+
+```bash
+npm run legacy:cancel                     # lists the legacy subscriptions and everything it won't touch
+npm run legacy:cancel -- --apply --ids=sub_a,sub_b --record=$HOME/.config/regroup-launch/legacy-cancel.json
+```
+
+It refuses an ID it didn't list, and a record path inside the repo. It writes each subscription's ID, customer, status, items and metadata to the record file (mode 600, never overwritten) before any Stripe write. Each subscription is marked `regroup_launch_cancel: "true"` before it's canceled, so the webhook sends the operator no "canceled" push: the owner's notice explains the change.
