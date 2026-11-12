@@ -1,5 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { isPrimaryOwner } from "../util/houseRoles";
+import { isSalesOpen } from "../util/salesSwitch";
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import isNil from "lodash/isNil";
@@ -153,6 +154,7 @@ async function finishCheckout<U extends { id: string }, M>(
 }
 
 const BILLING_OFF_MESSAGE = "New subscriptions are not available right now";
+const SALES_CLOSED_MESSAGE = "Subscriptions open when the new Regroup app is released";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // createOperatorSubscription
@@ -177,6 +179,10 @@ export const createOperatorSubscription = onCall(
     // path below stays until post-launch cleanup, unreachable from here.
     if (!isTierBillingEnabled()) {
       throw new HttpsError("failed-precondition", BILLING_OFF_MESSAGE);
+    }
+    // Web checkout stays closed until the new app is released (spec §4.1 item 8).
+    if (!(await isSalesOpen())) {
+      throw new HttpsError("failed-precondition", SALES_CLOSED_MESSAGE);
     }
 
     // Resolve the tier config from SUBSCRIPTION_TIERS.
@@ -384,6 +390,9 @@ export const reactivateOperatorSubscription = onCall(
           "failed-precondition",
           "This plan is no longer offered. Choose a plan to subscribe again.",
         );
+      }
+      if (!(await isSalesOpen())) {
+        throw new HttpsError("failed-precondition", SALES_CLOSED_MESSAGE);
       }
       const freshMetadata = await reactivateSubscription(
         storedMetadata.customerId,

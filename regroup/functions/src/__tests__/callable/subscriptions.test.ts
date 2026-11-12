@@ -116,6 +116,11 @@ jest.mock("../../util/email", () => ({
   regroupEmail: "admin@regroup-app.com",
 }));
 
+// The sales-open switch: open here unless a test closes it.
+const mockIsSalesOpen = jest.fn().mockResolvedValue(true);
+jest.mock("../../util/salesSwitch", () => ({
+  isSalesOpen: () => mockIsSalesOpen(),
+}));
 const mockGrantPotentialSuperAdminClaim = jest.fn().mockResolvedValue(true);
 jest.mock("../../util/superAdminClaim", () => ({
   grantPotentialSuperAdminClaim: (...args: any[]) =>
@@ -1536,6 +1541,57 @@ describe("checkout and reactivation refuse the legacy shape", () => {
     await expect(call(reactivateOperatorSubscription, { user: fakeUser })).rejects.toMatchObject({
       code: "failed-precondition",
       message: "New subscriptions are not available right now",
+    });
+    expect(mockReactivateSubscription).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sales-open switch: until the new app is released, no new subscription starts.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("checkout and reactivation wait for sales to open", () => {
+  beforeEach(() => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockIsSalesOpen.mockResolvedValue(false);
+  });
+  afterEach(() => {
+    delete process.env.TIER_BILLING_ENABLED;
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+    mockIsSalesOpen.mockResolvedValue(true);
+  });
+
+  it("checkout refuses while sales are closed, before Stripe is called", async () => {
+    mockGetUser.mockResolvedValue(fakeUser);
+
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+        tier: "starter",
+      }),
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: "Subscriptions open when the new Regroup app is released",
+    });
+    expect(mockInitializeTierCustomer).not.toHaveBeenCalled();
+  });
+
+  it("a canceled tier subscription is not replaced while sales are closed", async () => {
+    mockGetUser.mockResolvedValue({
+      ...fakeUser,
+      subscriptionMetadata: {
+        ...fakeUser.subscriptionMetadata,
+        status: "canceled",
+        houseType: "traditional",
+        tier: "starter",
+      },
+    });
+
+    await expect(call(reactivateOperatorSubscription, { user: fakeUser })).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: "Subscriptions open when the new Regroup app is released",
     });
     expect(mockReactivateSubscription).not.toHaveBeenCalled();
   });
