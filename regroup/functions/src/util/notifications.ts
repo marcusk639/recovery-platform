@@ -30,8 +30,14 @@ export async function sendNotification(
       throw new Error("User is undefined.");
     }
 
+    // The notification block is what the OS shows with the app in the
+    // background (the app's background handler is a no-op, and iOS doesn't
+    // deliver data-only pushes to a backgrounded app). The notifee data is what
+    // the app shows itself in the Android foreground, where FCM shows nothing.
     const result = await admin.messaging(app).sendEachForMulticast({
       tokens: user.messagingToken,
+      notification: { title, body },
+      android: { notification: { channelId: "default" } },
       data: {
         notifee: JSON.stringify({
           body,
