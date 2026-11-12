@@ -17,8 +17,45 @@ test('reused screens use phone type at a desk', async ({ page }) => {
   await expect(name).toBeVisible({ timeout: 20_000 });
   expect(await fontSize(name)).toBeLessThanOrEqual(18);
 
-  await page.goto(RECORD);
+  // The week's summary comes from a server trigger after the seed, so the
+  // breakdown can be missing on the first look.
   const verdict = page.getByText('Requirements not met', { exact: true });
-  await expect(verdict).toBeVisible({ timeout: 20_000 });
+  await expect(async () => {
+    await page.goto(RECORD);
+    await expect(verdict).toBeVisible({ timeout: 5_000 });
+  }).toPass({ timeout: 60_000 });
   expect(await fontSize(verdict)).toBeLessThanOrEqual(18);
+});
+
+const MAIN_LEFT = 160;
+const READABLE = 960;
+const right = (target: Locator) => target.evaluate((el) => el.getBoundingClientRect().right);
+const pageOverflow = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+
+test('reused screens keep a readable width', async ({ page }) => {
+  await signInAs(page, 'manager');
+  await page.goto(`${HOUSE}/activities`);
+  const dispute = page.getByText('DISPUTE', { exact: true }).first();
+  await expect(dispute).toBeVisible({ timeout: 20_000 });
+  expect(await right(dispute)).toBeLessThanOrEqual(MAIN_LEFT + READABLE);
+
+  await page.evaluate(() => (window as any).__portalTest.open('ResidentIntake', { houseId: 'test-house-123' }));
+  const inputs = page.locator('main input');
+  await expect(inputs.first()).toBeVisible({ timeout: 20_000 });
+  for (const width of await inputs.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().width)))
+    expect(width).toBeLessThanOrEqual(READABLE);
+
+  for (const path of [`${RECORD}/notes`, `${HOUSE}/shift-log`]) {
+    await page.goto(path);
+    await expect(page.getByTestId('staff-note-input')).toBeVisible({ timeout: 20_000 });
+    expect(await pageOverflow(page)).toBe(0);
+  }
+});
+
+test("the portal's own pages keep the full width", async ({ page }) => {
+  await signInAs(page, 'manager');
+  const table = page.locator('main table').first();
+  await expect(table).toBeVisible({ timeout: 20_000 });
+  expect(await table.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(1100);
 });

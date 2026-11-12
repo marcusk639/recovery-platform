@@ -21,15 +21,34 @@ export const HOUSE_LIST_ROUTE: string = Routes.HouseList;
 // The phone's StaffNotesFeed with type shift_log, under a route of its own so it can have a URL.
 export const SHIFT_LOG_ROUTE = 'portalShiftLog';
 
+// Pages the portal builds itself. Every other route is a reused phone screen.
+export const PORTAL_PAGE_ROUTES: ReadonlySet<string> = new Set([
+  HOME_ROUTE,
+  NOT_FOUND_ROUTE,
+  Routes.HouseList,
+  Routes.HouseSummary,
+  Routes.GuestList,
+  Routes.GuestOverview,
+]);
+export const isPortalPage = (routeName: string): boolean => PORTAL_PAGE_ROUTES.has(routeName);
+
 // In tab order, from the layout the owner picked.
 export const SECTIONS: Record<Section, { route: string; path: string; label: string }> = {
   summary: { route: Routes.HouseSummary, path: 'houses/:houseId', label: 'Overview' },
   residents: { route: Routes.GuestList, path: 'houses/:houseId/residents', label: 'Residents' },
   beds: { route: Routes.Beds, path: 'houses/:houseId/beds', label: 'Beds' },
-  applications: { route: Routes.ApplicationList, path: 'houses/:houseId/applications', label: 'Applications' },
+  applications: {
+    route: Routes.ApplicationList,
+    path: 'houses/:houseId/applications',
+    label: 'Applications',
+  },
   payments: { route: Routes.PaymentDashboard, path: 'houses/:houseId/payments', label: 'Payments' },
   // The phone has no link to Balance Details; here it's a tab (owner, 2026-11-10).
-  balances: { route: Routes.BalanceDashboard, path: 'houses/:houseId/payments/balances', label: 'Balances' },
+  balances: {
+    route: Routes.BalanceDashboard,
+    path: 'houses/:houseId/payments/balances',
+    label: 'Balances',
+  },
   disputes: { route: Routes.HouseDisputes, path: 'houses/:houseId/disputes', label: 'Disputes' },
   activities: { route: Routes.Activities, path: 'houses/:houseId/activities', label: 'Activities' },
   drugTests: { route: Routes.DrugTesting, path: 'houses/:houseId/drug-tests', label: 'Drug tests' },

@@ -73,3 +73,11 @@ test('documents and the drug-test screens have paths, under their tabs', () => {
   expect(sectionForRoute('route-DrugTestForm')).toBe('drugTests');
   expect(sectionForRoute('route-DrugTestHistory')).toBe('drugTests');
 });
+
+test("the portal's own pages are told apart from reused phone screens", async () => {
+  const { isPortalPage, NOT_FOUND_ROUTE } = await import('../src/app/urls');
+  for (const route of [HOME_ROUTE, NOT_FOUND_ROUTE, 'route-HouseList', 'route-HouseSummary', 'route-GuestList', 'route-GuestOverview'])
+    expect(isPortalPage(route)).toBe(true);
+  for (const route of ['route-Activities', 'route-EditUserInfo', 'route-ResidentIntake', SHIFT_LOG_ROUTE])
+    expect(isPortalPage(route)).toBe(false);
+});

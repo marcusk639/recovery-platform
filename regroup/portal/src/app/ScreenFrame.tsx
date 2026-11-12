@@ -9,20 +9,37 @@ import { FullViewGate } from './FullViewGate';
 import { HouseGate } from './HouseGate';
 import { SubscriptionCheck } from './SubscriptionCheck';
 import { useRoleUnknown } from './useHouseAccess';
+import { isPortalPage } from './urls';
 
 // Wraps the focused screen inside the navigator. Gates above the navigator would
 // unmount it while a house loads, which resets navigation to its first route.
 // Keying the boundary on the route means leaving a crashed screen clears the crash.
 const column = { flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' } as const;
+const READABLE_WIDTH = 960;
+const reused = { ...column, width: '100%', maxWidth: READABLE_WIDTH, overflowX: 'hidden' } as const;
 
-export function ScreenFrame(props: { state: any; routeKey: string; navigation?: any; children: ReactNode }) {
+export function ScreenFrame(props: {
+  state: any;
+  routeKey: string;
+  navigation?: any;
+  children: ReactNode;
+}) {
   const { state, routeKey, children } = props;
   const houseId = houseIdForState(state);
   const guestId = guestIdForState(state);
   const routeName: string = state.routes[state.index]?.name ?? '';
   useLeaveWarning(routeName);
   useConfirmOnRemove(props.navigation, routeName);
-  const boundary = <ErrorBoundary key={routeKey}>{children}</ErrorBoundary>;
+  const caught = <ErrorBoundary key={routeKey}>{children}</ErrorBoundary>;
+  // A phone screen stretched across a desk is hard to read, and its full-width
+  // cards with margins run past the edge, which the phone clips too.
+  const boundary = isPortalPage(routeName) ? (
+    caught
+  ) : (
+    <div data-testid="reused-screen" style={reused}>
+      {caught}
+    </div>
+  );
   const screen = (
     <div data-testid="screen-body" style={column}>
       {/* The role gate always applies in a house. A guestId in the URL's query
@@ -69,7 +86,15 @@ export function ScreenFrame(props: { state: any; routeKey: string; navigation?: 
 function RoleNotice() {
   if (!useRoleUnknown()) return null;
   return (
-    <p data-testid="role-notice" style={{ margin: 0, padding: '8px 16px', background: '#fff4d6', font: '14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+    <p
+      data-testid="role-notice"
+      style={{
+        margin: 0,
+        padding: '8px 16px',
+        background: '#fff4d6',
+        font: '14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+      }}
+    >
       Couldn't confirm your role, so some details are hidden.
     </p>
   );
