@@ -1,5 +1,7 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { isPrimaryOwner } from "../util/houseRoles";
+import { isSalesOpen } from "../util/salesSwitch";
+import { setOperatorHousesStatus } from "../util/operatorHouses";
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import isNil from "lodash/isNil";
@@ -38,7 +40,7 @@ import {
   withinResidentCap,
   totalResidents,
 } from "../util/tierCaps";
-import { isTierAvailableForSale } from "../util/tierPricing";
+import { isTierAvailableForSale, resolveTierPriceId } from "../util/tierPricing";
 import {
   addHousesToSubscription,
   removeHouseFromSubscription,
@@ -152,6 +154,9 @@ async function finishCheckout<U extends { id: string }, M>(
   };
 }
 
+const BILLING_OFF_MESSAGE = "New subscriptions are not available right now";
+const SALES_CLOSED_MESSAGE = "Subscriptions open when the new Regroup app is released";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // createOperatorSubscription
 // ─────────────────────────────────────────────────────────────────────────────
@@ -170,6 +175,15 @@ export const createOperatorSubscription = onCall(
         "invalid-argument",
         "An email address is required to start a subscription",
       );
+    }
+    // No silent fallback to the legacy two-item shape (SUB-003). The legacy
+    // path below stays until post-launch cleanup, unreachable from here.
+    if (!isTierBillingEnabled()) {
+      throw new HttpsError("failed-precondition", BILLING_OFF_MESSAGE);
+    }
+    // Web checkout stays closed until the new app is released (spec §4.1 item 8).
+    if (!(await isSalesOpen())) {
+      throw new HttpsError("failed-precondition", SALES_CLOSED_MESSAGE);
     }
 
     // Resolve the tier config from SUBSCRIPTION_TIERS.
@@ -360,6 +374,7 @@ export const reactivateOperatorSubscription = onCall(
     }
 
     let subscriptionMetadata: typeof storedMetadata;
+    let replacement = false;
     if (status === "cancelling") {
       // Set to cancel at period end but still live — resume in place.
       await uncancelSubscription(storedMetadata.subscriptionId);
@@ -367,12 +382,27 @@ export const reactivateOperatorSubscription = onCall(
     } else if (status === "canceled") {
       // Terminal in Stripe: a canceled subscription cannot be resumed, so a
       // replacement is the only route back. The sole branch allowed to create.
+      // A replacement is a new subscription, so it needs tier billing on, and a
+      // legacy (tier-less) one isn't recreated: the operator picks a plan.
+      if (!isTierBillingEnabled()) {
+        throw new HttpsError("failed-precondition", BILLING_OFF_MESSAGE);
+      }
+      if (!storedMetadata.tier) {
+        throw new HttpsError(
+          "failed-precondition",
+          "This plan is no longer offered. Choose a plan to subscribe again.",
+        );
+      }
+      if (!(await isSalesOpen())) {
+        throw new HttpsError("failed-precondition", SALES_CLOSED_MESSAGE);
+      }
       const freshMetadata = await reactivateSubscription(
         storedMetadata.customerId,
         storedMetadata,
         data.user.id,
       );
-      subscriptionMetadata = { ...freshMetadata, status: "active" };
+      subscriptionMetadata = { ...freshMetadata, status: freshMetadata.status || "pending" };
+      replacement = true;
     } else {
       // past_due, unpaid, or unrecognized. The Stripe subscription still exists
       // in these states, so creating a second one would double-bill.
@@ -383,6 +413,28 @@ export const reactivateOperatorSubscription = onCall(
     }
     logger.info("Subscription reactivated");
     await updateUser(data.user.id!, { subscriptionMetadata });
+    if (replacement) {
+      // The webhooks find a subscription only through its subscriptions doc, and
+      // the replacement's first events can arrive before the record above points
+      // at it, so the doc is seeded and the houses written here, as checkout does.
+      await upsertSubscriptionDoc({
+        houseId: "",
+        stripeCustomerId: subscriptionMetadata.customerId,
+        stripeSubscriptionId: subscriptionMetadata.subscriptionId,
+        status: subscriptionMetadata.status as SubscriptionDoc["status"],
+        currentPeriodEnd: subscriptionMetadata.currentPeriodEnd
+          ? new Date(subscriptionMetadata.currentPeriodEnd).toISOString()
+          : "",
+        // The replacement is created on the stored plan.
+        planId: resolveTierPriceId(
+          storedMetadata.houseType as HouseType,
+          storedMetadata.tier as TierKey,
+        ),
+        guestCount: 0,
+        userId: data.user.id,
+      });
+      await setOperatorHousesStatus(data.user.id!, subscriptionMetadata.status);
+    }
     return { ...data.user, subscriptionMetadata };
   },
 );

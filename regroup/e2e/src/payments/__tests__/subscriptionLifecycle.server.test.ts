@@ -104,18 +104,17 @@ test('SUB-025: dunning exhausted is blocked, and a new card unblocks with no sec
   for (let attempt = 0; attempt < 2; attempt++) {
     await expect(stripe.invoices.pay(invoiceId)).rejects.toMatchObject({ type: 'StripeCardError' });
   }
-  // Stripe raises attempt_count only on its own retry schedule, never for a manual pay, and
-  // the sandbox's schedule can't be driven to its end here. So the third real failure is
-  // delivered as the schedule's last retry carries it, attempt_count 3, the count
-  // handleInvoicePaymentFailed treats as exhausted.
-  const failures = await eventsOfType(stripe, { since, objectId: invoiceId, type: FAILED, count: 3 });
-  const last = failures[failures.length - 1] as unknown as { data: { object: object } };
-  const exhausted: object = { ...last, data: { ...last.data, object: { ...last.data.object, attempt_count: 3 } } };
-  const toDeliver: object[] = [...failures.slice(0, -1), exhausted];
-  for (const event of toDeliver) expect((await deliver(event)).status).toBe(200);
-  // The subscription doc proves the exhausted count was read, whatever happens to houses (#222).
-  expect((await docData(`subscriptions/${op.subscriptionId}`)).status).toBe('unpaid');
-  expect(await houseStatus(house.id)).toBe('unpaid');
+  // Every failure is delivered as Stripe sent it. The status is the one Stripe reports, past
+  // due while it still retries; what follows exhausted dunning (unpaid or canceled) is the
+  // account's retry setting, and the sandbox's schedule can't be driven to its end here. Grace
+  // runs out on its own deadline, so an expired deadline stands in for exhausted dunning.
+  for (const event of await eventsOfType(stripe, { since, objectId: invoiceId, type: FAILED, count: 3 })) {
+    expect((await deliver(event)).status).toBe(200);
+  }
+  expect((await docData(`subscriptions/${op.subscriptionId}`)).status).toBe('past_due');
+  await expired(house.id);
+  expect(await houseStatus(house.id)).toBe('past_due');
+  expect((await callAs(op.uid, 'createHouses', newHouseInput())).errorCode).toBe('failed-precondition');
 
   const card = await stripe.paymentMethods.attach('pm_card_visa', { customer: op.customerId });
   await stripe.invoices.pay(invoiceId, { payment_method: card.id });

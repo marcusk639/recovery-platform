@@ -91,6 +91,8 @@ src/
 
 Oxford houses are never charged this way: their dues are the members' equal expense share (`ees-records`), and `rentSettingsOf` and the rules keep price charging off there. When a house's charging turned on lives in server-only `rentHouseStates/{houseId}`, never on the house doc. `src/rent/chargeResident.ts` is the only writer that adds rent to `rentOwed` (hourly `rentCharges` job, `onGuestWrite`, catch-up). Records live in server-only `rentAccounts` / `rentCharges`. Stop switch: set `config/rentCharges.paused = true` (stops every charge without a deploy); `npm run rent:reverse:dry-run -- --house=ID` / `rent:reverse:apply` reverses by record and refuses unless paused or the house's charging is off. A reversal frees those days to be charged again, so un-pausing (or turning the house's charging back on) re-charges them unless the cause is fixed first.
 
+Sales-open switch: `config/sales.open` (`util/salesSwitch.ts`) decides whether new tier subscriptions can start. Missing, non-boolean or unreadable means closed. `createOperatorSubscription` and the canceled branch of `reactivateOperatorSubscription` read it on every call and refuse while it's closed; `getTierCatalog` reports it as `salesOpen` (cached 60s) with `trialDays`. Closed in production from the backend deploy until launch step 10.5; open on staging and the emulators (the payment suite's `globalSetup` opens it). Set it with `npm run switch:set`.
+
 ### Stripe amounts
 
 All Stripe amounts are in **US cents** (integers). `50000` = $500.00. Convert only at the UI boundary — never inside function logic.
@@ -134,7 +136,7 @@ Absent flag ⇒ sellable.
 
 ### Server-side entitlement gate (paywall)
 
-`util/entitlement.ts` (`enforceHouseEntitlement`) is the only server-side paywall. `active`/`trialing` grant, `past_due` grants until `guestGraceEndsAt`, and `canceled`/`unpaid`/unknown statuses deny. Phase A: an absent `subscriptionStatus` is still **granted** and logs `entitlement.absent_status`. The kill switch `paywall/config.enabled` fails closed. Gated: `castOxfordVote`, `setOxfordEnabled`, `createInvitation` and claim grants. Payments, claim revocations, `redeemInvitation`, the billing escape hatches and reads are deliberately ungated. Don't "fix" them. The full ladder, the reasons and the testing trap are in `.claude/rules/regroup-paywall.md`, which loads automatically when you work in `regroup/functions/src/`.
+`util/entitlement.ts` (`enforceHouseEntitlement`) is the only server-side paywall. `active`/`trialing` grant, `past_due` grants until `guestGraceEndsAt` (the first failed invoice's `finalized_at` + 7 days, `util/grace.ts`: kept across retries and late delivery, anchored only to an invoice that is still open, cleared once Stripe says the subscription is live and when it goes `canceled` or `unpaid`), and `canceled`/`unpaid`/unknown statuses deny. Phase A: an absent `subscriptionStatus` is still **granted** and logs `entitlement.absent_status`. The kill switch `paywall/config.enabled` fails closed. Gated: `castOxfordVote`, `setOxfordEnabled`, `createInvitation` and claim grants. Payments, claim revocations, `redeemInvitation`, the billing escape hatches and reads are deliberately ungated. Don't "fix" them. The full ladder, the reasons and the testing trap are in `.claude/rules/regroup-paywall.md`, which loads automatically when you work in `regroup/functions/src/`.
 
 ### Invitations, admission tickets and house tiers
 
@@ -172,6 +174,10 @@ One order for #141 and #145, the same as `regroup/CLAUDE.md` ("Deploy order (#14
 ### Webhook security
 
 `webhooks/stripeWebhook.ts` uses Stripe signature verification (`stripe.webhooks.constructEvent`). Never process a webhook payload without verifying the signature first.
+
+Subscription events (`customer.subscription.created`/`updated`) re-read the subscription from Stripe and write that state, not the payload's, to the `subscriptions` doc, the operator's houses and `users/{uid}.subscriptionMetadata.status` (`webhooks/subscriptionState.ts`), so a late or out-of-order event can't move it backwards. `cancelling` there means set to cancel at period end. A subscription with no `subscriptions` doc is skipped before any Stripe call.
+
+Subscription events `stripeEvents` handles: `customer.subscription.created`/`updated`/`deleted`/`trial_will_end`, `invoice.payment_succeeded`/`payment_failed`/`payment_action_required`. The live endpoint's event list must include every one. `trial_will_end` and `payment_action_required` only push to the operator (`webhooks/subscriptionNotices.ts`). A subscription whose metadata has `regroup_launch_cancel: "true"` is canceled everywhere with no push: the launch cancellations are explained by the owner's notice.
 
 ### Cross-product access (meetings, referrals)
 

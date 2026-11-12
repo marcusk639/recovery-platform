@@ -1,7 +1,8 @@
 import { onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { STRIPE_SECRET_KEY, SUBSCRIPTION_TIERS, HouseType, TierKey } from '../config';
-import { stripe } from '../api/stripe';
+import { stripe, TRIAL_PERIOD_DAYS } from '../api/stripe';
+import { isSalesOpen } from '../util/salesSwitch';
 import {
   getTier,
   resolveTierPriceId,
@@ -10,6 +11,9 @@ import {
 } from '../util/tierPricing';
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+// The sales-open switch, apart from prices: the catalog is public and
+// unauthenticated, so it isn't read on every call. Checkout reads it uncached.
+const SALES_TTL_MS = 60 * 1000;
 
 const BILLING_INTERVALS: BillingInterval[] = ['month', 'year'];
 
@@ -37,14 +41,22 @@ interface TierCatalogEntry {
   };
 }
 
-export interface TierCatalogResponse {
+interface CatalogPrices {
   currency: 'usd';
   tiers: TierCatalogEntry[];
 }
 
+export interface TierCatalogResponse extends CatalogPrices {
+  /** Free-trial days a new subscription gets (TRIAL_PERIOD_DAYS). */
+  trialDays: number;
+  /** Whether new subscriptions can start (config/sales.open). */
+  salesOpen: boolean;
+}
+
 // Module-scope cache. Cold instances repopulate on their first invocation;
 // TTL keeps warm instances from hitting Stripe on every request.
-let cache: { data: TierCatalogResponse; expiresAt: number } | undefined;
+let cache: { data: CatalogPrices; expiresAt: number } | undefined;
+let salesCache: { open: boolean; expiresAt: number } | undefined;
 
 /**
  * Resolves a single tier/interval price from Stripe. Never throws — a
@@ -90,7 +102,7 @@ async function resolvePrice(
   }
 }
 
-async function buildCatalog(): Promise<TierCatalogResponse> {
+async function buildCatalog(): Promise<CatalogPrices> {
   const tiers: TierCatalogEntry[] = [];
   const houseTypes = Object.keys(SUBSCRIPTION_TIERS) as HouseType[];
   for (const houseType of houseTypes) {
@@ -129,11 +141,12 @@ export const getTierCatalog = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (): Promise<TierCatalogResponse> => {
     const now = Date.now();
-    if (cache && cache.expiresAt > now) {
-      return cache.data;
+    if (!cache || cache.expiresAt <= now) {
+      cache = { data: await buildCatalog(), expiresAt: now + CACHE_TTL_MS };
     }
-    const data = await buildCatalog();
-    cache = { data, expiresAt: now + CACHE_TTL_MS };
-    return data;
+    if (!salesCache || salesCache.expiresAt <= now) {
+      salesCache = { open: await isSalesOpen(), expiresAt: now + SALES_TTL_MS };
+    }
+    return { ...cache.data, trialDays: TRIAL_PERIOD_DAYS, salesOpen: salesCache.open };
   },
 );

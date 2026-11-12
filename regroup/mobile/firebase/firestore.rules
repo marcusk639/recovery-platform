@@ -678,6 +678,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The paywall kill switch: enabled == false lets every house in without a
+    // deploy. The app reads it once signed in; only the server script writes it
+    // (functions/src/scripts/setServerSwitch.ts).
+    match /paywall/config {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     match /complaints/{complaintId} {
       // Confidential: only house admins and the named complainant may read a
       // complaint — not every resident of the house (which would expose

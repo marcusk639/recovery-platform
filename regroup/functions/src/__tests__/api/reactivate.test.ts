@@ -55,4 +55,25 @@ describe("reactivateSubscription", () => {
     expect(fresh.tier).toBe("standard");
     expect(fresh.houseType).toBe("oxford");
   });
+
+  it("records the status Stripe gave the replacement", async () => {
+    process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_std";
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_3",
+      status: "incomplete",
+      trial_end: null,
+      billing_cycle_anchor: 1893456000,
+      items: { data: [{ id: "si_3", plan: { id: "price_oxford_std" } }] },
+    });
+    const meta = Object.assign(new OperatorSubscription(), {
+      tier: "standard",
+      houseType: "oxford",
+      customerId: "cus_3",
+      houses: {},
+    });
+
+    const fresh = await reactivateSubscription("cus_3", meta, "uid_3");
+
+    expect(fresh.status).toBe("incomplete");
+  });
 });
