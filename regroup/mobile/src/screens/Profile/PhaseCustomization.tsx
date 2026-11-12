@@ -258,7 +258,13 @@ const PhaseCustomization: React.FC<Props> = ({ navigation }) => {
         updatedGuest: { id: guest.id, phase: customPhase.name } as Guest,
       });
     } catch (error) {
+      // Stay here and say so: going back looked like a save (#218).
       logException(error);
+      Alert.alert(
+        "Couldn't save the phase",
+        'Check your connection and try again.',
+      );
+      return;
     }
     navigation.goBack();
   }, [customPhase, guest, updateGuestAsync, navigation]);

@@ -61,9 +61,19 @@ jest.mock('../../../context', () => ({
 
 // ─── Auth context mock ────────────────────────────────────────────────────────
 // Default: token has "house:full-edit" role so the settings button renders
+let mockToken: any = { role: { 'house-1': 'admin' }, claims: {} };
 jest.mock('../../../context/auth', () => ({
   AuthConsumer: ({ children }: { children: (ctx: any) => any }) =>
-    children({ token: { role: { 'house-1': 'admin' }, claims: {} } }),
+    children({ token: mockToken }),
+  useRoleToken: () => mockToken,
+}));
+
+// Applications are readable by admins only, so residents mustn't query them (#197).
+const mockUseHouseApplications = jest.fn(
+  (..._args: any[]): any => ({ data: [] }),
+);
+jest.mock('../../../state/queries/applicationQueries', () => ({
+  useHouseApplications: (...args: any[]) => mockUseHouseApplications(...args),
 }));
 
 // ─── Can component mock — always render the "yes" branch by default ───────────
@@ -79,6 +89,14 @@ const mockUseGuests = jest.fn();
 
 jest.mock('../../../state/queries', () => ({
   useGuests: (...args: any[]) => mockUseGuests(...args),
+}));
+
+// This week's per-resident stats feed the health score (#208).
+const mockUseHouseWeekStats = jest.fn(
+  (..._args: any[]): any => ({ stats: {}, isLoading: false, isError: false }),
+);
+jest.mock('../../../state/queries/activityQueries', () => ({
+  useHouseWeekStats: (...args: any[]) => mockUseHouseWeekStats(...args),
 }));
 
 // ─── Component stubs ──────────────────────────────────────────────────────────
@@ -369,6 +387,7 @@ describe('HouseSummary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCanGranted = true;
+    mockToken = { role: { 'house-1': 'admin' }, claims: {} };
     // Default: React Query returns no data (falls back to Redux guests)
     mockUseGuests.mockReturnValue({
       data: null,
@@ -558,6 +577,61 @@ describe('HouseSummary', () => {
       mockCanGranted = false;
       const { queryByTestId } = renderScreen();
       expect(queryByTestId('manage-guests-button')).toBeNull();
+    });
+  });
+
+  // ─── Health score (#208) ─────────────────────────────────────────────────────
+  describe('health score', () => {
+    const ruledHouse = { ...BASE_HOUSE, phases: { 1: { rules: { meetings: 2 } } } };
+    const residents = {
+      g1: { id: 'g1', houseId: 'house-1', phase: 1, status: 'active' },
+      g2: { id: 'g2', houseId: 'house-1', phase: 1, status: 'discharged' },
+    };
+
+    beforeEach(() => {
+      mockUseGuests.mockReturnValue({ data: residents, isLoading: false, error: null });
+    });
+
+    it("shows the score from this week's summaries, for current residents only", () => {
+      mockUseHouseWeekStats.mockReturnValue({
+        stats: {
+          g1: {
+            meetingsAttended: 2,
+            primarySupporterMet: 1,
+            choresCompleted: 0,
+            hoursWorked: 0,
+            medicationTaken: 0,
+          },
+        },
+        isLoading: false,
+        isError: false,
+      });
+      const { getByTestId } = renderScreen({ house: ruledHouse });
+      expect(getByTestId('week-stat-summary').props.accessibilityValue).toEqual({
+        text: '100',
+      });
+      expect(mockUseHouseWeekStats.mock.calls[0][0]).toEqual(['g1']);
+    });
+
+    it('shows a loading indicator, not 0%, while the summaries load', () => {
+      mockUseHouseWeekStats.mockReturnValue({ stats: {}, isLoading: true, isError: false });
+      const { queryByTestId, getByTestId } = renderScreen({ house: ruledHouse });
+      expect(queryByTestId('week-stat-summary')).toBeNull();
+      expect(getByTestId('health-score-loading')).toBeTruthy();
+    });
+  });
+
+  // ─── Applications query (#197) ───────────────────────────────────────────────
+  describe('applications query', () => {
+    it('runs for a house admin', () => {
+      renderScreen();
+      expect(mockUseHouseApplications).toHaveBeenCalledWith('house-1', true);
+    });
+
+    it('does not run for a resident, whom the rules refuse', () => {
+      mockToken = { role: { 'house-1': 'guest' }, claims: {} };
+      renderScreen();
+      expect(mockUseHouseApplications).not.toHaveBeenCalledWith('house-1', true);
     });
   });
 });
