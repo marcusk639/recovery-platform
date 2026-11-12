@@ -132,8 +132,8 @@ describe('exact webhook paths', () => {
 });
 
 describe('platform events', () => {
-  it('match production: 11 events, account.updated only on the Connect endpoint', () => {
-    expect(PLATFORM_EVENTS).toHaveLength(11);
+  it('match production: 14 events, account.updated only on the Connect endpoint', () => {
+    expect(PLATFORM_EVENTS).toHaveLength(14);
     expect(PLATFORM_EVENTS).not.toContain('account.updated');
     expect(CONNECT_EVENTS).toContain('account.updated');
   });

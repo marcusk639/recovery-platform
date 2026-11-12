@@ -4,6 +4,8 @@ module.exports = {
   testEnvironment: "node",
   roots: ["<rootDir>/src"],
   testMatch: ["**/__tests__/**/*.server.test.ts"],
+  // Opens sales on the emulator: checkout refuses while config/sales is missing.
+  globalSetup: "<rootDir>/src/payments/harness/openSales.ts",
   globals: { "ts-jest": { tsconfig: "tsconfig.json" } },
   maxWorkers: 1,
   testTimeout: 180000,

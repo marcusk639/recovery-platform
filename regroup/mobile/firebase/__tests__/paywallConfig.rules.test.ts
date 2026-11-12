@@ -1,11 +1,16 @@
 /**
- * paywall/config is the server's paywall kill switch (#196). The app reads it on
- * cold start (useSubscriptionGate); with no rule the read was refused, so the
- * client could never see the switch turned off. Only the server writes it.
+ * Firestore Security Rules Tests — the paywall kill switch (paywall/config)
  *
- * Requires the Firestore emulator (FIRESTORE_EMULATOR_HOST, set by
- * `firebase emulators:exec`).
+ * The app's paywall reads paywall/config.enabled. With no rule for it the read
+ * is denied and the hook fails closed, so the switch could never let anyone
+ * in. Signed-in users may read it; no client may write it (the server-side
+ * script functions/src/scripts/setServerSwitch.ts does).
+ *
+ * Requires a Firestore emulator: FIRESTORE_EMULATOR_HOST, else 127.0.0.1:8080.
+ *   cd firebase && firebase emulators:exec --only firestore \
+ *     "cd .. && npx jest --config jest.config.rules.js firebase/__tests__/paywallConfig.rules.test.ts"
  */
+
 import {
   initializeTestEnvironment,
   assertSucceeds,
@@ -16,21 +21,22 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
-const [HOST, PORT] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080').split(':');
+const PROJECT_ID = 'demo-paywall-config-rules-test';
+const [FIRESTORE_HOST, FIRESTORE_PORT] = (
+  process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080'
+).split(':');
+const RULES_PATH = path.resolve(__dirname, '../firestore.rules');
 
 let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
-    projectId: 'rats-paywall-config-rules-test',
+    projectId: PROJECT_ID,
     firestore: {
-      rules: fs.readFileSync(path.resolve(__dirname, '../firestore.rules'), 'utf8'),
-      host: HOST,
-      port: Number(PORT),
+      rules: fs.readFileSync(RULES_PATH, 'utf8'),
+      host: FIRESTORE_HOST,
+      port: Number(FIRESTORE_PORT),
     },
-  });
-  await testEnv.withSecurityRulesDisabled(async ctx => {
-    await setDoc(doc(ctx.firestore(), 'paywall/config'), { killSwitchEnabled: false });
   });
 });
 
@@ -38,21 +44,37 @@ afterAll(async () => {
   await testEnv.cleanup();
 });
 
-const signedIn = () => testEnv.authenticatedContext('anyone', {}).firestore();
-const houseAdmin = () =>
-  testEnv.authenticatedContext('admin', { admin: { house123: true } }).firestore();
+beforeEach(async () => {
+  await testEnv.clearFirestore();
+  await testEnv.withSecurityRulesDisabled(async (ctx) => {
+    await setDoc(doc(ctx.firestore(), 'paywall/config'), { enabled: true });
+    await setDoc(doc(ctx.firestore(), 'paywall/other'), { enabled: true });
+  });
+});
 
-describe('paywall/config (#196)', () => {
-  test('any signed-in user can read it', async () => {
-    await assertSucceeds(getDoc(doc(signedIn(), 'paywall/config')));
+describe('paywall/config', () => {
+  it('a signed-in user can read the kill switch', async () => {
+    const db = testEnv.authenticatedContext('anyUser').firestore();
+    await assertSucceeds(getDoc(doc(db, 'paywall/config')));
   });
 
-  test('a signed-out user cannot read it', async () => {
-    await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), 'paywall/config')));
+  it('a signed-out visitor cannot read it', async () => {
+    const db = testEnv.unauthenticatedContext().firestore();
+    await assertFails(getDoc(doc(db, 'paywall/config')));
   });
 
-  test('nobody can write it, not even a house admin', async () => {
-    await assertFails(setDoc(doc(signedIn(), 'paywall/config'), { killSwitchEnabled: true }));
-    await assertFails(setDoc(doc(houseAdmin(), 'paywall/config'), { killSwitchEnabled: true }));
+  it('a signed-in user cannot write it', async () => {
+    const db = testEnv.authenticatedContext('anyUser').firestore();
+    await assertFails(setDoc(doc(db, 'paywall/config'), { enabled: false }));
+  });
+
+  it('a house admin cannot write it either', async () => {
+    const db = testEnv.authenticatedContext('admin', { admin: { house123: true } }).firestore();
+    await assertFails(setDoc(doc(db, 'paywall/config'), { enabled: false }));
+  });
+
+  it('other paywall documents stay closed', async () => {
+    const db = testEnv.authenticatedContext('anyUser').firestore();
+    await assertFails(getDoc(doc(db, 'paywall/other')));
   });
 });

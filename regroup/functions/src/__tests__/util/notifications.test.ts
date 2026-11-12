@@ -121,7 +121,50 @@ describe("sendNotification", () => {
 
     const call = mockSendEachForMulticast.mock.calls[0][0];
     const notifee = JSON.parse(call.data.notifee);
-    expect(notifee.android).toEqual({ channelId: "default" });
+    expect(notifee.android).toEqual({ channelId: "default-channel-id" });
+  });
+
+  // A data-only message shows nothing when the app is in the background: the
+  // app's background handler is a no-op, and iOS doesn't deliver data-only
+  // pushes to a backgrounded app. The notification block lets the OS show it.
+  it("sends a notification block so the OS shows it with the app in the background", async () => {
+    mockGetUser.mockResolvedValue(baseUser);
+    mockSendEachForMulticast.mockResolvedValue({
+      responses: [{ error: null }],
+    });
+
+    await sendNotification({
+      recipientId: "u1",
+      title: "Rent due",
+      body: "Pay by Friday",
+    });
+
+    const call = mockSendEachForMulticast.mock.calls[0][0];
+    expect(call.notification).toEqual({
+      title: "Rent due",
+      body: "Pay by Friday",
+    });
+    expect(call.android).toEqual({
+      notification: { channelId: "default-channel-id" },
+    });
+  });
+
+  it("keeps the notifee data so the app shows it in the Android foreground", async () => {
+    mockGetUser.mockResolvedValue(baseUser);
+    mockSendEachForMulticast.mockResolvedValue({
+      responses: [{ error: null }],
+    });
+
+    await sendNotification({
+      recipientId: "u1",
+      title: "Rent due",
+      body: "Pay by Friday",
+    });
+
+    const call = mockSendEachForMulticast.mock.calls[0][0];
+    expect(JSON.parse(call.data.notifee)).toEqual(
+      expect.objectContaining({ title: "Rent due", body: "Pay by Friday" })
+    );
   });
 
   it("forwards the optional data field into the notifee payload", async () => {
@@ -298,6 +341,26 @@ describe("sendFcmToHouseAdmins", () => {
       expect.objectContaining({
         token: "test-token-123",
         notification: { title: "Test Title", body: "Test Body" },
+      })
+    );
+  });
+
+  it("names the android channel the app creates, not one it lacks", async () => {
+    getDocGetMock("houses", "house-1").mockResolvedValue({
+      exists: true,
+      data: () => ({ adminIds: ["uid-1"] }),
+    });
+    getDocGetMock("users", "uid-1").mockResolvedValue({
+      exists: true,
+      data: () => ({ messagingToken: ["test-token-123"] }),
+    });
+    mockMessagingSend.mockResolvedValue({});
+
+    await sendFcmToHouseAdmins("house-1", "Title", "Body");
+
+    expect(mockMessagingSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        android: { notification: { channelId: "default-channel-id" } },
       })
     );
   });
