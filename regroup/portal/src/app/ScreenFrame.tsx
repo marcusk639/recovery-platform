@@ -10,6 +10,7 @@ import { HouseGate } from './HouseGate';
 import { SubscriptionCheck } from './SubscriptionCheck';
 import { useRoleUnknown } from './useHouseAccess';
 import { isPortalPage } from './urls';
+import { FrameWidth } from './frame-width';
 
 // Wraps the focused screen inside the navigator. Gates above the navigator would
 // unmount it while a house loads, which resets navigation to its first route.
@@ -36,9 +37,9 @@ export function ScreenFrame(props: {
   const boundary = isPortalPage(routeName) ? (
     caught
   ) : (
-    <div data-testid="reused-screen" style={reused}>
+    <FrameWidth testID="reused-screen" style={reused}>
       {caught}
-    </div>
+    </FrameWidth>
   );
   const screen = (
     <div data-testid="screen-body" style={column}>

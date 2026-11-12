@@ -59,3 +59,22 @@ test("the portal's own pages keep the full width", async ({ page }) => {
   await expect(table).toBeVisible({ timeout: 20_000 });
   expect(await table.evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(1100);
 });
+
+// The wrapper around a reused screen, or the whole screen body before there is one.
+const frameRight = (page: import('@playwright/test').Page) =>
+  page.evaluate(() => {
+    const frame = document.querySelector('[data-testid="reused-screen"]') ?? document.querySelector('[data-testid="screen-body"]');
+    return frame!.getBoundingClientRect().right;
+  });
+
+for (const width of [1440, 1024]) {
+  test(`intake's steps fit the screen at ${width}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await signInAs(page, 'manager');
+    await page.evaluate(() => (window as any).__portalTest.open('ResidentIntake', { houseId: 'test-house-123' }));
+    const legal = page.getByText('Legal', { exact: true });
+    await expect(legal).toBeVisible({ timeout: 20_000 });
+    expect(await pageOverflow(page)).toBe(0);
+    expect(await right(legal)).toBeLessThanOrEqual(await frameRight(page));
+  });
+}
