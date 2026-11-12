@@ -1,0 +1,57 @@
+# Android Back with the keyboard up inside a modal: the first Back closes only
+# the keyboard, the second closes the modal. Since targetSdk 36, Android 16's
+# predictive back handed Back to the modal window ahead of the keyboard, so one
+# press closed the modal and lost what was typed (API 36 only; API 34 was fine).
+# Uses the house search filter modal, which a signed-out visitor can open.
+# Android only (iOS has no Back); on iOS the flow only opens the filter.
+# Run (Android): maestro test -e APP_ID=com.regroup.app.e2e.emu maestro/flows/device-modal-back-keyboard.yaml
+appId: ${APP_ID}
+tags:
+  - device
+  - android
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    permissions:
+      location: deny
+      notifications: allow
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "landing-role-guest"
+- tapOn:
+    id: "nav-house-search"
+- extendedWaitUntil:
+    visible:
+      id: "house-search-screen"
+    timeout: 20000
+- tapOn:
+    id: "filter-activities-button"
+- extendedWaitUntil:
+    visible: "Begin typing to see addresses..."
+    timeout: 10000
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - tapOn: "Begin typing to see addresses..."
+      - inputText: "Aus"
+      - extendedWaitUntil:
+          visible: "Aus"
+          timeout: 5000
+      # Back with the keyboard up: the modal and the typed text stay.
+      - pressKey: back
+      - assertVisible: "Aus"
+      - assertVisible: "Gender"
+      # Back again: the modal closes.
+      - pressKey: back
+      - extendedWaitUntil:
+          notVisible: "Gender"
+          timeout: 10000
+      - assertVisible:
+          id: "house-search-screen"

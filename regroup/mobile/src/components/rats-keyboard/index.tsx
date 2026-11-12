@@ -13,6 +13,7 @@ import {
   KEYBOARD_HAS_ROUNDED_CORNERS,
   KeyboardAvoidingView,
   KeyboardAvoidingViewProps,
+  KeyboardController,
   KeyboardProvider,
   KeyboardStickyView,
   KeyboardStickyViewProps,
@@ -99,6 +100,20 @@ export const RatsKeyboardAvoidingView = ({
     keyboardVerticalOffset={keyboardVerticalOffset + KEYBOARD_TOOLBAR_SPACE}
   />
 );
+
+/**
+ * For an Android modal's Back handler: closes the keyboard if it is up and
+ * returns true, so the caller keeps the modal open. Since targetSdk 36,
+ * Android 16's predictive back can hand Back to the modal's window ahead of
+ * the keyboard, which closed the modal and lost what was typed.
+ */
+export const dismissKeyboardOnBack = (): boolean => {
+  if (IOS || !KeyboardController.isVisible()) {
+    return false;
+  }
+  KeyboardController.dismiss();
+  return true;
+};
 
 /** The keyboard's height while it is open, else 0. Re-renders on change. */
 export const useRatsKeyboardHeight = (): number =>
