@@ -16,7 +16,8 @@ function parseNotifications(dumpsys) {
   return blocks.map((block) => {
     const pkg = (block.match(/\bpkg=(\S+)/) || [])[1] || '';
     const channel = (block.match(/Notification\(channel=(\S+)/) || [])[1] || '';
-    const title = (block.match(/android\.title=String \((.*)\)\s*$/m) || [])[1] || '';
+    // FCM posts a String title; react-native-notify-kit a SpannableString.
+    const title = (block.match(/android\.title=(?:Spannable)?String \((.*)\)\s*$/m) || [])[1] || '';
     return { pkg, channel, title };
   });
 }

@@ -40,6 +40,20 @@ describe('check-notifications', () => {
     expect(findPosted(DUMPSYS, 'com.regroup.app.e2e.emu', 'push-e2e-resident-123')).toBeNull();
   });
 
+  // react-native-notify-kit (the app's own foreground notifications) posts
+  // the title as a SpannableString; FCM's own notifications use a String.
+  it('reads a title posted as a SpannableString', () => {
+    const spannable = record('com.regroup.app.e2e.stg', 'default', 'push-e2e-resident-9').replace(
+      'android.title=String (',
+      'android.title=SpannableString (',
+    );
+    expect(findPosted(spannable, 'com.regroup.app.e2e.stg', 'push-e2e-resident-9')).toEqual({
+      pkg: 'com.regroup.app.e2e.stg',
+      channel: 'default',
+      title: 'push-e2e-resident-9',
+    });
+  });
+
   it('returns null when nothing matches', () => {
     expect(findPosted(DUMPSYS, 'com.regroup.app.e2e.stg', 'push-e2e-missing')).toBeNull();
     expect(parseNotifications('')).toEqual([]);
