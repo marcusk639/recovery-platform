@@ -216,7 +216,7 @@ export async function sendFcmToHouseAdmins(
           .send({
             token,
             notification: { title, body },
-            android: { notification: { channelId: "default" } },
+            android: { notification: { channelId: DEFAULT_CHANNEL_ID } },
           })
           .catch((err: Error) => {
             logger.warn("sendFcmToHouseAdmins: token send failed (non-fatal)", {

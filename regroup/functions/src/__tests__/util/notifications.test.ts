@@ -345,6 +345,26 @@ describe("sendFcmToHouseAdmins", () => {
     );
   });
 
+  it("names the android channel the app creates, not one it lacks", async () => {
+    getDocGetMock("houses", "house-1").mockResolvedValue({
+      exists: true,
+      data: () => ({ adminIds: ["uid-1"] }),
+    });
+    getDocGetMock("users", "uid-1").mockResolvedValue({
+      exists: true,
+      data: () => ({ messagingToken: ["test-token-123"] }),
+    });
+    mockMessagingSend.mockResolvedValue({});
+
+    await sendFcmToHouseAdmins("house-1", "Title", "Body");
+
+    expect(mockMessagingSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        android: { notification: { channelId: "default-channel-id" } },
+      })
+    );
+  });
+
   it("deduplicates admin IDs across adminIds, adminId, superAdminIds, superAdminId, and ownerId", async () => {
     getDocGetMock("houses", "house-1").mockResolvedValue({
       exists: true,
