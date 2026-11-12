@@ -152,6 +152,8 @@ async function finishCheckout<U extends { id: string }, M>(
   };
 }
 
+const BILLING_OFF_MESSAGE = "New subscriptions are not available right now";
+
 // ─────────────────────────────────────────────────────────────────────────────
 // createOperatorSubscription
 // ─────────────────────────────────────────────────────────────────────────────
@@ -170,6 +172,11 @@ export const createOperatorSubscription = onCall(
         "invalid-argument",
         "An email address is required to start a subscription",
       );
+    }
+    // No silent fallback to the legacy two-item shape (SUB-003). The legacy
+    // path below stays until post-launch cleanup, unreachable from here.
+    if (!isTierBillingEnabled()) {
+      throw new HttpsError("failed-precondition", BILLING_OFF_MESSAGE);
     }
 
     // Resolve the tier config from SUBSCRIPTION_TIERS.
@@ -367,6 +374,17 @@ export const reactivateOperatorSubscription = onCall(
     } else if (status === "canceled") {
       // Terminal in Stripe: a canceled subscription cannot be resumed, so a
       // replacement is the only route back. The sole branch allowed to create.
+      // A replacement is a new subscription, so it needs tier billing on, and a
+      // legacy (tier-less) one isn't recreated: the operator picks a plan.
+      if (!isTierBillingEnabled()) {
+        throw new HttpsError("failed-precondition", BILLING_OFF_MESSAGE);
+      }
+      if (!storedMetadata.tier) {
+        throw new HttpsError(
+          "failed-precondition",
+          "This plan is no longer offered. Choose a plan to subscribe again.",
+        );
+      }
       const freshMetadata = await reactivateSubscription(
         storedMetadata.customerId,
         storedMetadata,

@@ -203,9 +203,11 @@ beforeEach(() => jest.clearAllMocks());
 describe("createOperatorSubscription", () => {
   beforeEach(() => {
     process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_test_pro_existing";
+    process.env.TIER_BILLING_ENABLED = "true";
   });
   afterEach(() => {
     delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
+    delete process.env.TIER_BILLING_ENABLED;
   });
 
   it("initializes customer with email and payment method", async () => {
@@ -217,7 +219,7 @@ describe("createOperatorSubscription", () => {
       currentPeriodEnd: Date.now() + 1000000,
     };
     mockGetUser.mockResolvedValue(fakeUser);
-    mockInitializeCustomer.mockResolvedValue(fakeMeta);
+    mockInitializeTierCustomer.mockResolvedValue(fakeMeta);
     mockUpdateUser.mockResolvedValue(undefined);
 
     await call(createOperatorSubscription, {
@@ -227,11 +229,13 @@ describe("createOperatorSubscription", () => {
       tier: "professional",
     });
 
-    expect(mockInitializeCustomer).toHaveBeenCalledWith(
+    expect(mockInitializeTierCustomer).toHaveBeenCalledWith(
       fakeUser.email,
       "pm_test",
-      false,
+      "traditional",
+      "professional",
       fakeUser.id,
+      "month",
     );
   });
 
@@ -248,7 +252,7 @@ describe("createOperatorSubscription", () => {
     expect(mockInitializeCustomer).not.toHaveBeenCalled();
   });
 
-  it("reads oxfordEnabled from Firestore, not from request payload", async () => {
+  it("builds the requested plan, never the legacy Oxford shape from Firestore's oxfordEnabled", async () => {
     // Security: billing tier must be server-authoritative (Firestore), not client-supplied.
     const oxfordFirestoreUser = {
       ...fakeUser,
@@ -266,7 +270,7 @@ describe("createOperatorSubscription", () => {
       oxfordEnabled: true,
     };
     mockGetUser.mockResolvedValue(oxfordFirestoreUser);
-    mockInitializeCustomer.mockResolvedValue(fakeMeta);
+    mockInitializeTierCustomer.mockResolvedValue(fakeMeta);
     mockUpdateUser.mockResolvedValue(undefined);
 
     // Request payload does NOT include oxfordEnabled — Firestore is the source of truth.
@@ -277,11 +281,14 @@ describe("createOperatorSubscription", () => {
       tier: "professional",
     });
 
-    expect(mockInitializeCustomer).toHaveBeenCalledWith(
+    expect(mockInitializeCustomer).not.toHaveBeenCalled();
+    expect(mockInitializeTierCustomer).toHaveBeenCalledWith(
       fakeUser.email,
       "pm_oxford",
-      true,
+      "traditional",
+      "professional",
       fakeUser.id,
+      "month",
     );
   });
 
@@ -297,7 +304,7 @@ describe("createOperatorSubscription", () => {
       status: "trialing",
     };
     mockGetUser.mockResolvedValue(fakeUser);
-    mockInitializeCustomer.mockResolvedValue(fakeMeta);
+    mockInitializeTierCustomer.mockResolvedValue(fakeMeta);
     mockUpdateUser.mockResolvedValue(undefined);
 
     await call(createOperatorSubscription, {
@@ -327,7 +334,7 @@ describe("createOperatorSubscription", () => {
       currentPeriodEnd: Date.now() + 1000000,
     };
     mockGetUser.mockResolvedValue(fakeUser);
-    mockInitializeCustomer.mockResolvedValue(fakeMeta);
+    mockInitializeTierCustomer.mockResolvedValue(fakeMeta);
     mockUpdateUser.mockResolvedValue(undefined);
 
     const result = await call(createOperatorSubscription, {
@@ -357,7 +364,7 @@ describe("createOperatorSubscription", () => {
       status: "active",
     };
     mockGetUser.mockResolvedValue(fakeUser);
-    mockInitializeCustomer.mockResolvedValue(fakeMeta);
+    mockInitializeTierCustomer.mockResolvedValue(fakeMeta);
     mockUpdateUser.mockResolvedValue(undefined);
 
     await call(createOperatorSubscription, {
@@ -391,28 +398,21 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
     delete process.env.STRIPE_PRICE_TRAD_STARTER;
   });
 
-  it("grants the claim after a successful legacy subscription and reports it in the response", async () => {
+  it("does not grant the claim when checkout is refused because tier billing is off", async () => {
+    delete process.env.TIER_BILLING_ENABLED;
     mockGetUser.mockResolvedValue(fakeUser);
-    mockInitializeCustomer.mockResolvedValue({
-      customerId: "cus_new",
-      subscriptionId: "sub_new",
-      items: { houseItemId: "si_house", guestItemId: "si_guest" },
-      status: "active",
-    });
-    mockUpdateUser.mockResolvedValue(undefined);
-    mockGrantPotentialSuperAdminClaim.mockResolvedValue(true);
 
-    const result = await call(createOperatorSubscription, {
-      user: fakeUser,
-      paymentMethod: "pm_test",
-      houseType: "traditional",
-      tier: "professional",
-    });
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+        tier: "professional",
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
 
-    expect(mockGrantPotentialSuperAdminClaim).toHaveBeenCalledWith(
-      fakeUser.id,
-    );
-    expect(result).toMatchObject({ claimGranted: true });
+    expect(mockInitializeCustomer).not.toHaveBeenCalled();
+    expect(mockGrantPotentialSuperAdminClaim).not.toHaveBeenCalled();
   });
 
   it("grants the claim after a successful tier-billing subscription and reports it in the response", async () => {
@@ -466,27 +466,26 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
     expect(result.subscriptionMetadata.houses).toEqual(KEPT_HOUSES);
   });
 
-  it("writes a legacy subscription through writeOperatorSubscription", async () => {
+  it("a checkout refused because tier billing is off writes no subscription", async () => {
     delete process.env.TIER_BILLING_ENABLED;
     mockGetUser.mockResolvedValue(fakeUser);
-    mockInitializeCustomer.mockResolvedValue({
-      customerId: "cus_new",
-      subscriptionId: "sub_new",
-      status: "trialing",
-    });
-    await call(createOperatorSubscription, {
-      user: fakeUser,
-      paymentMethod: "pm_test",
-      houseType: "traditional",
-      tier: "professional",
-    });
-    expect(mockWriteOperatorSubscription).toHaveBeenCalledWith(
-      fakeUser.id,
-      expect.objectContaining({ subscriptionId: "sub_new", status: "trialing" }),
-    );
+
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+        tier: "professional",
+      }),
+    ).rejects.toMatchObject({ code: "failed-precondition" });
+
+    expect(mockWriteOperatorSubscription).not.toHaveBeenCalled();
+    expect(mockUpsertSubscriptionDoc).not.toHaveBeenCalled();
   });
 
   it("does not grant a claim when subscription creation is rejected before Stripe is called", async () => {
+    // Tier billing on, so the refusal is the not-for-sale tier, not billing off.
+    process.env.TIER_BILLING_ENABLED = "true";
     mockGetUser.mockResolvedValue(fakeUser);
 
     await expect(
@@ -503,7 +502,8 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
 
   it("does not grant a claim when the Stripe call itself throws", async () => {
     mockGetUser.mockResolvedValue(fakeUser);
-    mockInitializeCustomer.mockRejectedValue(new Error("card_declined"));
+    process.env.TIER_BILLING_ENABLED = "true";
+    mockInitializeTierCustomer.mockRejectedValue(new Error("card_declined"));
 
     await expect(
       call(createOperatorSubscription, {
@@ -519,7 +519,8 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
 
   it("does not fail the callable when the claim grant reports false, and surfaces claimGranted: false", async () => {
     mockGetUser.mockResolvedValue(fakeUser);
-    mockInitializeCustomer.mockResolvedValue({
+    process.env.TIER_BILLING_ENABLED = "true";
+    mockInitializeTierCustomer.mockResolvedValue({
       customerId: "cus_new",
       subscriptionId: "sub_new",
       items: { houseItemId: "si_house", guestItemId: "si_guest" },
@@ -675,50 +676,49 @@ describe("createOperatorSubscription — input validation", () => {
 });
 
 describe("reactivateOperatorSubscription", () => {
-  it("uses Firestore oxfordEnabled for Oxford reactivation billing", async () => {
-    const oxfordFirestoreUser = {
+  it("a canceled legacy Oxford subscription is refused, not recreated", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    mockGetUser.mockResolvedValue({
       ...fakeUser,
       subscriptionMetadata: {
         ...fakeUser.subscriptionMetadata,
         status: "canceled",
         oxfordEnabled: true,
       },
-    };
-    const freshMeta = {
-      subscriptionId: "sub_reactivated",
-      customerId: "cus_fake",
-      items: { houseItemId: "si_new_house", guestItemId: "si_new_guest" },
-      oxfordEnabled: true,
-      status: "active",
-    };
-    mockGetUser.mockResolvedValue(oxfordFirestoreUser);
-    mockReactivateSubscription.mockResolvedValue(freshMeta);
-    mockUpdateUser.mockResolvedValue(undefined);
-
-    const result = await call(reactivateOperatorSubscription, {
-      user: fakeUser,
     });
 
-    expect(mockReactivateSubscription).toHaveBeenCalledWith(
-      oxfordFirestoreUser.subscriptionMetadata.customerId,
-      expect.objectContaining({ oxfordEnabled: true }),
-      fakeUser.id,
-    );
-    expect(result.subscriptionMetadata).toMatchObject({
-      subscriptionId: "sub_reactivated",
-      items: { houseItemId: "si_new_house", guestItemId: "si_new_guest" },
-      status: "active",
-    });
+    try {
+      await expect(
+        call(reactivateOperatorSubscription, { user: fakeUser }),
+      ).rejects.toMatchObject({
+        code: "failed-precondition",
+        message: "This plan is no longer offered. Choose a plan to subscribe again.",
+      });
+    } finally {
+      delete process.env.TIER_BILLING_ENABLED;
+    }
+    expect(mockReactivateSubscription).not.toHaveBeenCalled();
   });
 });
 
 describe("reactivateOperatorSubscription — never creates a duplicate subscription", () => {
+  // A tier operator: a canceled one is replaced on the same plan.
   const userWithStatus = (status: string) => ({
     ...fakeUser,
-    subscriptionMetadata: { ...fakeUser.subscriptionMetadata, status },
+    subscriptionMetadata: {
+      ...fakeUser.subscriptionMetadata,
+      houseType: "traditional",
+      tier: "starter",
+      status,
+    },
+  });
+
+  afterEach(() => {
+    delete process.env.TIER_BILLING_ENABLED;
   });
 
   beforeEach(() => {
+    process.env.TIER_BILLING_ENABLED = "true";
     mockReactivateSubscription.mockReset();
     mockUncancelSubscription.mockReset();
     mockUpdateUser.mockReset();
@@ -959,14 +959,20 @@ describe("createSubscription — tier routing", () => {
 
   beforeEach(() => {
     process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_test_pro_123";
+    process.env.TIER_BILLING_ENABLED = "true";
     mockGetUser.mockResolvedValue(fakeUser);
-    mockInitializeCustomer.mockResolvedValue(fakeMetaBase);
+    mockInitializeTierCustomer.mockResolvedValue({
+      ...fakeMetaBase,
+      houseType: "traditional",
+      tier: "professional",
+    });
     mockUpdateUser.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
     delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
     delete process.env.STRIPE_PRICE_TRAD_STARTER;
+    delete process.env.TIER_BILLING_ENABLED;
   });
 
   it("resolves priceId and persists tier metadata for a valid traditional/professional tier", async () => {
@@ -1420,30 +1426,24 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
     expect(mockInitializeTierCustomer).not.toHaveBeenCalled();
   });
 
-  it("uses the legacy initializeCustomer when the flag is off", async () => {
+  it("refuses, before Stripe, when the flag is off (no legacy fallback)", async () => {
     process.env.TIER_BILLING_ENABLED = "false";
-    process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_pro";
     mockGetUser.mockResolvedValue(fakeUser);
-    mockInitializeCustomer.mockResolvedValue({
-      customerId: "cus_legacy",
-      subscriptionId: "sub_legacy",
-      houses: {},
-      items: { houseItemId: "si_house", guestItemId: "si_guest" },
-      currentPeriodEnd: Date.now() + 1000000,
-      status: "trialing",
-    });
-    mockUpdateUser.mockResolvedValue(undefined);
 
-    await call(createOperatorSubscription, {
-      user: fakeUser,
-      paymentMethod: "pm_test",
-      houseType: "traditional",
-      tier: "professional",
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+        tier: "professional",
+      }),
+    ).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: "New subscriptions are not available right now",
     });
 
-    expect(mockInitializeCustomer).toHaveBeenCalled();
+    expect(mockInitializeCustomer).not.toHaveBeenCalled();
     expect(mockInitializeTierCustomer).not.toHaveBeenCalled();
-    delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
   });
 });
 
@@ -1507,5 +1507,36 @@ describe("post-legacy subscription shape", () => {
 
     expect(result).toBeDefined();
     expect(result.subscriptionMetadata.houses).toHaveProperty("house-new");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// No legacy fallback (SUB-003): with tier billing off, checkout refuses rather
+// than silently creating the legacy two-item shape, and a canceled legacy
+// subscription is not recreated. Returning operators buy a tier at checkout.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("checkout and reactivation refuse the legacy shape", () => {
+  afterEach(() => {
+    delete process.env.TIER_BILLING_ENABLED;
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+  });
+
+  it("a canceled tier subscription is not recreated while tier billing is off", async () => {
+    delete process.env.TIER_BILLING_ENABLED;
+    mockGetUser.mockResolvedValue({
+      ...fakeUser,
+      subscriptionMetadata: {
+        ...fakeUser.subscriptionMetadata,
+        status: "canceled",
+        houseType: "traditional",
+        tier: "starter",
+      },
+    });
+
+    await expect(call(reactivateOperatorSubscription, { user: fakeUser })).rejects.toMatchObject({
+      code: "failed-precondition",
+      message: "New subscriptions are not available right now",
+    });
+    expect(mockReactivateSubscription).not.toHaveBeenCalled();
   });
 });
