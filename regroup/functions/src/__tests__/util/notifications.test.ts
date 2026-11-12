@@ -124,6 +124,47 @@ describe("sendNotification", () => {
     expect(notifee.android).toEqual({ channelId: "default" });
   });
 
+  // A data-only message shows nothing when the app is in the background: the
+  // app's background handler is a no-op, and iOS doesn't deliver data-only
+  // pushes to a backgrounded app. The notification block lets the OS show it.
+  it("sends a notification block so the OS shows it with the app in the background", async () => {
+    mockGetUser.mockResolvedValue(baseUser);
+    mockSendEachForMulticast.mockResolvedValue({
+      responses: [{ error: null }],
+    });
+
+    await sendNotification({
+      recipientId: "u1",
+      title: "Rent due",
+      body: "Pay by Friday",
+    });
+
+    const call = mockSendEachForMulticast.mock.calls[0][0];
+    expect(call.notification).toEqual({
+      title: "Rent due",
+      body: "Pay by Friday",
+    });
+    expect(call.android).toEqual({ notification: { channelId: "default" } });
+  });
+
+  it("keeps the notifee data so the app shows it in the Android foreground", async () => {
+    mockGetUser.mockResolvedValue(baseUser);
+    mockSendEachForMulticast.mockResolvedValue({
+      responses: [{ error: null }],
+    });
+
+    await sendNotification({
+      recipientId: "u1",
+      title: "Rent due",
+      body: "Pay by Friday",
+    });
+
+    const call = mockSendEachForMulticast.mock.calls[0][0];
+    expect(JSON.parse(call.data.notifee)).toEqual(
+      expect.objectContaining({ title: "Rent due", body: "Pay by Friday" })
+    );
+  });
+
   it("forwards the optional data field into the notifee payload", async () => {
     mockGetUser.mockResolvedValue(baseUser);
     mockSendEachForMulticast.mockResolvedValue({
