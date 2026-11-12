@@ -48,9 +48,21 @@ const openScreen = (page: Page, route: string) =>
 
 test('text is translated, not raw keys', async ({ page }) => {
   await signInAs(page, 'manager');
+  await page.evaluate(() => (window as any).__portalTest.open('ResidentIntake', { houseId: 'test-house-123' }));
+  const label = (text: string) => page.getByText(text, { exact: true }).or(page.getByPlaceholder(text, { exact: true }));
+  await expect(label('Drug of Choice')).toBeVisible({ timeout: 20_000 });
+  await expect(label('drugOfChoice')).toHaveCount(0);
+});
+
+test("a resident's edit URL edits no one", async ({ page }) => {
+  await signInAs(page, 'manager');
+  // Like any URL the portal doesn't have, it lands on all houses.
+  await page.goto('/houses/test-house-123/residents/guest-a/edit');
+  await expect(page.locator('main table').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('My Profile', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('APPLY', { exact: true })).toHaveCount(0);
   await openScreen(page, 'EditUserInfo');
-  await expect(page.getByText('Date of Birth', { exact: true })).toBeVisible();
-  await expect(page.getByText('dateOfBirth', { exact: true })).toHaveCount(0);
+  await expect(page.getByRole('alertdialog')).toContainText(/use the Regroup app on your phone/i);
 });
 
 test.describe('failures', () => {
@@ -63,10 +75,11 @@ test.describe('failures', () => {
     await expect(page.locator('#nav-residents')).toBeVisible();
   });
 
-  test('a deferred feature reached from a button fails visibly', async ({ page }) => {
+  // No reused screen gives staff a button into a deferred feature any more, so
+  // the e2e-only hook calls one the way a button would: outside any render.
+  test('a deferred feature, once called, fails visibly', async ({ page }) => {
     await signInAs(page, 'manager');
-    await openScreen(page, 'EditUserInfo');
-    await page.getByText('LIBRARY', { exact: true }).click();
+    await page.evaluate(() => (window as any).__portalTest.callDeferred());
     await expect(page.getByRole('alertdialog')).toContainText(/not available on the web yet/i);
   });
 });

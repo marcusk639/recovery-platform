@@ -62,7 +62,6 @@ export const RESIDENT_ROUTE: string = Routes.GuestOverview;
 export const RESIDENT_ROUTE_PATHS: Record<string, string> = {
   [Routes.GuestOverview]: RECORD_PATH,
   [Routes.GuestInfo]: `${RECORD_PATH}/profile`,
-  [Routes.EditUserInfo]: `${RECORD_PATH}/edit`,
   [Routes.PaymentHistory]: `${RECORD_PATH}/payments`,
   [Routes.MeetingSummary]: `${RECORD_PATH}/meetings`,
   [Routes.WorkSummary]: `${RECORD_PATH}/work`,

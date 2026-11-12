@@ -9,6 +9,8 @@ import { collection, doc, updateDoc } from '../adapter/firebase/firestore';
 import { getDownloadURL, putFile, ref } from '../adapter/firebase/storage';
 import { disputeActivity, resolveDispute } from '@mobile/services/activity';
 import { reopenDispute } from '@mobile/services/reopenDispute';
+// A deferred feature in the bundle, called the way a button would call it.
+import { launchImageLibrary } from 'react-native-image-picker';
 
 // The id the phone's dispute hooks pass: the signed-in user in the store.
 async function storeUserId(): Promise<string> {
@@ -42,6 +44,10 @@ async function attempt(write: (uid: string) => Promise<void>) {
   open: (routeKey: string, params?: object) => {
     store.dispatch(selectGuestById('guest-a'));
     navigationRef.current?.navigate(Routes[routeKey], params);
+  },
+  // Calls a deferred feature outside any render, as a button would.
+  callDeferred: () => {
+    void Promise.resolve().then(() => launchImageLibrary({ mediaType: 'photo' } as never));
   },
   // Opens the e2e-only screen that throws, for the crash-recovery journeys.
   openCrash: () => navigationRef.current?.navigate('portalTestCrash' as never),

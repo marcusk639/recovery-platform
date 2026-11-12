@@ -81,3 +81,9 @@ test("the portal's own pages are told apart from reused phone screens", async ()
   for (const route of ['route-Activities', 'route-EditUserInfo', 'route-ResidentIntake', SHIFT_LOG_ROUTE])
     expect(isPortalPage(route)).toBe(false);
 });
+
+test("the signed-in person's own profile editor has no resident URL", async () => {
+  const { RESIDENT_ROUTE_PATHS } = await import('../src/app/urls');
+  expect(RESIDENT_ROUTE_PATHS['route-EditUserInfo']).toBeUndefined();
+  expect(sectionForRoute('route-EditUserInfo')).toBeNull();
+});

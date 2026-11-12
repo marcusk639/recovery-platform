@@ -20,7 +20,6 @@ import GuestSupporterSummary from '@mobile/screens/GuestSupporterOverview/GuestS
 import GuestWorkSummary from '@mobile/screens/GuestWorkOverview/GuestWorkSummary/GuestWorkSummary';
 import Issues from '@mobile/screens/Issues/Issues';
 import { PaymentHistory } from '@mobile/screens/Payments';
-import EditUserInfoForm from '@mobile/screens/Profile/EditUserInfoForm';
 import UserInfo from '@mobile/screens/Profile/UserInfo';
 import IntakeFormScreen from '@mobile/screens/ResidentIntake/IntakeFormScreen';
 import StaffNotesFeed from '@mobile/screens/StaffNotes/StaffNotesFeed';
@@ -71,10 +70,11 @@ export const Screens = () => (
     <Stack.Screen name={Routes.ResidentIntake} component={IntakeFormScreen} />
     <Stack.Screen name={Routes.GuestOverview} component={ResidentRecord} />
     <Stack.Screen name={Routes.GuestInfo} component={UserInfo} />
-    <Stack.Screen name={Routes.EditUserInfo} component={EditUserInfoForm} />
     {/* A resident's notes by URL carry no type, so a reload would load nothing without this. */}
     <Stack.Screen name={Routes.StaffNotes} component={StaffNotesFeed} initialParams={{ type: 'resident_note' }} />
     <Stack.Screen name={SHIFT_LOG_ROUTE} component={StaffNotesFeed} initialParams={{ type: 'shift_log' }} />
+    {/* EditUserInfo stays unregistered: it edits the signed-in person, not the
+        resident, and the portal has no page for one's own profile. */}
     {/* PhaseCustomization stays unregistered: its save swallows errors, so the
         visible "use the phone" alert is better than a silent failure. */}
     <Stack.Screen name={Routes.BalanceDashboard} component={BalanceDashboard} />
