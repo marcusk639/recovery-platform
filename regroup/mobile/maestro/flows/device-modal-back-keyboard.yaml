@@ -14,7 +14,7 @@ tags:
 - launchApp:
     clearState: true
     permissions:
-      location: deny
+      location: allow
       notifications: allow
     arguments:
       IS_E2E_TEST: "1"
