@@ -15,7 +15,6 @@ const REAL = [
   'react-native-animatable',
   'react-native-popover-view',
   'react-native-collapsible',
-  'react-native-size-matters',
   'react-native-simple-radio-button',
   '@react-native/normalize-colors',
   '@react-native/normalize-color',
@@ -47,6 +46,8 @@ const REPLACE = {
   '@react-native-vector-icons/fontawesome5/static': 'src/adapter/icons/fontawesome5.tsx',
   // The browser's print dialog saves the phone's own HTML as a PDF.
   'react-native-html-to-pdf': 'src/adapter/html-to-pdf.ts',
+  // Scaled against the browser window, phone sizes came out about 1.8 times as big.
+  'react-native-size-matters': 'src/adapter/size-matters.ts',
 };
 
 const DEFERRED = [

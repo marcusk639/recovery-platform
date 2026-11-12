@@ -27,3 +27,6 @@ test('every inert entry has a reason', () => {
 test('react-native-html-to-pdf maps to the print view', () => {
   expect(classify('react-native-html-to-pdf')).toEqual({ kind: 'replace', target: 'src/adapter/html-to-pdf.ts' });
 });
+test('react-native-size-matters maps to the phone-sized frame', () => {
+  expect(classify('react-native-size-matters')).toEqual({ kind: 'replace', target: 'src/adapter/size-matters.ts' });
+});
