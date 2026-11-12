@@ -189,7 +189,9 @@ export const withSplash = <P extends object>(
         getMessaging(),
         async (fcmToken) => {
           const { user, updating } = latest.current.userState;
-          if (!user || updating) {
+          // iOS reports the current token at every launch, not only on rotation;
+          // the server pushes to every stored copy.
+          if (!user || updating || user.messagingToken?.includes(fcmToken)) {
             return;
           }
           const _nextTokens = user.messagingToken
