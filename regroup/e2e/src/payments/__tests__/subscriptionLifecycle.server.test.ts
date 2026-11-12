@@ -112,9 +112,11 @@ test('SUB-025: dunning exhausted is blocked, and a new card unblocks with no sec
     expect((await deliver(event)).status).toBe(200);
   }
   expect((await docData(`subscriptions/${op.subscriptionId}`)).status).toBe('past_due');
+  // In grace the house still works; past the deadline it is blocked.
+  expect((await callAs(op.uid, 'createInvitation', inviteInput(house.id))).errorMessage).toBeUndefined();
   await expired(house.id);
   expect(await houseStatus(house.id)).toBe('past_due');
-  expect((await callAs(op.uid, 'createHouses', newHouseInput())).errorCode).toBe('failed-precondition');
+  expect((await callAs(op.uid, 'createInvitation', inviteInput(house.id))).errorCode).toBe('failed-precondition');
 
   const card = await stripe.paymentMethods.attach('pm_card_visa', { customer: op.customerId });
   await stripe.invoices.pay(invoiceId, { payment_method: card.id });
