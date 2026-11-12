@@ -59,6 +59,23 @@ The safest order: restore into a separate database, compare, then copy back only
 - **Copying back:** write only the affected document IDs back to `(default)` with an Admin SDK script that follows the `functions/src/scripts/` pattern (dry run by default, no PII in logs).
 - **Clean up** the restore database afterwards; it is billed while it exists.
 
+## Server switches
+
+Two Firestore documents change behavior without a deploy. Only the server writes them; set them with the script, from `regroup/functions`, with the dry run first. The script logs which project it targets; check that before `--apply`.
+
+| Switch | Document | What it does |
+| --- | --- | --- |
+| Paywall kill switch | `paywall/config.enabled` | `false` lets every house in, on the server and in the app. Use it to undo a paywall mistake, such as houses wrongly behind "plan required" on launch day. `true` (or no document) enforces the paywall. |
+| Sales open | `config/sales.open` | `true` lets new tier subscriptions start. Anything else, including no document, refuses checkout. Closed in production from the backend deploy until launch step 10.5. |
+
+```bash
+npm run switch:set -- --switch=paywall --value=false            # dry run: prints current and intended
+npm run switch:set -- --switch=paywall --value=false --apply    # writes it, then prints the value read back
+npm run switch:set -- --switch=sales --value=true --apply
+```
+
+Checkout reads the sales switch on every call, so closing it stops new subscriptions at once; the public tier catalog shows the change within a minute. The server reads the paywall switch with a one-minute cache.
+
 ## Not covered here
 
 Stripe objects can't be restored this way. A canceled subscription can't be reactivated, and live prices can only be archived. The launch design §6.1 covers those.
