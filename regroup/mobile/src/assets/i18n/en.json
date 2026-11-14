@@ -113,6 +113,7 @@
       "house.chat": "House Chat",
       "send": "Send",
       "password": "Password",
+      "confirmPassword": "Confirm Password",
       "forgot.password": "Forgot Password",
       "please.enter.email": "Please enter your email address",
       "please.check.email": "Email sent",

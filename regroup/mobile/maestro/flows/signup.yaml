@@ -124,3 +124,13 @@ tags:
     visible:
       id: "new-account-screen|org-setup-screen"
     timeout: 60000
+# The profile must be written too (#182). Landing alone proves nothing: the
+# auth-state listener reaches NewAccount even when createUser threw, which left
+# the Auth account with no users/<uid> doc and lost the form's fields.
+- runScript:
+    file: ../scripts/maestro-js/read-user-by-email.js
+    env:
+      EMAIL: "e2e-signup@rats-e2e.com"
+- assertTrue:
+    condition: ${output.userDocCount === 1 && output.userFirstName === 'Emma' && output.userTermsOfService === true}
+    label: users/<uid> exists with the form's first name and terms acceptance
