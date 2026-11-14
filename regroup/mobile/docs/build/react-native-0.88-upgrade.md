@@ -171,7 +171,11 @@ fixing one is a visible, deliberate test change.
 6. **The integration suite is order-dependent.** `activity.emulator.test.ts` wipes the whole
    emulator (`clearEmulatorData()`) in `beforeEach`, while Jest runs the integration files in
    parallel workers against the same emulator. Results vary between runs. Runs with `--runInBand`
-   are reproducible; Appendix A uses in-band numbers from Task 3 on.
+   are reproducible; Appendix A uses in-band numbers from Task 3 on. _Fixed 2026-11-14:_ `clearEmulatorData`
+   now deletes only the given guest's activities and `{guestId}_` week summaries
+   (`firebase-test-utils.emulator.test.ts` pins it). In band and in three parallel runs the
+   suite gives the same 37 pass, 20 fail, with identical failures; before, parallel runs failed 3–4
+   more tests in `activity.integration` and `weekSummary.integration`.
 
 ## 5. Audits
 
@@ -369,7 +373,7 @@ it, because screens show residents' names, recovery and payment details.
 | Typecheck ratchet      | 126 errors, baseline regenerated (Appendix B)                                                                 |
 | ESLint, changed files  | no new errors (each file compared with its `HEAD` version under the new config)                               |
 | Rules                  | 591 / 591                                                                                                     |
-| Integration            | see Appendix A (order-dependent; measured in-band)                                                            |
+| Integration            | see Appendix A (in band or in parallel since §4 item 6 fix)                                                   |
 | Android release bundle | `react-native bundle --platform android --dev false` builds; it carries the `regroup-e2e-variant=none` marker |
 
 ### Task 4: the Android project
