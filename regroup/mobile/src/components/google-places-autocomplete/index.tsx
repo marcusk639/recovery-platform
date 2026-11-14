@@ -5,6 +5,7 @@ import {
   GooglePlacesAutocompleteRef,
 } from 'react-native-google-places-autocomplete';
 import autocompleteStyles from './styles';
+import { toLegacyPlaceDetail } from './placeDetail';
 import { RatsIcon } from '../rats-icon/rats-icon';
 import { fontSize, normalize } from '../../styles/theme';
 import { TouchableOpacity, Platform, TextInputProps } from 'react-native';
@@ -150,21 +151,25 @@ class RatsGooglePlacesAutocomplete extends Component<
             );
           }
         } // custom description render
-        onPress={onPress}
+        onPress={(data, details) => onPress(data, toLegacyPlaceDetail(details))}
         // Places API (New). The legacy places-backend.googleapis.com service is
         // disabled on the phoenix-cleanhouse project, so the legacy
         // /maps/api/place/* endpoints this library calls by default cannot work.
         //
         // isNewPlacesAPI switches it to POST /v1/places:autocomplete and
-        // GET /v1/places/{id}, and the library maps the new response back to the
-        // legacy shape internally (placePrediction.text.text -> description,
-        // placeId -> place_id, structuredFormat -> structured_formatting), so
-        // onPress still receives GooglePlaceData/GooglePlaceDetail and callers
-        // like rats-search-bar and rats-text-input need no change.
+        // GET /v1/places/{id}. The library maps the new suggestions back to the
+        // legacy shape (placePrediction.text.text -> description, placeId ->
+        // place_id), but not Place Details: toLegacyPlaceDetail (onPress above)
+        // does that, so rats-search-bar and rats-text-input need no change.
         isNewPlacesAPI
         requestUrl={{
           useOnPlatform: 'all',
           url: 'https://places.googleapis.com',
+          // The search is a POST with a JSON body, and the library sets no
+          // Content-Type. React Native on Android refuses to send a body
+          // without one ("Payload is set but no content-type header
+          // specified"), so every search failed there with status 0.
+          headers: { 'Content-Type': 'application/json' },
         }}
         // Field mask for the Place Details call only — the library passes
         // `fields` to GET /v1/places/{id} and not to :autocomplete. Names are
