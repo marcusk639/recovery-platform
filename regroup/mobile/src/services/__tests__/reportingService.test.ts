@@ -2,7 +2,7 @@
  * Reporting Service Tests
  *
  * Tests for getOccupancyReport, getComplianceTrend, getDischargeReport,
- * and the getSundayAnchoredWeekStart utility.
+ * and the getComplianceWeekStart utility.
  */
 
 // Mock Firebase before importing the service.
@@ -32,7 +32,7 @@ jest.mock('../../util/logging', () => ({
 }));
 
 import {
-  getSundayAnchoredWeekStart,
+  getComplianceWeekStart,
   getOccupancyReport,
   getComplianceTrend,
   getDischargeReport,
@@ -95,22 +95,37 @@ function makeWeekSummary(overrides: Partial<WeekSummary> = {}): WeekSummary {
 }
 
 // ---------------------------------------------------------------------------
-// getSundayAnchoredWeekStart
+// getComplianceWeekStart
 // ---------------------------------------------------------------------------
 
-describe('getSundayAnchoredWeekStart', () => {
-  it('returns the Sunday of the week for a Wednesday', () => {
-    // 2026-05-20 is a Wednesday; the Sunday prior is 2026-05-17
-    // Use local-time constructor to avoid UTC midnight shifting in negative-offset zones
-    const result = getSundayAnchoredWeekStart(new Date(2026, 4, 20)); // month 4 = May
-    expect(result).toBe('2026-05-17');
+// Summaries are keyed by the server's weekStartFor: the Monday of the
+// house-local week (functions/src/activities/weekSummaryMath.ts), #249.
+describe('getComplianceWeekStart', () => {
+  it('returns the house-local Monday for a Wednesday', () => {
+    // 2026-05-20 is a Wednesday; its week starts Monday 2026-05-18
+    expect(getComplianceWeekStart(new Date('2026-05-20T16:00:00Z'), 'America/New_York')).toBe(
+      '2026-05-18',
+    );
   });
 
-  it('returns the same Sunday when given a Sunday', () => {
-    // 2026-05-17 is itself a Sunday; use local-time constructor to avoid UTC
-    // midnight shifting the date to Saturday in negative-offset time zones
-    const result = getSundayAnchoredWeekStart(new Date(2026, 4, 17)); // month 4 = May
-    expect(result).toBe('2026-05-17');
+  it('returns the previous Monday for a Sunday, which ends the week', () => {
+    // 2026-05-17 is a Sunday, the last day of the week that began 2026-05-11
+    expect(getComplianceWeekStart(new Date('2026-05-17T16:00:00Z'), 'America/New_York')).toBe(
+      '2026-05-11',
+    );
+  });
+
+  it("uses the house's zone, not the device's, near midnight", () => {
+    // 03:30 UTC on Monday 2026-11-16 is still Sunday evening in New York
+    const at = new Date('2026-11-16T03:30:00Z');
+    expect(getComplianceWeekStart(at, 'America/New_York')).toBe('2026-11-09');
+    expect(getComplianceWeekStart(at, 'Europe/London')).toBe('2026-11-16');
+  });
+
+  it('defaults to America/New_York, as the server does', () => {
+    const at = new Date('2026-11-16T03:30:00Z');
+    expect(getComplianceWeekStart(at)).toBe('2026-11-09');
+    expect(getComplianceWeekStart(at, 'Not/AZone')).toBe('2026-11-09');
   });
 });
 
@@ -173,12 +188,13 @@ describe('getComplianceTrend', () => {
   it('computes chore and meeting rates from returned Firestore docs', async () => {
     const { __mockGet } = require('../../../firebase-setup');
 
-    // Simulate one doc returned: choresCompleted=2, meetingsAttended=3.
-    // startDate must fall in the week the service computes for weeksBack=1
-    // relative to "now" — derive it dynamically so the test can't go stale.
+    // Simulate one doc returned: choresCompleted=2, meetingsAttended=3, keyed
+    // the way the server keys it: this week's Monday (#249). The clock is fixed
+    // to a Wednesday so the literal key can't go stale.
+    jest.useFakeTimers({ now: new Date('2026-11-11T17:00:00Z') });
     const doc1 = makeWeekSummary({
       guestId: 'g1',
-      startDate: getSundayAnchoredWeekStart(new Date()),
+      startDate: '2026-11-09',
       stats: {
         choresCompleted: 2,
         meetingsAttended: 3,
@@ -193,8 +209,10 @@ describe('getComplianceTrend', () => {
     });
 
     // Use weeksBack=1 so we only build one week slice
-    const result = await getComplianceTrend('house-1', ['g1'], 1);
+    const result = await getComplianceTrend('house-1', ['g1'], 1, 'America/New_York');
+    jest.useRealTimers();
     expect(result.weeks).toHaveLength(1);
+    expect(result.weeks[0].weekStart).toBe('2026-11-09');
     // 1 doc met chore threshold out of 1 guest → 100%
     expect(result.weeks[0].choreRate).toBe(1);
     // 1 doc met meeting threshold (≥3) out of 1 guest → 100%
@@ -237,6 +255,55 @@ describe('getComplianceTrend', () => {
     expect(result.weeks).toHaveLength(1);
     expect(result.weeks[0].choreRate).toBe(0);
     expect(result.weeks[0].meetingRate).toBe(0);
+  });
+
+  describe('weeks keyed like the server (#249)', () => {
+    afterEach(() => jest.useRealTimers());
+
+    const summary = (startDate: string) =>
+      makeWeekSummary({
+        guestId: 'g1',
+        startDate,
+        stats: {
+          choresCompleted: 1,
+          meetingsAttended: 3,
+          hoursWorked: 0,
+          medicationTaken: 0,
+          primarySupporterMet: 0,
+        },
+      });
+
+    it('labels the four weeks by their Mondays and counts each Monday-keyed summary', async () => {
+      const { __mockGet } = require('../../../firebase-setup');
+      jest.useFakeTimers({ now: new Date('2026-11-11T17:00:00Z') }); // Wednesday
+      __mockGet.mockResolvedValue({
+        docs: [summary('2026-10-26'), summary('2026-11-09')].map(doc => ({ data: () => doc })),
+      });
+
+      const result = await getComplianceTrend('house-1', ['g1'], 4, 'America/New_York');
+
+      expect(result.weeks.map(w => w.weekStart)).toEqual([
+        '2026-10-19',
+        '2026-10-26',
+        '2026-11-02',
+        '2026-11-09',
+      ]);
+      expect(result.weeks.map(w => w.choreRate)).toEqual([0, 1, 0, 1]);
+      expect(result.weeks.map(w => w.meetingRate)).toEqual([0, 1, 0, 1]);
+    });
+
+    it("picks the week by the house's zone on Sunday night", async () => {
+      const { __mockGet } = require('../../../firebase-setup');
+      // Monday 03:30 UTC is still Sunday 2026-11-15 in New York: the week of the 9th
+      jest.useFakeTimers({ now: new Date('2026-11-16T03:30:00Z') });
+      __mockGet.mockResolvedValue({ docs: [{ data: () => summary('2026-11-09') }] });
+
+      const result = await getComplianceTrend('house-1', ['g1'], 1, 'America/New_York');
+
+      expect(result.weeks).toEqual([
+        { weekStart: '2026-11-09', choreRate: 1, meetingRate: 1, guestCount: 1 },
+      ]);
+    });
   });
 });
 
