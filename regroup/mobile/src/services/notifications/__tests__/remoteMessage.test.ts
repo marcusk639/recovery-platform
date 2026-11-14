@@ -10,6 +10,7 @@ jest.mock('react-native-notify-kit', () => require('react-native-notify-kit/jest
 jest.mock('../channels', () => ({ ensureNotificationChannels: jest.fn() }));
 jest.mock('../../../util/logging', () => ({ logException: jest.fn() }));
 
+import { Platform } from 'react-native';
 import notifee from 'react-native-notify-kit';
 import { ensureNotificationChannels } from '../channels';
 import { logException } from '../../../util/logging';
@@ -85,6 +86,36 @@ describe('displayRemoteMessage', () => {
 
     expect(display).not.toHaveBeenCalled();
     expect(log).toHaveBeenCalledTimes(1);
+  });
+
+  // sendNotification also sends a notification block, for the background.
+  // iOS presents that block in the foreground itself (firebase.json's
+  // messaging_ios_foreground_presentation_options), so a second banner from
+  // here would be a duplicate. Android shows nothing in the foreground.
+  describe('a message that also has a notification block', () => {
+    const both = {
+      data: { notifee: JSON.stringify(PAYLOAD) },
+      notification: { title: PAYLOAD.title, body: PAYLOAD.body },
+    } as RemoteMessage;
+    const os = Platform.OS;
+    afterEach(() => {
+      Platform.OS = os;
+    });
+
+    it('is left to iOS, which presents it in the foreground', async () => {
+      Platform.OS = 'ios';
+      await displayRemoteMessage(both);
+
+      expect(display).not.toHaveBeenCalled();
+      expect(log).not.toHaveBeenCalled();
+    });
+
+    it('is displayed on Android, where FCM shows nothing in the foreground', async () => {
+      Platform.OS = 'android';
+      await displayRemoteMessage(both);
+
+      expect(display).toHaveBeenCalledTimes(1);
+    });
   });
 
   it('ignores a message without a notifee payload', async () => {

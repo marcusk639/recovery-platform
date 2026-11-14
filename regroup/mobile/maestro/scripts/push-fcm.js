@@ -3,9 +3,10 @@
  * Sends real FCM pushes to an e2e test account on staging (regroup-e2e), for
  * push.sh (device pass #160, row 3). The message shapes copy the server's:
  *
- *   resident  sendNotification (functions/src/util/notifications.ts): data only,
- *             a notifee JSON string the app shows itself in the foreground;
- *   admin     sendFcmToHouseAdmins: a notification block on channel `default`;
+ *   resident  sendNotification (functions/src/util/notifications.ts): a
+ *             notification block the OS shows in the background, plus a
+ *             notifee JSON string the app shows itself in the foreground;
+ *   admin     sendFcmToHouseAdmins: a notification block on channel `default-channel-id`;
  *   data      a data-only probe with no title or body.
  *
  *   node maestro/scripts/push-fcm.js wait-token <email> [timeoutSeconds]
@@ -21,18 +22,23 @@ const path = require('path');
 
 const PROJECT = 'regroup-e2e';
 const BODY = 'Device pass push check';
+// What the server sends (functions/src/util/notifications.ts DEFAULT_CHANNEL_ID):
+// the app's "Reminders" channel (services/notifications/channels.ts).
+const CHANNEL_ID = 'default-channel-id';
 
 function buildMessage(kind, token, marker) {
   switch (kind) {
     case 'resident':
       return {
         token,
+        notification: { title: marker, body: BODY },
+        android: { notification: { channelId: CHANNEL_ID } },
         data: {
           notifee: JSON.stringify({
             body: BODY,
             title: marker,
             data: {},
-            android: { channelId: 'default' },
+            android: { channelId: CHANNEL_ID },
           }),
         },
       };
@@ -40,7 +46,7 @@ function buildMessage(kind, token, marker) {
       return {
         token,
         notification: { title: marker, body: BODY },
-        android: { notification: { channelId: 'default' } },
+        android: { notification: { channelId: CHANNEL_ID } },
       };
     case 'data':
       return { token, data: { e2eProbe: marker } };
