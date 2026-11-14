@@ -6,10 +6,10 @@
  * payments, Oxford gates, applications, guest self-edit guards and invitations
  * — had no working runner and were effectively untested.
  *
- * These suites need a live Firestore emulator. Run them through
- * `firebase emulators:exec` so one is guaranteed:
+ * These suites need the Firestore, Storage and Auth emulators. Run them through
+ * `firebase emulators:exec` so they are guaranteed (CI job regroup-mobile-rules):
  *
- *   cd firebase && firebase emulators:exec --only firestore \
+ *   cd firebase && firebase emulators:exec --only firestore,storage,auth --project demo-test \
  *     "cd .. && npx jest --config jest.config.rules.js --no-coverage --forceExit"
  *
  * Deliberately NOT the react-native preset: these tests drive the Firebase web

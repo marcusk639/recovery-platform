@@ -203,6 +203,37 @@ jobs:
       - name: Test
         run: cd regroup/mobile && npm test -- --ci
 
+  # The app's Firestore and Storage security rules (regroup/mobile/firebase).
+  # The unit job above cannot run these: they need the emulators, which
+  # emulators:exec starts from regroup/mobile/firebase/firebase.json, so the
+  # Storage suites test the storage.rules it loads there.
+  regroup-mobile-rules:
+    name: regroup/mobile — Firestore and Storage security rules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: regroup/mobile/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "21"
+      # Same install as the unit job: postinstall runs pod-install, which fails on Linux.
+      - name: Install dependencies
+        run: cd regroup/mobile && npm ci --ignore-scripts && npx patch-package
+      - name: Install firebase-tools
+        run: npm install -g firebase-tools
+      - name: Run security rules tests
+        run: |
+          cd regroup/mobile/firebase
+          firebase emulators:exec --only firestore,storage,auth --project demo-test \
+            "cd .. && npm run test:rules"
+
   regroup-web:
     name: regroup/web — typecheck
     runs-on: ubuntu-latest
