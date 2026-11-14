@@ -130,9 +130,6 @@ test('Escape on the admitted alert closes the form, as OK does', async ({ page }
 });
 
 test('double-submitting intake admits one resident (#217)', async ({ page }) => {
-  // #217, fixed in #231. Expected to fail until that merges in; Playwright fails
-  // this once it passes, so remove the line then.
-  test.fail(true, '#217: fixed in #231');
   await approveIntoIntake(page);
   await fillIntake(page, 'twice@rats-e2e.invalid');
   await page.getByTestId('intake-submit-button').dblclick();

@@ -46,11 +46,6 @@ const EXPECTED_DEFERRED: Record<string, string[]> = {};
 // not the resident.
 const EXPECTED_UNREGISTERED = new Set(['EditUserInfo']);
 
-// Phone defects fixed in #231 (#194: the medication summary crashes; #197: drug test
-// history's query is refused). Expected to fail until #231 merges in; Playwright fails
-// them once they pass, so take them out of this set then.
-const AWAITING_231 = new Set(['MedicationSummary', 'DrugTestHistory']);
-
 const OUT = 'dist/screen-survey.json';
 const rows: object[] = [];
 
@@ -62,7 +57,6 @@ test.afterAll(() => fs.writeFileSync(OUT, JSON.stringify(rows, null, 2)));
 
 for (const [route, params] of SCREENS) {
   test(`survey ${route}`, async ({ page, pageErrors }) => {
-    test.fail(AWAITING_231.has(route), 'fixed in #231');
     await signInAs(page, 'manager');
     // After sign-in, so a read the gate makes at sign-in isn't blamed on every screen.
     const consoleErrors: string[] = [];
