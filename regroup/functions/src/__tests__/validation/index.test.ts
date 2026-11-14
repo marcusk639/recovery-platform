@@ -1,4 +1,4 @@
-jest.mock("firebase-functions/v2/https", () => ({
+jest.mock('firebase-functions/v2/https', () => ({
   HttpsError: class HttpsError extends Error {
     code: string;
     constructor(code: string, message: string) {
@@ -8,78 +8,70 @@ jest.mock("firebase-functions/v2/https", () => ({
   },
 }));
 
-import { z } from "zod";
-import { parseInput, safeReturnUrlSchema } from "../../validation";
-import { HttpsError } from "firebase-functions/v2/https";
+import { z } from 'zod';
+import { parseInput, safeReturnUrlSchema } from '../../validation';
+import { HttpsError } from 'firebase-functions/v2/https';
 
 const schema = z.object({
   name: z.string().min(1),
   age: z.number().int().positive(),
 });
 
-describe("parseInput", () => {
-  it("returns parsed data when input is valid", () => {
-    const result = parseInput(schema, { name: "Alice", age: 30 });
-    expect(result).toEqual({ name: "Alice", age: 30 });
+describe('parseInput', () => {
+  it('returns parsed data when input is valid', () => {
+    const result = parseInput(schema, { name: 'Alice', age: 30 });
+    expect(result).toEqual({ name: 'Alice', age: 30 });
   });
 
-  it("throws HttpsError with invalid-argument code on invalid input", () => {
-    expect(() => parseInput(schema, { name: "", age: 30 })).toThrow(HttpsError);
+  it('throws HttpsError with invalid-argument code on invalid input', () => {
+    expect(() => parseInput(schema, { name: '', age: 30 })).toThrow(HttpsError);
     try {
-      parseInput(schema, { name: "", age: 30 });
+      parseInput(schema, { name: '', age: 30 });
     } catch (err) {
-      expect((err as any).code).toBe("invalid-argument");
+      expect((err as any).code).toBe('invalid-argument');
     }
   });
 
-  it("throws HttpsError when a required field is missing", () => {
-    expect(() => parseInput(schema, { name: "Bob" })).toThrow(HttpsError);
+  it('throws HttpsError when a required field is missing', () => {
+    expect(() => parseInput(schema, { name: 'Bob' })).toThrow(HttpsError);
   });
 
-  it("throws HttpsError when wrong type is supplied", () => {
-    expect(() => parseInput(schema, { name: "Bob", age: "thirty" })).toThrow(
-      HttpsError,
-    );
+  it('throws HttpsError when wrong type is supplied', () => {
+    expect(() => parseInput(schema, { name: 'Bob', age: 'thirty' })).toThrow(HttpsError);
   });
 
-  it("includes a human-readable message from Zod", () => {
+  it('includes a human-readable message from Zod', () => {
     try {
-      parseInput(schema, { name: "", age: 30 });
+      parseInput(schema, { name: '', age: 30 });
     } catch (err) {
       expect((err as any).message).toBeTruthy();
     }
   });
 
-  it("re-throws non-ZodError exceptions unchanged", () => {
+  it('re-throws non-ZodError exceptions unchanged', () => {
     const badSchema = {
       parse: () => {
-        throw new RangeError("unexpected");
+        throw new RangeError('unexpected');
       },
     } as any;
     expect(() => parseInput(badSchema, {})).toThrow(RangeError);
   });
 });
 
-describe("safeReturnUrlSchema", () => {
-  it("accepts URLs on an allowed origin", () => {
-    expect(
-      safeReturnUrlSchema.safeParse("https://regroup-app.com/return").success,
-    ).toBe(true);
-    expect(
-      safeReturnUrlSchema.safeParse("http://localhost:4200/x").success,
-    ).toBe(true);
-  });
-
-  it("rejects URLs on an off-allowlist origin (open-redirect guard)", () => {
-    expect(
-      safeReturnUrlSchema.safeParse("https://evil.example.com/return").success,
-    ).toBe(false);
-  });
-
-  it("rejects javascript: and non-URL values", () => {
-    expect(safeReturnUrlSchema.safeParse("javascript:alert(1)").success).toBe(
-      false,
+describe('safeReturnUrlSchema', () => {
+  it('accepts URLs on an allowed origin', () => {
+    expect(safeReturnUrlSchema.safeParse('https://regroup-app.com/return').success).toBe(true);
+    expect(safeReturnUrlSchema.safeParse('https://phoenix-cleanhouse.web.app/x').success).toBe(
+      true,
     );
-    expect(safeReturnUrlSchema.safeParse("not a url").success).toBe(false);
+  });
+
+  it('rejects URLs on an off-allowlist origin (open-redirect guard)', () => {
+    expect(safeReturnUrlSchema.safeParse('https://evil.example.com/return').success).toBe(false);
+  });
+
+  it('rejects javascript: and non-URL values', () => {
+    expect(safeReturnUrlSchema.safeParse('javascript:alert(1)').success).toBe(false);
+    expect(safeReturnUrlSchema.safeParse('not a url').success).toBe(false);
   });
 });
