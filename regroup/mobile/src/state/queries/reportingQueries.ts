@@ -16,8 +16,8 @@ export const reportingKeys = {
   all: ['reporting'] as const,
   occupancy: (houseId: string) =>
     [...reportingKeys.all, 'occupancy', houseId] as const,
-  compliance: (houseId: string, weeksBack: number) =>
-    [...reportingKeys.all, 'compliance', houseId, weeksBack] as const,
+  compliance: (houseId: string, weeksBack: number, timeZone?: string | null) =>
+    [...reportingKeys.all, 'compliance', houseId, weeksBack, timeZone ?? null] as const,
   discharge: (houseId: string, daysBack: DischargePeriod) =>
     [...reportingKeys.all, 'discharge', houseId, daysBack] as const,
 };
@@ -53,10 +53,11 @@ export const useComplianceTrend = (
   guestIds: string[],
   weeksBack: number = 4,
   enabled: boolean = true,
+  timeZone?: string | null,
 ) => {
   const result = useQuery<ComplianceTrend>({
-    queryKey: reportingKeys.compliance(houseId, weeksBack),
-    queryFn: () => getComplianceTrend(houseId, guestIds, weeksBack),
+    queryKey: reportingKeys.compliance(houseId, weeksBack, timeZone),
+    queryFn: () => getComplianceTrend(houseId, guestIds, weeksBack, timeZone),
     enabled: enabled && !!houseId && guestIds.length > 0,
     staleTime: 60_000,
   });

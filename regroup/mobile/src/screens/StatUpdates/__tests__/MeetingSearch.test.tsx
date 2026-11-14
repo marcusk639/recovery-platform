@@ -158,8 +158,9 @@ jest.mock('../../../components/help-icon', () => {
 
 jest.mock('../../../components/empty-screen', () => {
   const { View, Text, TouchableOpacity } = require('react-native');
-  return ({ message, buttonTitle, onPress }: any) => (
+  return ({ message, buttonTitle, onPress, icon }: any) => (
     <View testID="empty-screen">
+      <Text testID="empty-screen-icon">{icon}</Text>
       <Text testID="empty-screen-message">{message}</Text>
       <TouchableOpacity testID="empty-screen-btn" onPress={onPress}>
         <Text>{buttonTitle}</Text>
@@ -570,6 +571,17 @@ describe('MeetingSearch', () => {
       );
       expect(getByTestId('empty-screen-message').props.children).toBe(
         "Couldn't load meetings. Please try again.",
+      );
+    });
+
+    it('shows a FontAwesome5 icon, not a Material icon name', () => {
+      const { getByTestId } = renderScreen(
+        { meetings: [] },
+        { searchFailed: true },
+      );
+      // RatsIcon renders FontAwesome5; "error-outline" is Material and shows a blank glyph.
+      expect(getByTestId('empty-screen-icon').props.children).toBe(
+        'exclamation-triangle',
       );
     });
 

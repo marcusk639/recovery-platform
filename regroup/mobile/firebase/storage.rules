@@ -138,9 +138,13 @@ service firebase.storage {
     // =========================================================================
     // 8. Documents: houses/{houseId}/documents/{docId} and
     //    houses/{houseId}/guests/{guestId}/documents/{docId}
-    //    Read/write: house admins only, as for the documents collection in
-    //    firestore.rules. Residents have no access. PDFs and images only (the
-    //    picker offers no others); max 25 MB.
+    //    Write (upload, delete): house admins only, as for the documents
+    //    collection in firestore.rules. Residents have no access. PDFs and
+    //    images only (the picker offers no others); max 25 MB.
+    //    Read: nobody. Documents open through getDocumentLink's 15-minute signed
+    //    link, which checks claims live. A client read would let any admin claim
+    //    mint a download-token URL that bypasses the rules and keeps working
+    //    after their access is removed.
     // =========================================================================
     function isValidDocumentWrite() {
       return (request.resource == null)
@@ -150,12 +154,12 @@ service firebase.storage {
     }
 
     match /houses/{houseId}/documents/{docId} {
-      allow read: if isHouseAdmin(houseId);
+      allow read: if false;
       allow write: if isHouseAdmin(houseId) && isValidDocumentWrite();
     }
 
     match /houses/{houseId}/guests/{guestId}/documents/{docId} {
-      allow read: if isHouseAdmin(houseId);
+      allow read: if false;
       allow write: if isHouseAdmin(houseId) && isValidDocumentWrite();
     }
 

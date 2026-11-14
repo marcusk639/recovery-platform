@@ -18,6 +18,8 @@ npm run deploy:batched          # Batched fallback for deploy quotas only
 
 **Deploy** from `regroup/`, building first: `npm --prefix functions ci && npm --prefix functions run build && firebase deploy --only functions`. `package.json` `main` is `lib/index.js`, and the `functions.predeploy` hook in `regroup/firebase.json` runs only `scripts/preflight-billing.js`, never the TypeScript build.
 
+**One-time IAM, per project, before documents can open:** `getDocumentLink` signs a v4 URL with no private key, through the IAM Credentials `signBlob` API, so the functions' runtime account (`<project number>-compute@developer.gserviceaccount.com`) needs `roles/iam.serviceAccountTokenCreator` on itself. Editor doesn't include it. Without it every call fails as `internal` and the app shows "Couldn't open the document". Grant it with `gcloud iam service-accounts add-iam-policy-binding <number>-compute@developer.gserviceaccount.com --member=serviceAccount:<number>-compute@developer.gserviceaccount.com --role=roles/iam.serviceAccountTokenCreator --project <project>`, and keep `iamcredentials.googleapis.com` enabled. Check with `gcloud iam service-accounts get-iam-policy <number>-compute@developer.gserviceaccount.com --project <project>`. On 2026-11-14 `regroup-e2e` had the API enabled but no grant.
+
 **Migration scripts** (each runs `npm run build` first; dry-run is the default, `--apply` writes for the cents migrations):
 
 ```bash

@@ -133,13 +133,8 @@ jest.mock("../../../../util/display", () => ({
   camelCaseToDisplayForm: jest.fn((s: string) => s),
   getTodaysDate: jest.fn(() => "2024-01-01"),
   daysLeft: jest.fn(() => 3),
-  STAT_MAP: {
-    medication: { label: "Medication", icon: "pills" },
-    meeting: { label: "Meetings", icon: "users" },
-    metPrimarySupporter: { label: "Sponsor", icon: "user" },
-    hoursWorked: { label: "Work", icon: "briefcase" },
-    choreCompleted: { label: "Chores", icon: "home" },
-  },
+  // The real map: a mocked one once hid that "medication" had no entry (#194).
+  STAT_MAP: jest.requireActual("../../../../util/display").STAT_MAP,
 }));
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────

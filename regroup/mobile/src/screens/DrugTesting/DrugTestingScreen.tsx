@@ -25,7 +25,10 @@ function DrugTestRow({ test }: { test: DrugTest }) {
     <TouchableOpacity
       style={styles.row}
       onPress={() =>
-        navigation.navigate(Routes.DrugTestHistory, { guestId: test.guestId })
+        navigation.navigate(Routes.DrugTestHistory, {
+          guestId: test.guestId,
+          houseId: test.houseId,
+        })
       }>
       <View style={styles.rowLeft}>
         <RatsText

@@ -93,14 +93,16 @@ describe('history queries', () => {
   });
 
   it('lists a guest’s tests newest first with the default limit', async () => {
-    const tests = await getDrugTestsForGuest('g1');
+    const tests = await getDrugTestsForGuest('h1', 'g1');
 
     expect(tests.map((t) => t.testDate)).toEqual(['2026-10-05', '2026-10-01', '2026-05-01']);
+    // houseId first: the rules only allow a list the house's admins can read (#197).
     expect(getOpLog()).toEqual([
       {
         op: 'getDocs',
         path: 'drug-tests',
         constraints: [
+          ['where', 'houseId', '==', 'h1'],
           ['where', 'guestId', '==', 'g1'],
           ['orderBy', 'testDate', 'desc'],
           ['limit', 50],
@@ -132,7 +134,7 @@ describe('history queries', () => {
   });
 
   it('counts positive or refused tests since the cutoff (ISO string compare)', async () => {
-    expect(await getPositiveTestCount('g1')).toBe(1);
+    expect(await getPositiveTestCount('h1', 'g1')).toBe(1);
 
     const since = new Date(NOW);
     since.setDate(since.getDate() - 90);
@@ -141,6 +143,7 @@ describe('history queries', () => {
         op: 'getDocs',
         path: 'drug-tests',
         constraints: [
+          ['where', 'houseId', '==', 'h1'],
           ['where', 'guestId', '==', 'g1'],
           ['where', 'result', 'in', ['positive', 'refused']],
           ['where', 'testDate', '>=', since.toISOString()],
@@ -151,7 +154,7 @@ describe('history queries', () => {
 
   it('wraps a guest query failure', async () => {
     failNext('getDocs', new Error('unavailable'), 'drug-tests');
-    await expect(getDrugTestsForGuest('g1')).rejects.toThrow('Failed to fetch drug test history');
+    await expect(getDrugTestsForGuest('h1', 'g1')).rejects.toThrow('Failed to fetch drug test history');
   });
 
   it('wraps a house query failure', async () => {
@@ -161,6 +164,6 @@ describe('history queries', () => {
 
   it('wraps a count query failure', async () => {
     failNext('getDocs', new Error('unavailable'), 'drug-tests');
-    await expect(getPositiveTestCount('g1')).rejects.toThrow('Failed to count positive tests');
+    await expect(getPositiveTestCount('h1', 'g1')).rejects.toThrow('Failed to count positive tests');
   });
 });
