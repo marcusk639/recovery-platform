@@ -2,6 +2,8 @@ import { Dispute, DisputeChallenge } from '../entities/Dispute';
 import { cloneDeep, each, filter, find, map, some, sortBy } from 'lodash';
 import { House, HouseActionItems, HouseHealth } from '../entities/House';
 import { Admins, Guests } from '../types';
+import { Guest } from '../entities/Guest';
+import { WeekStats } from '../entities/WeekSummary';
 import { getOverallPercentage } from './guest';
 import { getTodaysDate } from './display';
 import { Phases, PhaseConfiguration } from '../entities/Phase';
@@ -139,15 +141,30 @@ export const houseGuestsAreCached = (
   });
 };
 
-export const getHousePercentage = (house: House, guests: Guests) => {
-  let runningTotal = 0;
-  let count = 0;
-  each(guests, guest => {
-    count++;
-    runningTotal += getOverallPercentage(guest, house, getTodaysDate());
-  });
-  return count > 0 ? Math.ceil(runningTotal / count) : 0;
+/**
+ * The house health score: the average of current residents' scores this week.
+ * A resident with no week summary yet scores 0. Residents who have left, and
+ * residents whose phase has no rules (getOverallPercentage scores them 100),
+ * are left out. The operator portal scores houses the same way.
+ */
+export const getHousePercentage = (
+  house: House,
+  guests: Guests,
+  weekStats: Record<string, WeekStats | undefined>,
+) => {
+  const today = getTodaysDate();
+  const scores = filter(guests, guest => isScoredResident(guest, house)).map(
+    guest =>
+      getOverallPercentage(guest, house, today, undefined, weekStats[guest.id]),
+  );
+  if (scores.length === 0) return 0;
+  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
 };
+
+export const isScoredResident = (guest: Guest, house: House) =>
+  guest.status !== 'discharged' &&
+  guest.status !== 'archived' &&
+  !!house.phases?.[guest.phase]?.rules;
 
 export const getHouseActionItems = (house: House) => {
   const actionItems: { [key: string]: any } = {};

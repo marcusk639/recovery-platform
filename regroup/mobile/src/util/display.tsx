@@ -84,6 +84,12 @@ export const STAT_MAP: StatMap = {
     color: color.cobalt,
     activityLabel: '',
   },
+  medication: {
+    icon: 'pills',
+    label: 'Medications',
+    color: color.cobalt,
+    activityLabel: 'Medication taken',
+  },
   metPrimarySupporter: {
     icon: 'handshake',
     label: 'Sponsor',

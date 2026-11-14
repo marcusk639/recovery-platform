@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   TextInput,
@@ -79,6 +79,9 @@ const IntakeFormScreen = () => {
   const { mutateAsync: createGuest, isPending } = useCreateGuest();
   const [step, setStep] = useState(0);
   const [values, setValues] = useState<IntakeFormValues>(INITIAL_VALUES);
+  // isPending only disables Submit after a re-render, so a quick second click
+  // could admit the same person twice (#217). The ref is set synchronously.
+  const submittingRef = useRef(false);
   const houseId = route.params?.houseId ?? '';
 
   const updateField = (field: keyof IntakeFormValues, value: string) => {
@@ -116,10 +119,12 @@ const IntakeFormScreen = () => {
   };
 
   const handleSubmit = async () => {
+    if (submittingRef.current) return;
     if (!houseId) {
       Alert.alert('Error', 'No house selected. Please try again.');
       return;
     }
+    submittingRef.current = true;
     try {
       const guest = new Guest();
       guest.houseId = houseId;
@@ -162,6 +167,9 @@ const IntakeFormScreen = () => {
         { text: 'OK', onPress: () => navigation.goBack() },
       ]);
     } catch (error) {
+      // Only a failure frees Submit: after a success the screen is leaving, and
+      // a press behind the success alert would admit the person again.
+      submittingRef.current = false;
       logException(error);
       Alert.alert('Error', 'Failed to create resident. Please try again.');
     }
