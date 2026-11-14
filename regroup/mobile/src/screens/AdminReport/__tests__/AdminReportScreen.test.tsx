@@ -200,6 +200,20 @@ describe('AdminReportScreen', () => {
     );
   });
 
+  it("asks for the compliance trend in the house's time zone", () => {
+    setupMocks({
+      useSelectedHouse: { house: { maximumCapacity: 8, timezone: 'America/Chicago' } },
+    });
+    render(<AdminReportScreen navigation={mockNavigation} />);
+    expect(useComplianceTrend).toHaveBeenCalledWith(
+      'house-1',
+      ['g1', 'g2'],
+      4,
+      true,
+      'America/Chicago',
+    );
+  });
+
   it('shows "no compliance data" text when compliance.weeks is empty', () => {
     setupMocks({ compliance: { weeks: [] } });
     const { getByText } = render(
