@@ -16,9 +16,16 @@ jest.mock('firebase-functions/params', () => ({
 const mockPricesRetrieve = jest.fn();
 
 jest.mock('../../api/stripe', () => ({
+  // The real constant: the catalog must report what checkout actually grants.
+  TRIAL_PERIOD_DAYS: jest.requireActual('../../api/stripe').TRIAL_PERIOD_DAYS,
   stripe: {
     prices: { retrieve: (...args: any[]) => mockPricesRetrieve(...args) },
   },
+}));
+
+const mockIsSalesOpen = jest.fn();
+jest.mock('../../util/salesSwitch', () => ({
+  isSalesOpen: () => mockIsSalesOpen(),
 }));
 
 // All 12 price env vars the real SUBSCRIPTION_TIERS config reads from
@@ -68,7 +75,7 @@ beforeEach(() => {
   mockPricesRetrieve.mockImplementation(async (priceId: string) => ({
     id: priceId,
     unit_amount: 1234,
-  }));
+  }));  mockIsSalesOpen.mockResolvedValue(true);
 });
 
 afterAll(() => {
@@ -165,5 +172,33 @@ describe('getTierCatalog', () => {
     expect(callsAfterFirst).toBeGreaterThan(0);
     await call(fn);
     expect(mockPricesRetrieve.mock.calls.length).toBe(callsAfterFirst);
+  });
+});
+
+describe('getTierCatalog: trial length and the sales-open switch', () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it('reports the trial length checkout grants', async () => {
+    const result = await call(loadGetTierCatalog());
+    expect(result.trialDays).toBe(7);
+  });
+
+  it('reports the switch, re-reading it after 60 seconds while prices stay cached for the hour', async () => {
+    setAllPriceEnvVars();
+    const getTierCatalog = loadGetTierCatalog();
+    const start = 1_767_225_600_000;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+
+    mockIsSalesOpen.mockResolvedValue(true);
+    expect((await call(getTierCatalog)).salesOpen).toBe(true);
+    const stripeCalls = mockPricesRetrieve.mock.calls.length;
+
+    mockIsSalesOpen.mockResolvedValue(false);
+    now.mockReturnValue(start + 59_000);
+    expect((await call(getTierCatalog)).salesOpen).toBe(true);
+
+    now.mockReturnValue(start + 61_000);
+    expect((await call(getTierCatalog)).salesOpen).toBe(false);
+    expect(mockPricesRetrieve.mock.calls.length).toBe(stripeCalls);
   });
 });

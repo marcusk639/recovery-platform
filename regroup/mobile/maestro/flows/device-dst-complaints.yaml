@@ -1,0 +1,72 @@
+# Device pass (#160) row 8: a DST boundary under Hermes Intl. The Complaints
+# screen lists every complaint in the house doc, with no date window, and shows
+# createdAt as "EEEE, MMMM do yyyy hh:mm a" in the device's zone
+# (util/display.tsx getDateAndTime, date-fns-tz formatInTimeZone). The script
+# writes four complaints dated 90 minutes before and after the host zone's last
+# two DST changes and computes each one's text on the host; the simulator and
+# the emulator use the host's zone, so iOS and Android must both show exactly
+# it. A device applying one offset all year shows a time an hour off. The
+# complaints are removed when the flow ends, pass or fail.
+# Persona: the manager of test-house-123. Needs a host zone with DST.
+# Run: maestro/scripts/run-flows.sh device-dst-complaints
+appId: ${APP_ID}
+tags:
+  - device
+  - dates
+onFlowComplete:
+  - runScript:
+      file: ../scripts/maestro-js/dst-complaints.js
+      env:
+        ACTION: remove
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runScript:
+    file: ../scripts/maestro-js/dst-complaints.js
+    env:
+      ACTION: add
+- assertTrue:
+    condition: ${output.dstFound}
+    label: the host zone changed its UTC offset twice in the last 400 days
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+# The Complaints section has no testID, and iOS merges its labels into one
+# element (", Complaints, 4 complaints, 4"), so match the count line.
+- scrollUntilVisible:
+    element:
+      text: ".*[0-9]+ complaints?.*"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    text: ".*[0-9]+ complaints?.*"
+# iOS can merge a card's labels, so match each time inside its element's text.
+# Newest first: the second instant of each pair is listed above the first.
+- scrollUntilVisible:
+    element:
+      text: ".*${output.expected2}.*"
+    direction: DOWN
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: ".*${output.expected1}.*"
+    direction: DOWN
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: ".*${output.expected4}.*"
+    direction: DOWN
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: ".*${output.expected3}.*"
+    direction: DOWN
+    timeout: 20000
+- runFlow:
+    file: ../subflows/logout.yaml

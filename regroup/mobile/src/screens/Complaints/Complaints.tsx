@@ -34,6 +34,7 @@ import { useAppSelector } from '../../state/store';
 import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 import { useGuests } from '../../state/queries/guestQueries';
 import { useUpdateHouse } from '../../state/queries/houseQueries';
+import { logException } from '../../util/logging';
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -87,23 +88,26 @@ const ComplaintScreen: React.FC<Props> = ({ navigation }) => {
           {
             text: 'Continue',
             onPress: async () => {
-              // Remove complaint from house.complaints object
+              // Residents add complaints only to the house's map, so that is
+              // the only copy to remove (the rules refuse deleting a missing
+              // complaints/{id} record).
               const updatedComplaints = { ...house.complaints };
               delete updatedComplaints[complaint.id];
-
-              await updateHouseMutation.mutateAsync({
-                houseId: house.id,
-                values: {
-                  complaints: updatedComplaints,
-                },
-              });
-
-              notify(
-                'Complaint Removed',
-                'Complaint was successfully removed',
-                [],
-                'succeed',
-              );
+              try {
+                await updateHouseMutation.mutateAsync({
+                  houseId: house.id,
+                  values: { complaints: updatedComplaints },
+                });
+                notify(
+                  'Complaint Removed',
+                  'Complaint was successfully removed',
+                  [],
+                  'succeed',
+                );
+              } catch (err) {
+                logException(err);
+                notify('Removal Failed', 'Failed to remove complaint', [], 'fail');
+              }
             },
           },
         ],

@@ -21,8 +21,23 @@ tags:
     visible:
       id: "initial-landing-screen"
     timeout: 30000
-- tapOn:
-    id: "sign-in-button"
+# On a cold launch the Sign In tap was twice delivered to the button with no
+# navigation (API 36, 2026-11-11; not reproduced since), so tap again until the
+# login screen shows. The tap is optional: mid-transition the button is gone.
+- repeat:
+    while:
+      notVisible:
+        id: "login-screen"
+    times: 3
+    commands:
+      - tapOn:
+          id: "sign-in-button"
+          optional: true
+      - extendedWaitUntil:
+          visible:
+            id: "login-screen"
+          timeout: 8000
+          optional: true
 # Wait out the screen transition first: typed into too early, the email is lost.
 - extendedWaitUntil:
     visible:

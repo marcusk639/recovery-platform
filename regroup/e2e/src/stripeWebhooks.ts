@@ -11,8 +11,11 @@ export const PLATFORM_EVENTS = [
   'charge.refund.updated',
   'invoice.payment_succeeded',
   'invoice.payment_failed',
+  'invoice.payment_action_required',
+  'customer.subscription.created',
   'customer.subscription.deleted',
   'customer.subscription.updated',
+  'customer.subscription.trial_will_end',
   'payout.failed',
 ] as Stripe.WebhookEndpointCreateParams.EnabledEvent[];
 

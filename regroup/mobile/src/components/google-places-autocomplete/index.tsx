@@ -36,7 +36,8 @@ export interface RatsGooglePlacesAutocompleteProps {
   onPress: (data: GooglePlaceData, details: GooglePlaceDetail | null) => void;
   rightButtonPress?: () => void;
   renderDescription?: (row: DescriptionRow) => string;
-  listViewDisplayed: boolean;
+  /** Ignored: the library shows and hides the list itself (see render). */
+  listViewDisplayed?: boolean;
   placeholder?: string;
   textInputProps?: TextInputProps;
   setRef: (ref: GooglePlacesAutocompleteRef) => void;
@@ -46,8 +47,9 @@ export interface RatsGooglePlacesAutocompleteProps {
   [key: string]: any;
 }
 
-class State {
-  listViewDisplayed: boolean = false;
+interface State {
+  /** The field has been focused at least once. */
+  opened: boolean;
 }
 
 class RatsGooglePlacesAutocomplete extends Component<
@@ -55,14 +57,20 @@ class RatsGooglePlacesAutocomplete extends Component<
   State
 > {
   googlePlacesRef: any;
-  state = new State();
+  state: State = { opened: false };
+
+  onFocus: NonNullable<TextInputProps['onFocus']> = event => {
+    if (!this.state.opened) {
+      this.setState({ opened: true });
+    }
+    this.props.textInputProps?.onFocus?.(event);
+  };
 
   onRightButtonPress = () => {
     this.googlePlacesRef.setAddressText('');
     if (this.props.rightButtonPress) {
       this.props.rightButtonPress();
     }
-    this.setState({ listViewDisplayed: false });
   };
 
   renderRightButton = (): React.JSX.Element => {
@@ -88,9 +96,6 @@ class RatsGooglePlacesAutocomplete extends Component<
       </TouchableOpacity>
     );
   };
-
-  isListViewDisplayed = () =>
-    this.props.listViewDisplayed && this.state.listViewDisplayed;
 
   setGooglePlacesRef = (ref: GooglePlacesAutocompleteRef) => {
     this.googlePlacesRef = ref;
@@ -120,7 +125,6 @@ class RatsGooglePlacesAutocomplete extends Component<
         placeholder={placeholder || 'Search...'}
         keyboardShouldPersistTaps="handled"
         minLength={2} // minimum length of text to search
-        listViewDisplayed={this.isListViewDisplayed()} // true/false/undefined
         fetchDetails={true}
         currentLocation={true}
         suppressDefaultStyles={suppressDefaultStyles ? true : false}
@@ -131,6 +135,7 @@ class RatsGooglePlacesAutocomplete extends Component<
           returnKeyType: 'search',
           keyboardAppearance: 'light',
           ...(textInputProps || {}),
+          onFocus: this.onFocus,
         }}
         renderRightButton={this.renderRightButton}
         renderDescription={
@@ -182,6 +187,11 @@ class RatsGooglePlacesAutocomplete extends Component<
         }}
         ref={this.setGooglePlacesRef}
         {...restProps}
+        // Closed until the field is first focused, then 'auto': the library
+        // opens the list on focus and while there are suggestions, and closes
+        // it after a pick or on blur. Since 2.6.5 a boolean controls the list
+        // outright, and false (all this wrapper used to pass) hid it for good.
+        listViewDisplayed={this.state.opened ? 'auto' : false}
       />
       // </View>
     );

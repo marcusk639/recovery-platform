@@ -1,9 +1,10 @@
 import {
   collection,
+  deleteDoc,
   doc,
   updateDoc,
-  writeBatch,
 } from "@react-native-firebase/firestore";
+import { logException } from "../util/logging";
 import * as crud from "./crud";
 import { firestore } from "../../firebase-setup";
 import { HouseIssue, IssueStatus } from "../entities/Issue";
@@ -24,19 +25,24 @@ export const createIssue = (issue: HouseIssue) => {
 };
 
 export const removeIssue = async (_house: House, issue: HouseIssue) => {
-  const batch = writeBatch(firestore);
   const issues = cloneDeep(_house.issues);
   delete issues[issue.id];
   const house: House = { ..._house, issues: { ...issues } };
-  // Hardened 2026-07-05: batch.set() rewrote the same issue document back
-  // instead of deleting it — "Remove" disappeared the item from the house's
-  // embedded list view but the standalone collection doc persisted untouched.
-  // Also scoped the house update to just the changed field instead of
-  // blind-writing the full client-side house snapshot, which risked
-  // clobbering concurrent edits from other admins.
-  batch.delete(doc(issuesCollection, issue.id));
-  batch.update(doc(houseCollection, house.id), { issues: house.issues });
-  await batch.commit();
+  // The house's list is what the app shows, and it alone decides the outcome.
+  // Scoped to just the issues field (hardened 2026-07-05): a blind write of the
+  // whole house snapshot could clobber other admins' edits.
+  await updateDoc(doc(houseCollection, house.id), { issues: house.issues });
+  // Residents add issues only to that list. Delete an issues/{id} record if one
+  // exists (never rewrite it, 2026-07-05). With no record the rules refuse the
+  // delete (they read resource.data), and in one batch that refusal used to fail
+  // the whole removal.
+  try {
+    await deleteDoc(doc(issuesCollection, issue.id));
+  } catch (error: any) {
+    if (error?.code !== "firestore/permission-denied") {
+      logException(error, "removeIssue: issues/{id} record");
+    }
+  }
   return house;
 };
 

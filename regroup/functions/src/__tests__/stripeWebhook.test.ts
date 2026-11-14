@@ -28,6 +28,8 @@ const mockConstructEvent = jest.fn();
 const mockChargesRetrieve = jest.fn();
 const mockV2AccountsRetrieve = jest.fn();
 const mockV1AccountsRetrieve = jest.fn();
+const mockSubscriptionsRetrieve = jest.fn();
+const mockInvoicesRetrieve = jest.fn();
 
 // ---------------------------------------------------------------------------
 // firebase-admin mock
@@ -95,6 +97,8 @@ jest.mock("stripe", () => {
       retrieve: mockChargesRetrieve,
     },
     accounts: { retrieve: mockV1AccountsRetrieve },
+    subscriptions: { retrieve: mockSubscriptionsRetrieve },
+    invoices: { retrieve: mockInvoicesRetrieve },
     v2: { core: { accounts: { retrieve: mockV2AccountsRetrieve } } },
   }));
 });
@@ -422,6 +426,7 @@ function setupIdempotencyTransaction(alreadyExists: boolean): void {
           // payment_intent.succeeded reads payments/{id}.rentApplied inside its
           // own transaction to make the rentOwed decrement exactly-once.
           get: (_field: string) => undefined,
+          data: () => undefined,
         }),
         set: jest.fn(),
         // The rentOwed decrement moved inside a transaction. Delegate to the
@@ -463,6 +468,19 @@ beforeEach(() => {
     payment_intent: "pi_test_123",
     metadata: { houseId: "house_1", guestId: "guest_1" },
   });
+
+  // Default: Stripe's current state is the delivered event's own subscription
+  // (the subscription handlers re-read it from Stripe).
+  mockSubscriptionsRetrieve.mockImplementation(async (id: string) => {
+    const returned = mockConstructEvent.mock.results.filter((r) => r.type === "return");
+    const object = returned[returned.length - 1]?.value?.data?.object;
+    return object && object.id === id
+      ? object
+      : { id, status: "active", metadata: {}, items: { data: [] } };
+  });
+
+  // The failure handler re-reads the invoice: open (still unpaid) by default.
+  mockInvoicesRetrieve.mockImplementation(async (id: string) => ({ id, status: "open" }));
 
   // Default idempotency: event not yet processed
   setupIdempotencyTransaction(false);
@@ -1810,6 +1828,16 @@ describe("invoice.payment_succeeded", () => {
 // ===========================================================================
 
 describe("invoice.payment_failed", () => {
+  // Stripe's current state of the subscription: past due after a failure.
+  beforeEach(() => {
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_test_123",
+      status: "past_due",
+      metadata: {},
+      items: { data: [] },
+    });
+  });
+
   function setupSubLookup(houseId = "house_1", status = "active"): void {
     const subRef = {
       update: mockUpdate.mockResolvedValue(undefined),
@@ -1818,7 +1846,12 @@ describe("invoice.payment_failed", () => {
     const subSnap = buildQuerySnap([
       {
         id: "sub_doc_1",
-        data: () => ({ houseId, stripeSubscriptionId: "sub_test_123", status }),
+        data: () => ({
+          houseId,
+          stripeSubscriptionId: "sub_test_123",
+          status,
+          userId: "admin_1",
+        }),
         ref: subRef,
       },
     ]);
@@ -1846,6 +1879,9 @@ describe("invoice.payment_failed", () => {
       if (name === "houses") {
         return {
           doc: jest.fn().mockReturnValue({ get: houseAdmin.houseDocGet }),
+          where: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
         };
       }
       if (name === "users") {
@@ -1864,7 +1900,7 @@ describe("invoice.payment_failed", () => {
     });
   }
 
-  test("first failure (attempt_count=1): status → past_due", async () => {
+  test("a failure Stripe reports past due: status → past_due", async () => {
     const invoice = makeInvoice({ attempt_count: 1 });
     const event = makeStripeEvent("invoice.payment_failed", invoice);
     mockConstructEvent.mockReturnValue(event);
@@ -1877,7 +1913,13 @@ describe("invoice.payment_failed", () => {
     );
   });
 
-  test("third+ failure (attempt_count >= 3): status → unpaid", async () => {
+  test("a failure Stripe reports unpaid: status → unpaid", async () => {
+    mockSubscriptionsRetrieve.mockResolvedValue({
+      id: "sub_test_123",
+      status: "unpaid",
+      metadata: {},
+      items: { data: [] },
+    });
     const invoice = makeInvoice({ attempt_count: 3 });
     const event = makeStripeEvent("invoice.payment_failed", invoice);
     mockConstructEvent.mockReturnValue(event);
@@ -1934,7 +1976,7 @@ describe("invoice.payment_failed", () => {
     );
   });
 
-  test("admin notification sent on payment failure", async () => {
+  test("operator notification sent on payment failure", async () => {
     const invoice = makeInvoice({ attempt_count: 2 });
     const event = makeStripeEvent("invoice.payment_failed", invoice);
     mockConstructEvent.mockReturnValue(event);
@@ -1957,10 +1999,11 @@ describe("invoice.payment_failed", () => {
 // ===========================================================================
 
 describe("customer.subscription.deleted", () => {
-  test("status updated to canceled, admin notified", async () => {
+  test("status updated to canceled, operator notified", async () => {
     const sub = makeSubscription({
       status: "active",
       canceled_at: Math.floor(Date.now() / 1000),
+      metadata: { guestCount: "5", userId: "admin_1" },
     });
     const event = makeStripeEvent("customer.subscription.deleted", sub);
     mockConstructEvent.mockReturnValue(event);
@@ -2002,6 +2045,9 @@ describe("customer.subscription.deleted", () => {
       if (name === "houses") {
         return {
           doc: jest.fn().mockReturnValue({ get: houseAdmin.houseDocGet }),
+          where: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
         };
       }
       if (name === "users") {
@@ -2109,6 +2155,9 @@ describe("customer.subscription.updated", () => {
       if (name === "houses") {
         return {
           doc: jest.fn().mockReturnValue({ get: houseAdmin.houseDocGet }),
+          where: jest.fn().mockReturnValue({
+            get: jest.fn().mockResolvedValue({ empty: true, docs: [] }),
+          }),
         };
       }
       if (name === "users") {
@@ -2150,9 +2199,10 @@ describe("customer.subscription.updated", () => {
     );
   });
 
-  test("status changed to past_due: admin notified", async () => {
+  test("status changed to past_due: operator notified", async () => {
     const sub = makeSubscription({
       status: "past_due" as Stripe.Subscription["status"],
+      metadata: { guestCount: "5", userId: "admin_1" },
     });
     const event = makeStripeEvent("customer.subscription.updated", sub);
     mockConstructEvent.mockReturnValue(event);

@@ -7,6 +7,7 @@ import {
   Alert,
   ViewStyle,
   TouchableOpacity,
+  Text,
 } from 'react-native';
 import { HouseIssue, IssueStatus, getIssueStatus } from '../../entities/Issue';
 import { CardItem, ActivityItem } from '../../components/card-list/card-list';
@@ -509,6 +510,17 @@ const IssueScreen: React.FC<Props> = ({ navigation }) => {
                             : 'Awaiting resolution.'
                         }
                       />
+                      {/* Dismiss is also on long press, which nobody finds with a mouse. */}
+                      {isAdmin(token, house.id) && !isClosed && (
+                        <TouchableOpacity
+                          testID={`dismiss-issue-button-${issue.id}`}
+                          accessibilityRole="button"
+                          onPress={handleDismissIssue(issue)}
+                          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                          style={{ alignSelf: 'flex-start', paddingVertical: normalize(6) }}>
+                          <Text style={{ color: color.dark_grey, fontWeight: '600' }}>DISMISS</Text>
+                        </TouchableOpacity>
+                      )}
                     </Fragment>
                   }
                   leftButtonProps={

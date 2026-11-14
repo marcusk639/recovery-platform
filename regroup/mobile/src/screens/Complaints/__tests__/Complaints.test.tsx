@@ -56,6 +56,14 @@ jest.mock('../../../services/house', () => ({
   updateHouse: jest.fn(() => Promise.resolve()),
 }));
 
+// ─── Complaints service stub: removal must not touch complaints/{id} ─────────
+// Residents add complaints only to the house's map, and the rules refuse
+// deleting a complaints/{id} record that doesn't exist.
+const mockRemoveComplaint = jest.fn();
+jest.mock('../../../services/complaints', () => ({
+  removeComplaint: (...args: unknown[]) => mockRemoveComplaint(...args),
+}));
+
 // ─── Display util mock ────────────────────────────────────────────────────────
 jest.mock('../../../util/display', () => ({
   getCurrentTime: jest.fn(() => '2024-01-01T00:00:00.000Z'),
@@ -220,6 +228,7 @@ import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { Provider } from 'react-redux';
 import { configureStore } from '@reduxjs/toolkit';
 import { Alert } from 'react-native';
+import { updateHouse } from '../../../services/house';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import housesReducer from '../../../state/slices/housesSlice';
@@ -677,6 +686,45 @@ describe('ComplaintScreen', () => {
           expect.any(Array),
         );
       });
+    });
+
+    it('removes the complaint from the house and says so', async () => {
+      (Alert.alert as jest.Mock).mockImplementation(
+        (_title: string, _msg: string, buttons: any[]) => {
+          buttons?.find(b => b.text === 'Continue')?.onPress?.();
+        },
+      );
+      (updateHouse as jest.Mock).mockResolvedValue(undefined);
+      const complaint = makeComplaint('c1', { description: 'Pest problem', reply: 'Called' });
+      const store = buildStore({ complaints: { c1: complaint }, guests: { 'guest-1': GUEST_1 } });
+      const { getByText } = renderScreen(store);
+      await act(async () => {
+        fireEvent.press(getByText('REMOVE'));
+      });
+      await waitFor(() =>
+        expect(mockNotify).toHaveBeenCalledWith('Complaint Removed', expect.any(String), [], 'succeed'),
+      );
+      expect(updateHouse).toHaveBeenCalledWith(expect.any(String), { complaints: {} });
+      expect(mockRemoveComplaint).not.toHaveBeenCalled();
+    });
+
+    it('tells the operator when the removal fails', async () => {
+      (Alert.alert as jest.Mock).mockImplementation(
+        (_title: string, _msg: string, buttons: any[]) => {
+          buttons?.find(b => b.text === 'Continue')?.onPress?.();
+        },
+      );
+      (updateHouse as jest.Mock).mockRejectedValueOnce(new Error('permission-denied'));
+      const complaint = makeComplaint('c1', { description: 'Pest problem', reply: 'Called' });
+      const store = buildStore({ complaints: { c1: complaint }, guests: { 'guest-1': GUEST_1 } });
+      const { getByText } = renderScreen(store);
+      await act(async () => {
+        fireEvent.press(getByText('REMOVE'));
+      });
+      await waitFor(() =>
+        expect(mockNotify).toHaveBeenCalledWith('Removal Failed', expect.any(String), [], 'fail'),
+      );
+      expect(mockNotify).not.toHaveBeenCalledWith('Complaint Removed', expect.anything(), [], 'succeed');
     });
 
     it('does not dispatch when removal is cancelled', () => {

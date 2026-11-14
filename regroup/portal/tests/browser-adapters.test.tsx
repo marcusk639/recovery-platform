@@ -3,7 +3,7 @@ import { vi } from 'vitest';
 import '../src/adapter/preload';
 import { captureException } from '../src/adapter/sentry';
 import { Dimensions } from '../src/adapter/react-native';
-import { KeyboardAwareScrollView, KeyboardEvents, useKeyboardState } from '../src/adapter/keyboard-controller';
+import { KeyboardAwareScrollView, KeyboardController, KeyboardEvents, useKeyboardState } from '../src/adapter/keyboard-controller';
 
 // components/rats-search-bar assigns navigator.geolocation while loading.
 test('navigator.geolocation can be assigned after preload', () => {
@@ -33,6 +33,11 @@ test('the keyboard is never reported as visible', () => {
   };
   render(<Probe />);
   expect(height).toBe(0);
+});
+// rats-keyboard's dismissKeyboardOnBack asks it first, so a modal's Back closes the modal.
+test('KeyboardController never reports a keyboard, and dismissing is harmless', () => {
+  expect(KeyboardController.isVisible()).toBe(false);
+  expect(() => KeyboardController.dismiss()).not.toThrow();
 });
 test('keyboard event listeners can be removed', () => {
   expect(() => KeyboardEvents.addListener('keyboardWillHide', () => {}).remove()).not.toThrow();

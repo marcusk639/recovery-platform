@@ -234,6 +234,24 @@ describe('messaging listeners', () => {
     ]);
   });
 
+  // iOS forwards FIRMessaging's registration-token callback, which fires at
+  // every launch with the current token. The server pushes to every stored
+  // copy, so a duplicate means a duplicate push.
+  it('does not store a refreshed token the user already has', async () => {
+    let refresh: ((token: string) => Promise<void>) | undefined;
+    messaging.instance.onTokenRefresh = (cb: (token: string) => Promise<void>) => {
+      refresh = cb;
+      return () => {};
+    };
+    renderSplash({ user: { id: 'u1', messagingToken: ['mock-fcm-token'] } });
+    await waitFor(() => expect(refresh).toBeDefined());
+    await settle();
+
+    await refresh!('mock-fcm-token');
+
+    expect(dispatchedOf('updateUser')).toEqual([]);
+  });
+
   it('ignores a refreshed token when no user is loaded', async () => {
     let refresh: ((token: string) => Promise<void>) | undefined;
     messaging.instance.onTokenRefresh = (cb: (token: string) => Promise<void>) => {

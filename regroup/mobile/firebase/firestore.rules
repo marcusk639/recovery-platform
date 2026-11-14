@@ -697,6 +697,14 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // The paywall kill switch: enabled == false lets every house in without a
+    // deploy. The app reads it once signed in; only the server script writes it
+    // (functions/src/scripts/setServerSwitch.ts).
+    match /paywall/config {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
     match /complaints/{complaintId} {
       // Confidential: only house admins and the named complainant may read a
       // complaint — not every resident of the house (which would expose
@@ -1231,13 +1239,6 @@ service cloud.firestore {
         && !('storageUrl' in request.resource.data);
       allow delete: if signedIn() && isAdmin([resource.data.houseId]);
       allow update: if false;
-    }
-
-    // The paywall kill switch. The app reads it on cold start; only the
-    // server (Admin SDK) writes it (#196).
-    match /paywall/{docId} {
-      allow read: if signedIn();
-      allow write: if false;
     }
   }
 }

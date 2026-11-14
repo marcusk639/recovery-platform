@@ -229,6 +229,8 @@ export const reactivateSubscription = async (
     freshMetadata.houses = subscriptionMetadata.houses ?? {};
     mapSubscriptionToMetadata(subscription, freshMetadata, customerId);
     freshMetadata.subscriptionItemId = subscription.items.data[0].id;
+    // Stripe's status (incomplete when the first payment needs action), not an assumed "active".
+    freshMetadata.status = subscription.status;
     return freshMetadata;
   }
 

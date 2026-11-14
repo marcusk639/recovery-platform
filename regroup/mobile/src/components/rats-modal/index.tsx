@@ -6,7 +6,11 @@ import { RatsText } from '../rats-text';
 import { IOS } from '../../util/platform';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import IOSStatusBar from '../ios-status-bar';
-import { RatsKeyboardAvoidingView, RatsKeyboardToolbar } from '../rats-keyboard';
+import {
+  dismissKeyboardOnBack,
+  RatsKeyboardAvoidingView,
+  RatsKeyboardToolbar,
+} from '../rats-keyboard';
 
 const styles = StyleSheet.create({
   modalContent: {
@@ -44,12 +48,19 @@ const RatsModal = (props: Props & ModalProps & ModalTitleProps) => {
     behavior,
     useKeyboardView = true,
     fullScreen,
+    onBackButtonPress,
   } = props;
   const VIEW_STYLE = [styles.modalContent, style];
   const insets = useSafeAreaInsets();
+  const onBack = () => {
+    if (!dismissKeyboardOnBack()) {
+      onBackButtonPress?.();
+    }
+  };
   return (
     <Modal
       {...props}
+      onBackButtonPress={onBack}
       useNativeDriver={false}
       style={modalStyle}
       isVisible={isVisible}

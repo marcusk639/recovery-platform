@@ -18,6 +18,11 @@ export const KeyboardAwareScrollView = forwardRef<unknown, any>(
 export const useKeyboardState = <T,>(selector: (state: { isVisible: boolean; height: number }) => T): T =>
   selector({ isVisible: false, height: 0 });
 
+export const KeyboardController = {
+  isVisible: () => false,
+  dismiss: async () => {},
+};
+
 export const KeyboardEvents = {
   addListener: (_event: string, _listener: () => void) => ({ remove: () => {} }),
 };

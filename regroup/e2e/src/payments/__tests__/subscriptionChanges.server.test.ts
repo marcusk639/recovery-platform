@@ -58,6 +58,8 @@ test('SUB-032: reactivating after a cancel is entitled, on the same customer, wi
   const fresh = await stripe.subscriptions.retrieve(meta.subscriptionId);
   expect(fresh.trial_end).toBeNull();
   expect((await docData(`houses/${house.id}`)).ownerId).toBe(op.uid);
+  expect(await houseStatus(house.id)).toBe('active');
+  expect((await docData(`subscriptions/${meta.subscriptionId}`)).status).toBe('active');
 });
 
 test('SUB-033: upgrade and downgrade change the price, and the tier follows', async () => {
