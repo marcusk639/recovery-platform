@@ -1,5 +1,7 @@
 # E2E Testing Solution - Comprehensive Review Findings
 
+> **Superseded (2026-11-14):** a February 2026 Detox-era document. Detox and its `e2e/tests/` suite are gone; Regroup e2e runs on Maestro only, against the E2EEmulator build. See [`regroup/mobile/maestro/README.md`](../../../../mobile/maestro/README.md) and [`regroup/mobile/docs/e2e/coverage-matrix.md`](../../../../mobile/docs/e2e/coverage-matrix.md).
+
 **Date**: February 15, 2026
 **Review Status**: In Progress
 

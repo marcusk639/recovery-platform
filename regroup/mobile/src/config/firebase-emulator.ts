@@ -56,7 +56,7 @@ export class E2EEmulatorUnreachable extends Error {
   constructor(unreachable: string[]) {
     super(
       `E2E emulator build cannot reach the Firebase emulators: ${unreachable.join(', ')}. ` +
-        'Start them (firebase emulators:start in regroup/) before launching the app. ' +
+        'Start them (./scripts/test-prep.sh from the repo root) before launching the app. ' +
         'This build never falls back to a real Firebase project.',
     );
     this.name = 'E2EEmulatorUnreachable';

@@ -13,7 +13,8 @@ const errorCode = (err: unknown): string | undefined => (err as { code?: string 
 /**
  * Caps the house reads one call can trigger. `subscriptionMetadata.houses` is
  * server-written (rules let a client create it only empty); ownership is still
- * verified by `house.ownerId === uid`. Legitimate
+ * verified, by the caller's primary owner record (`house-roles/{houseId}_{uid}`
+ * with tier owner and primary: true, see ownedHouseIds), never `house.ownerId`. Legitimate
  * houses beyond the first MAX_CANDIDATE_HOUSES candidates are not recovered;
  * that case is logged as `truncated`.
  */
@@ -25,7 +26,8 @@ const stringKeys = (ids: unknown): string[] =>
 /**
  * Candidate house ids: `housesOwned` first, then the subscription houses map
  * keys, deduped. housesOwned is client-writable and the map is server-written;
- * neither is trusted alone: ownership is verified against the house doc.
+ * neither is trusted alone: ownership is verified against the primary owner
+ * record (ownedHouseIds), not the house doc.
  */
 const candidateHouseIds = (user: Partial<User> | undefined): string[] =>
   Array.from(

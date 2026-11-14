@@ -15,14 +15,14 @@ You are a security reviewer specialized in Firebase + Stripe web apps that handl
 
 - SSN (last 4 digits stored on User), dateOfBirth, gender, ethnicity, maritalStatus, housingStatus must never appear in `console.log`, `console.error`, or browser `localStorage`.
 - Grep for these field names adjacent to logging calls.
-- Check that `cachedDetails` in `AuthService` (email + password cache) is cleared after use and never persisted to storage.
+- Check that `cachedDetails` in `AuthService` (typed `{ email?: string }`, an email-only cache) is never persisted to storage and never gains a password field.
 
 ### Firestore Security Rules
 
 - Every Firestore collection written to client-side must have corresponding security rules.
 - Collections in scope: `users`, `houses`, `subscriptions`, and any collection in `src/app/services/`.
 - Flag any service that calls `.collection.doc(id).set()` or `.add()` without a corresponding rule check.
-- Note: rules file location is `firestore.rules` at project root (may not exist yet — flag as CRITICAL if missing).
+- Note: there is no `firestore.rules` in `regroup/web/`. The shared Regroup rules are `../mobile/firebase/firestore.rules` (relative to `regroup/web`); check new collections against that file. Don't flag a missing rules file in `web/`.
 
 ### Stripe Compliance
 
@@ -32,7 +32,7 @@ You are a security reviewer specialized in Firebase + Stripe web apps that handl
 
 ### Firebase Auth
 
-- `cachedDetails: { email, password }` on `AuthService` is a risk surface. Verify it is only populated during login and not accessible after.
+- `cachedDetails: { email?: string }` on `AuthService` holds only the email; `clearCachedDetails()` resets it. Flag any change that adds a password or other credential to it.
 - `onAuthStateChanged` listeners must be unsubscribed (stored in `authSubscription`) to prevent memory leaks and stale auth state.
 - Token refresh is handled by Firebase SDK — flag any manual token management.
 

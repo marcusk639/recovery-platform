@@ -124,6 +124,8 @@ The documented trigger also does not parallelize the per-guest reads with `Promi
 
 ### F-03 — Five Timezone-Variant Scheduled Functions Share Identical Logic
 
+> **Status (2026-11-14): done.** The variants were consolidated into one scheduled function, `weeklyTransfers` (`0 8 * * 0` UTC, `regroup/functions/src/scheduled/index.ts`), which runs one pass per supported timezone plus a fallback pass for houses with no timezone (`scheduled/weeklyTransfers.ts`). The analysis below is kept as written.
+
 **Severity: High**
 **Source document:** `ACTIVE_PLAN.md`, Phase 1 context (Phase 5, "Scheduled functions run 5 separate timezone variants for weekly transfer")
 

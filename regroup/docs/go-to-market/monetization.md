@@ -26,8 +26,11 @@ makes money two ways:
    [`_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md) rows `RG-MON-1`…`RG-MON-6`.
 2. **Rent-payment platform fee** — a **method-aware application fee** on resident
    rent collected through Stripe Connect (destination charges), routed to the house
-   operator's connected account: ACH/bank = flat **$2/txn**, card = **0.75%**
-   platform fee, legacy houses grandfathered at **2%** (see §2).
+   operator's connected account. The fee is the platform margin (ACH/bank **$2.00**
+   flat, card **0.75%**) **plus** the estimated Stripe processing cost (ACH 0.8%
+   capped at $5, card 2.9% + 30¢), and the house bears all of it. A $500 payment
+   costs the house **$6.00** by ACH or **$18.55** by card. There is no legacy 2%
+   rate in code (see §2).
 
 All price values live in the canonical table
 [`_shared/pricing.md`](../../../docs/go-to-market/_shared/pricing.md). This doc holds the **narrative,
@@ -46,7 +49,7 @@ strategic assessment (Oxford Standard $39 / Oxford Plus $69; traditional Starter
 $49 / Professional $99) but was **not adopted**; the approved figures are the
 **balanced** ladder below — the same six-tier shape now hardcoded as labels and
 resident limits in `SUBSCRIPTION_TIERS`
-(source: regroup/functions/src/config.ts#L37-L78). Historical provenance for the
+(source: regroup/functions/src/config.ts, `SUBSCRIPTION_TIERS`). Historical provenance for the
 rejected conservative ladder: `regroup/docs/product/decisions.md` (stubbed).
 
 | sku (pricing.md) | Tier                     | House type  | Notes                                    |
@@ -66,7 +69,7 @@ pricing models — chosen over conservative, aggressive-value, flat-rate, and
 per-resident alternatives because it maximizes revenue while staying inside the
 affordability ceiling for both house types) and matches the in-code
 `SUBSCRIPTION_TIERS` config
-(source: regroup/functions/src/config.ts#L37-L78). Provenance for the model
+(source: regroup/functions/src/config.ts, `SUBSCRIPTION_TIERS`). Provenance for the model
 selection: `regroup/mobile/PRICING_STRATEGY.md` §3/§4 (stubbed).
 
 ### Why these numbers
@@ -102,11 +105,16 @@ a stacking subscription discount, applied automatically as a Stripe coupon:
 | 3–4    | `regroup-bundle-3` | 10% off  |
 | 5+     | `regroup-bundle-5` | 15% off  |
 
-The discount is recomputed from the operator's house count whenever houses are
-added/removed (`updateSubscriptionHouses`) and on demand via the
-`applyBundleDiscount` callable; it is removed when the count drops below 3
-(source: regroup/functions/src/api/stripe.ts `getBundleCoupon` /
-`applyBundleDiscountToSubscription`; coupons are `duration: forever`).
+The coupon is applied only when the `applyBundleDiscount` callable is called,
+from the number of houses in the stored `subscriptionMetadata.houses` (it takes
+only `{ userId }`, and skips a tier subscription); below 3 houses the same call clears the
+discount. `updateSubscriptionHouses` does
+**not** recompute it: its only working branch is the tier branch (occupancy
+tracking, no Stripe call), and a non-tier subscription gets `failed-precondition`
+there (source: regroup/functions/src/callable/subscriptions.ts
+`updateSubscriptionHouses` / `applyBundleDiscount`; regroup/functions/src/api/stripe.ts
+`getBundleCoupon` / `applyBundleDiscountToSubscription` / `removeBundleDiscount`;
+coupons are `duration: forever`).
 
 **Bundles do NOT apply to the six-tier model.** Tier subscriptions express
 multi-property capacity through the tier itself (Professional / Enterprise /
@@ -139,10 +147,11 @@ outcomes. Each tier in `SUBSCRIPTION_TIERS` carries a `features` map
 Capabilities are enforced server-side at their real call site via
 `tierAllows(houseType, tier, feature)` (`util/tierPricing.ts`) — composed with,
 not replacing, the `maxResidents`/`maxProperties` caps. Enforced today:
-`multiProperty` (in `updateSubscriptionHouses`) and `complianceExport` (the
-`complianceExport` callable, a Phase-5 stub — RG-SPEC-09). The remaining flags are
-defined ladder labels, not yet gated (no feature behind them yet — don't gate
-vaporware).
+`multiProperty` (`addHousesToSubscription` in `util/subscriptionHouses.ts`, used
+by `updateSubscriptionHouses` and `createHousesTx`), `complianceExport` (the
+`complianceExport` callable, fully built: a CSV or PDF export, owner only; see
+RG-SPEC-09) and `analytics` (the `rentRoiMetrics` callable). The remaining flags
+(`automatedRentCollection`, `whiteLabel`) are defined ladder labels, not yet gated.
 
 - **Oxford Network is not for sale (P-8).** `availableForSale: false` keeps the
   tier defined but blocks checkout (`isTierAvailableForSale()`) until a regional
@@ -167,25 +176,48 @@ a **method-aware `application_fee_amount`** (pricing-revision gates P-1/P-2/P-3,
 (regroup/functions/src/callable/payments.ts) and scheduled collection
 (regroup/functions/src/scheduled/scheduledRentCollection.ts):
 
-| Payment method | Platform fee                                                    | Rationale                                                                                                      |
-| -------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| ACH / bank     | flat **$2/txn** (`RENT_FEE_ACH_FLAT_CENTS`; capped % available) | Cheap, to nudge bank payments (property-mgmt norm).                                                            |
-| Card           | **0.75%** (`RENT_FEE_CARD_PLATFORM_RATE`)                       | Thin platform fee; Stripe's card cost is a resident-borne disclosed convenience fee (P-2), not double-charged. |
-| Legacy houses  | **2%** (`RENT_FEE_LEGACY_RATE`)                                 | The 5 live houses grandfathered until migration (P-3, §3).                                                     |
+`application_fee_amount` = platform margin **+** estimated Stripe processing cost
+(`RENT_FEE` in `functions/src/config.ts`):
 
-Legacy houses are identified by `house.legacyRentFee === true` or the
-`LEGACY_RENT_FEE_HOUSE_IDS` allow-list. All values are integer cents / decimal
-rates and env-overridable (see `functions/.env.example`). The earlier flat **2%
-on all rent** is superseded by this model; only the legacy branch still charges 2%.
+| Payment method | Platform margin (kept)                                                                                                       | Estimated Stripe cost (recovered)                                                    | $500 payment                |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | --------------------------- |
+| ACH / bank     | flat **$2.00** (`RENT_FEE_ACH_FLAT_CENTS`); if `RENT_FEE_ACH_RATE` > 0, that rate capped at `RENT_FEE_ACH_CAP_CENTS` instead | **0.8%, capped at $5** (`RENT_FEE_STRIPE_ACH_RATE`, `RENT_FEE_STRIPE_ACH_CAP_CENTS`) | $2.00 + $4.00 = **$6.00**   |
+| Card           | **0.75%** (`RENT_FEE_CARD_PLATFORM_RATE`)                                                                                    | **2.9% + 30¢** (`RENT_FEE_STRIPE_CARD_RATE`, `RENT_FEE_STRIPE_CARD_FIXED_CENTS`)     | $3.75 + $14.80 = **$18.55** |
+
+**Who pays.** The house. These are destination charges, so Stripe debits its
+processing fee from the platform, and the application fee comes out of the
+house's transfer: on $500 the house receives $494.00 (ACH) or $481.45 (card). The
+resident pays the rent amount only. The fee is capped at the rent amount and
+rounded to whole cents. Setting the four `RENT_FEE_STRIPE_*` values to 0 reverts
+to margin-only with no code change. The Stripe part is an estimate: an Amex or
+non-US card costs Stripe more than 2.9% + 30¢, and the platform absorbs the gap.
+All values are integer cents / decimal rates and env-overridable. The same split
+is the test oracle in
+[`../operations/stripe-testing.md`](../operations/stripe-testing.md#expected-fee-split).
+
+**Not built (status 2026-11-14):**
+
+- **P-2, resident-borne card convenience fee: reversed.** It was never built (no
+  code adds it, no screen discloses it); the house bears processing instead, as
+  above.
+- **P-3, legacy houses at 2%: never implemented.** `computeApplicationFee` has no
+  legacy branch, so every house gets the same method-aware fee.
+  `RENT_FEE_LEGACY_RATE` and `LEGACY_RENT_FEE_HOUSE_IDS` are read nowhere, and
+  `house.legacyRentFee` is declared in `createPaymentIntent`'s house type but
+  never read.
+
+The earlier flat **2% on all rent** is superseded by this model.
 
 > Note: the 2026-05-24 strategy doc and the launch-readiness doc reference a "2.5%"
 > flat fee — also superseded. The canonical model is the method-aware table above
 > (`RG-MON-7`).
 
-At scale the rent fee can **equal or exceed** subscription revenue. Worked
-example: $800 avg rent × 15 residents × 2% = ~$240/house/mo in platform fee —
-which on its own meets or beats the subscription line for the same house.
-(orig: regroup/docs/product/decisions.md "Pricing (Recommended)", stubbed.)
+Worked example at scale: $800 avg rent × 15 residents. The platform keeps the
+margin only, since the Stripe-cost part goes to Stripe: **$30/house/mo** if all
+pay by ACH (15 × $2.00) or **$90/house/mo** if all pay by card (15 × 0.75% of
+$800 = 15 × $6.00). That is comparable to a Starter/Standard subscription, not a
+multiple of it. (The source's ~$240/house/mo figure assumed the superseded flat
+2%; orig: regroup/docs/product/decisions.md "Pricing (Recommended)", stubbed.)
 Projection figures are referenced in §5, not restated.
 
 ---
@@ -234,7 +266,7 @@ holding MRR at ~$100–150 instead of $400–1,000+ on the same customer base.
 stubbed.)
 **Code reality (2026-06-10):** `9.99`/`19.99` no longer appear in regroup source —
 only in historical docs. Subscription pricing is now fully env-var driven through
-`SUBSCRIPTION_TIERS` (source: regroup/functions/src/config.ts#L37-L78). The defect
+`SUBSCRIPTION_TIERS` (source: regroup/functions/src/config.ts, `SUBSCRIPTION_TIERS`). The defect
 is **closed in code**; the remaining gap is activation (below).
 
 ### 4.2 Tier billing not yet activated (P0 — current top blocker)
@@ -252,8 +284,11 @@ is verified with a real card, no operator can subscribe on a tier. See
 
 Apple's IAP rules affect whether the iOS app can surface the upgrade CTA natively
 or must route operators to web checkout. The three options are: **(A) web-only**
-— upgrade CTA opens the `SubscriptionHandler` WebView to the web subscribe page
-(0% Apple cut, already built, no engineering); **(B) native IAP** — Apple payment
+— upgrade CTA opens the `SubscriptionHandler` WebView to
+`https://regroup-app.com/my-account` (`ACCOUNT_URL` in
+`mobile/src/screens/SubscriptionHandler/SubscriptionHandler.tsx`; web checkout
+itself is `/signup`, and `/subscribe` is a newsletter page) (0% Apple cut,
+already built, no engineering); **(B) native IAP** — Apple payment
 sheet via StoreKit 2 (15–30% Apple cut, 2–3 weeks engineering); **(C) hybrid** —
 free tier in-app, paid upgrade only via web link (same as A). The recommendation
 is **A/C (web-only / hybrid)**: 0% cut, the WebView is already wired, and Regroup
@@ -278,8 +313,10 @@ block first revenue but must be closed before billing is trusted at scale.
 ## 5. Projections (narrative)
 
 Projections are **scenario estimates from the source docs**, not commitments. They
-assume the balanced ladder (`RG-MON-1`…`RG-MON-6`) plus the 2% rent fee
-(`RG-MON-7`).
+assume the balanced ladder (`RG-MON-1`…`RG-MON-6`) plus a flat 2% rent fee
+(`RG-MON-7`). That 2% is superseded: the platform now keeps $2.00 per ACH payment
+or 0.75% per card payment (§2), so the rent-fee lines below overstate that
+revenue.
 
 ### 5.1 Today
 

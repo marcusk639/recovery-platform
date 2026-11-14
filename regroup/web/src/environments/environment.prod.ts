@@ -1,9 +1,7 @@
 export const environment = {
   production: true,
   appName: "App Name",
-  // LAUNCH BLOCKER (C2): replace with the live Stripe publishable key
-  // (`pk_live_...`) before production deploy. Publishable keys are safe to ship
-  // to the browser. Until this is set, the web billing path cannot charge cards.
+  // Live key set (C2 done; verify-ssr-target.js enforces pk_live_). Owner: confirm it is active in the Stripe Dashboard.
   stripePublishableKey: "pk_live_7aliRHmckYVQEJh7HseJ4PTa00GasKVZ81",
   firebaseConfig: {
     apiKey: "AIzaSyDTUKZ8_WPfdHrohySL2vycMkUyrbM1xJQ",

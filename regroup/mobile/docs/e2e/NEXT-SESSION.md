@@ -1,5 +1,7 @@
 # Next-Session Brief — Regroup E2E (Maestro)
 
+> **Superseded (2026-11-14):** a June 2026 session brief; its open tasks are done or reversed. `maestro/flows/run-all.yaml` exists (16 flows), the offline queue was removed, and flows run against the `com.rats.dev.e2e.emu` E2EEmulator build, never `com.rats.dev`. See [`maestro/README.md`](../../maestro/README.md) and [`running-maestro-flows.md`](./running-maestro-flows.md).
+
 **Branch:** `test/e2e-launch-prep` | **Working dir:** `regroup/mobile/`
 **Context:** read `docs/e2e/reports/2026-06-27-staging.md` for full session findings.
 

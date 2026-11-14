@@ -12,14 +12,14 @@ Create them, or the non-throwing design is just a quieter silence.
 
 ## What must alert
 
-| Log message                                           | Means                                                                                                                                                      | Urgency   |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `rentAttempts: attempts need reconciliation`          | A charge's Stripe outcome is unknown. Money may have moved with no ledger entry.                                                                           | Same day  |
-| `rentAttempts: in-flight attempt is stale, releasing` | An attempt sat unsettled past 10 days. Its hold is released, so the resident can be charged again — if the original did settle, that is a duplicate debit. | Same day  |
-| `scheduledRentCollection: some payments failed`       | One or more charges threw. The job also goes red for this.                                                                                                 | Immediate |
-| `rentAttempts: could not flag stale attempt`          | The flag write itself failed, so the signal above may be missing.                                                                                          | Same day  |
-| `rentAttempts: payments need manual reconciliation`  | A captured payment was quarantined and `rentOwed` was never decremented. Money moved; the balance did not. Highest urgency of the four.                    | Same day  |
-| `scheduledRentCollection: reconciliation sweep failed` | A sweep could not run, so its count is unknown rather than zero. Collection still charged residents; the diagnostic is blind until this clears.           | Same day  |
+| Log message                                            | Means                                                                                                                                                      | Urgency   |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `rentAttempts: attempts need reconciliation`           | A charge's Stripe outcome is unknown. Money may have moved with no ledger entry.                                                                           | Same day  |
+| `rentAttempts: in-flight attempt is stale, releasing`  | An attempt sat unsettled past 10 days. Its hold is released, so the resident can be charged again — if the original did settle, that is a duplicate debit. | Same day  |
+| `scheduledRentCollection: some payments failed`        | One or more charges threw. The job also goes red for this.                                                                                                 | Immediate |
+| `rentAttempts: could not flag stale attempt`           | The flag write itself failed, so the signal above may be missing.                                                                                          | Same day  |
+| `rentAttempts: payments need manual reconciliation`    | A captured payment was quarantined and `rentOwed` was never decremented. Money moved; the balance did not. Highest urgency of the four.                    | Same day  |
+| `scheduledRentCollection: reconciliation sweep failed` | A sweep could not run, so its count is unknown rather than zero. Collection still charged residents; the diagnostic is blind until this clears.            | Same day  |
 
 ## Create the metric and policy
 
@@ -32,13 +32,14 @@ PROJECT=phoenix-cleanhouse
 # One log-based metric covering the reconciliation + staleness signals.
 gcloud logging metrics create rent_reconciliation_needed \
   --project="$PROJECT" \
-  --description="Rent attempts or payments needing reconciliation, released as stale, or a sweep that could not run" \
+  --description="Rent attempts or payments needing reconciliation, released as stale, a stale flag that could not be written, or a sweep that could not run" \
   --log-filter='resource.type="cloud_run_revision"
 AND resource.labels.service_name="scheduledrentcollection"
 AND severity>=ERROR
 AND (jsonPayload.message:"attempts need reconciliation"
      OR jsonPayload.message:"payments need manual reconciliation"
      OR jsonPayload.message:"in-flight attempt is stale"
+     OR jsonPayload.message:"could not flag stale attempt"
      OR jsonPayload.message:"reconciliation sweep failed")'
 
 cat > /tmp/rent-recon-policy.json <<'JSON'
@@ -84,3 +85,22 @@ the count found, `0` is none found, and `null` means that sweep itself failed an
 count is unknown, which is not the same as none. A sweep failure is logged at error
 level ("reconciliation sweep failed", with `sweep: attempts` or `payments`) and the
 day's collection continues, so look for that log line rather than for a failed job.
+
+## Guests skipped because the house is not ready
+
+Before recording an attempt, the job looks up the house's Connect destination
+(`createRentDestinationLookup` in `scheduled/rentDestination.ts`). If the house is
+missing, has no `stripeAccountId`, or its `stripeStatus` is not `active`, the guest
+is **not charged**, nothing is left in flight, and the job logs at WARN:
+
+- per guest: `scheduledRentCollection: house cannot receive rent yet, not charging`
+  (`guestId`, `houseId`);
+- once per run, if any were skipped:
+  `scheduledRentCollection: guests not charged, house cannot receive rent`, with
+  `notChargedHouseNotReadyCount`.
+
+The summary returns `notChargedHouseNotReadyCount` too. It is not a job failure (an
+operator who hasn't finished Stripe onboarding is a normal state) and it is WARN, so
+the ERROR-level metric above does not count it. That rent is simply uncollected
+until the house is `active`. If you want to see it, add a separate WARN-level
+log-based metric on the run-level message rather than widening the alert above.

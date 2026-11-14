@@ -1,6 +1,6 @@
 ---
 description: Collection refs, timestamps, transactions, React Query, security rules
-paths: "src/**/*.{ts,tsx},firebase/**"
+paths: 'src/**/*.{ts,tsx},firebase/**'
 ---
 
 # Firebase / Firestore Patterns
@@ -90,7 +90,7 @@ Query files in `src/state/queries/` must follow:
 export const activityKeys = {
   all: ['activities'],
   lists: () => [...activityKeys.all, 'list'],
-  list: filters => [...activityKeys.lists(), filters],
+  list: (filters) => [...activityKeys.lists(), filters],
 };
 ```
 

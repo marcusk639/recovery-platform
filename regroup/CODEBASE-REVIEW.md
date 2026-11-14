@@ -6,6 +6,8 @@
 **Source files reviewed:** ~506 mobile + ~85 functions + ~151 web (vendor bundles in `web/public/` excluded)
 **Method:** 5 parallel specialist reviewers (security, functions TS/arch, mobile RN, web Angular, docs+deps) → deduplicated + cross-referenced.
 
+> **Status (2026-11-14):** this review is kept as written on 2026-06-21; its line numbers refer to that code. Since then `sendInviteEmails` was removed (invitations are `createInvitation` / `peekInvitation` / `redeemInvitation` in `functions/src/callable/invitations.ts`; the email helper it shared lives on in `util/inviteEmails.ts`), the webhook idempotency helper `checkAndMarkEventProcessed` was replaced by the two-phase `claimEvent` (`functions/src/webhooks/stripeWebhook.ts`, used by both webhook endpoints), and the legacy Stripe-quantity path that H-fns-7 patched was removed: `updateSubscriptionGuests` / `updateSubscriptionHouses` make no Stripe call and only track tier-cap occupancy.
+
 ---
 
 ## Executive Summary
@@ -29,7 +31,7 @@ The Regroup backend is functionally complete and its payment/auth happy-paths ar
 | Finding                                                                                          | Reviewers                       | Severity                                     |
 | ------------------------------------------------------------------------------------------------ | ------------------------------- | -------------------------------------------- |
 | GPS coordinates of recovery attendees logged in `meetings.ts`                                    | Security CRIT-3 + TS LOW-2      | CRITICAL → **FIXED**                         |
-| `sendInviteEmails` — no authz **and** swallows all delivery failures                             | Security CRIT-1 + TS HIGH-5     | CRITICAL                                     |
+| `sendInviteEmails` — no authz **and** swallows all delivery failures                             | Security CRIT-1 + TS HIGH-5     | CRITICAL → **FIXED**, function since removed |
 | Multiple divergent Stripe client init paths; `STRIPE_API_VERSION` unset → `undefined` apiVersion | TS MED-1/LOW-1/LOW-4 + Docs 3.4 | HIGH                                         |
 | Raw Stripe error messages returned to clients/HTTP                                               | TS CRIT-1 + Security MED-1      | HIGH                                         |
 | Angular 9 / EOL web dependency stack                                                             | Web MED + Docs 3.1              | HIGH (risk, not blocker per launch decision) |
@@ -68,7 +70,7 @@ The Regroup backend is functionally complete and its payment/auth happy-paths ar
 `allow write: if isGuestOrAdmin([request.resource.data.houseId])` lets a resident create/update/delete archived discharge records (sensitive recovery + financial data).
 **Fix needed:** `allow write: if isAdmin(...)`; residents read-only at most.
 
-### [C6] Fire-and-forget `sendEmail` in 4 Firestore triggers — silent email loss + unhandled rejections
+### [C6] Fire-and-forget `sendEmail` in 4 Firestore triggers — silent email loss + unhandled rejections — **FIXED**
 
 **Domain:** Correctness / Error handling · **File:** `functions/src/triggers/firestore/index.ts:56,115,138,158` · **Confidence:** 98
 `notifyNewHouseCreated`, `sendSubscriptionUpdateEmail`, `reportBug`, `submitFeedback` call `sendEmail(...)` with no `await`/`.catch`. Rejections are swallowed; the trigger reports success while the email is lost.
@@ -95,8 +97,8 @@ No `__DEV__` guard (unlike the sibling `SimpleDebugLogger`). Persists PII to `de
 - **[H-fns-1]** `scheduledRentCollection.ts:65` — `guest.rentOwed` read from Firestore and passed to Stripe without integer validation; a float (`149.5`) is rejected by Stripe. Wrap in `Math.round`/Zod. (conf 90)
 - **[H-fns-2]** `api/firestore.ts:191` — `updateUser` uses `JSON.parse(JSON.stringify(values))`, silently converting `FieldValue.serverTimestamp()/increment()/delete()` to `{}` and `Date`→ISO string. Latent footgun. (conf 99)
 - **[H-fns-3]** `payments.ts:697,748` — `stripeLastSyncAt: Date.now()` instead of `serverTimestamp()`; mixes `number` and `Timestamp` types across `houses` docs. (conf 85)
-- **[H-fns-4]** `webhooks/stripeWebhook.ts:1130-1197` — Connect webhook handler has **no** idempotency check (platform webhook does). Apply `checkAndMarkEventProcessed`. (conf 95)
-- **[H-fns-5]** `subscriptions.ts:822-832` — `sendInviteEmails` catch logs but does not re-throw; client sees success when all emails failed. Use `Promise.allSettled` + surface partial failure. (conf 96)
+- **[H-fns-4]** `webhooks/stripeWebhook.ts:1130-1197` — Connect webhook handler has **no** idempotency check (platform webhook does). Apply `checkAndMarkEventProcessed`. (conf 95) _(2026-11-14: now `claimEvent`, see the status note.)_
+- **[H-fns-5]** `subscriptions.ts:822-832` — `sendInviteEmails` catch logs but does not re-throw; client sees success when all emails failed. Use `Promise.allSettled` + surface partial failure. (conf 96) _(2026-11-14: `sendInviteEmails` since removed.)_
 - **[H-fns-6]** `tsconfig.json:6` — `noUnusedLocals: false` weakens strict mode; enable and resolve. (conf 90)
 - **[H-fns-7]** `subscriptions.ts:515-537` — any Stripe error (rate-limit/network) triggers the Firestore-only fallback, permanently diverging Firestore occupancy from Stripe billing. Gate fallback on `resource_missing` only. (conf 88)
 - **[H-fns-8]** `api/firestore.ts:66` — `shapeHouses(docs: any[])` disables type-checking for the primary house-shaping path. Type as `QueryDocumentSnapshot[]`. (conf 95)
@@ -196,8 +198,8 @@ No `__DEV__` guard (unlike the sibling `SimpleDebugLogger`). Persists PII to `de
 - [x] **H-fns-1 — Fixed:** `scheduledRentCollection` `Math.round`s `guest.rentOwed` before the PaymentIntent (a stray non-integer cents value was silently rejected by Stripe, skipping auto-pay). +1 regression test.
 - [x] **H-fns-2 — Fixed:** `updateUser` no longer `JSON.parse(JSON.stringify())`s values (`stripUndefinedDeep` preserves `FieldValue` sentinels / `Date`).
 - [ ] **H-fns-3 — WON'T FIX (reclassified):** `payments.ts` `stripeLastSyncAt: Date.now()`. The `House` entity types both `stripeConnectedAt` and `stripeLastSyncAt` as `number` (epoch millis) and `payments.ts` uses `serverTimestamp()` nowhere, so the writes are already consistent; `Date.now()` inside a Cloud Function is server-side time. Switching to `serverTimestamp()` would introduce the Timestamp/number mix the finding warns against. Left as-is.
-- [x] **H-fns-4 — Already fixed (pricing commit):** Connect webhook handler now runs `checkAndMarkEventProcessed` (idempotent), mirroring the platform handler.
-- [x] **H-fns-7 — Fixed:** `updateSubscriptionGuests` Firestore-only fallback gated to `resource_missing`; other Stripe errors re-throw (no silent Firestore↔Stripe drift).
+- [x] **H-fns-4 — Already fixed (pricing commit):** Connect webhook handler now runs `checkAndMarkEventProcessed` (idempotent), mirroring the platform handler. _(2026-11-14: both handlers now use `claimEvent`.)_
+- [x] **H-fns-7 — Fixed:** `updateSubscriptionGuests` Firestore-only fallback gated to `resource_missing`; other Stripe errors re-throw (no silent Firestore↔Stripe drift). _(2026-11-14: superseded; the Stripe-quantity path and its fallback were removed.)_
 - [x] **H-fns-8 — Fixed:** `shapeHouses` typed `QueryDocumentSnapshot[]` (was `any[]`).
 - [x] **H-fns-9 — Fixed:** `findMeetings` re-throws `HttpsError` on backend failure instead of returning `[]`.
 - [x] **H-web-1 — Fixed:** `redirect.component.ts` `?debug=true` panel gated behind `!environment.production`.

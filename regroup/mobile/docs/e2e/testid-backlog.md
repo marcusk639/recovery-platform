@@ -2,6 +2,8 @@
 
 **Generated:** 2026-06-23 · Companion to [`regroup-e2e-test-plan.md`](./regroup-e2e-test-plan.md)
 
+> **Status (2026-11-14):** much of this backlog has landed. All the P0 IntakeFormScreen testIDs exist, as do `landing-role-guest` / `landing-role-manager` / `landing-demo-link` (`InitialLandingForm.tsx`), `wizard-back-button` / `wizard-next-button` / `wizard-finish-button` (`OperatorSetupWizard.tsx`) and `house-item-` / `edit-house-button-` / `delete-house-button-` (`OrgSetup.tsx`). Grep `src/` for an id before adding it. `src/` has about 484 `testID=` occurrences in non-test `.tsx` files.
+
 testIDs to add so the 12 BLOCKED flows become authorable. Kebab-case, screen-prefixed,
 suffix by element type (`-screen`, `-button`, `-input`, `-list`, `-item`, `-modal`).
 Dynamic list items use `${id}`. Add to the component's wrapping `View`/`TextInput`/
@@ -15,7 +17,7 @@ Priority = the lowest flow priority it unblocks.
 
 ### IntakeFormScreen (`src/screens/ResidentIntake/IntakeFormScreen.tsx`) — unblocks flow 06, 09
 
-Zero testIDs today. Multi-step form.
+Multi-step form. Done: every testID below exists in `IntakeFormScreen.tsx`.
 
 - `intake-form-screen` (wrapper), `intake-step-indicator`
 - Step 1: `intake-first-name-input`, `intake-last-name-input`, `intake-email-input`, `intake-phone-input`, `intake-sobriety-date-input`, `intake-drug-of-choice-input`
@@ -108,6 +110,7 @@ Zero testIDs (note: search is a no-op `executeSearch` — see below).
 - ⬜ **SubscriptionGate** — no wrapper element to tag without changing layout; left as-is.
 
 ### Recommended shared-component follow-ups (small, non-breaking, high leverage)
+
 1. `RatsRadioButtonGroup` — add an optional per-option `testID` prop (unblocks landing role selection by id).
 2. `ActivityItemWithButtons` (card-list) — add optional `leftButtonTestID`/`rightButtonTestID` (unblocks OrgSetup edit/delete + many list rows).
 3. `RatsLoadingIndicator` — accept + forward `testID` (removes the View-wrapper workaround).

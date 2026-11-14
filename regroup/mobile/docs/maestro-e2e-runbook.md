@@ -1,8 +1,10 @@
 # Regroup Mobile — Maestro E2E Runbook
 
 Operational guide for running the Maestro E2E suite locally against the Firebase
-emulator. For the design/rationale and phase plan, see
-[`maestro-e2e-testing-plan.md`](./maestro-e2e-testing-plan.md).
+emulators. The build and run reference of record is
+[`maestro/README.md`](../maestro/README.md); this runbook adds detail on tags,
+persistence checks and troubleshooting. The older design and phase plan,
+[`maestro-e2e-testing-plan.md`](./maestro-e2e-testing-plan.md), is superseded.
 
 All paths below are relative to `regroup/mobile/` unless noted. Run npm scripts
 from `regroup/mobile/`.
@@ -12,16 +14,17 @@ from `regroup/mobile/`.
 ## TL;DR (happy path, iOS)
 
 ```bash
-# 0. one-time: install Maestro CLI + Java 17 (see Prerequisites)
+# 0. one-time: install Maestro CLI + Java 21 (see Prerequisites)
+export E2E_TEST_PASSWORD="$(cat ~/.config/regroup-e2e/e2e-test-password)"
 
-# 1. terminal A — start the Firebase emulator (from regroup/)
-cd ../  &&  firebase emulators:start          # Firestore 8080, Auth 9099, Storage 9199, UI 4000
+# 1. terminal A — from the repo root: build functions, start the demo-regroup-e2e
+#    emulators (plus the recovery-api directory emulator), seed, keep running
+./scripts/test-prep.sh
 
-# 2. terminal B — seed, build, boot, run (from regroup/mobile/)
-npm run maestro:seed                           # seed test accounts + houses into the emulator
-npm run test:e2e:build:ios                     # build the debug app (~15-20 min first time)
-xcrun simctl boot "iPhone 14 Pro"              # boot a simulator (skip if already booted)
-npm run maestro:smoke:ios                      # run the smoke flow
+# 2. terminal B — from regroup/mobile/: build + install the E2EEmulator app
+#    (commands in maestro/README.md, "Which app build"), then run
+maestro/scripts/run-flows.sh smoke --sim "$SIM_UDID"   # the smoke flow
+maestro/scripts/run-flows.sh --sim "$SIM_UDID"         # the whole suite
 ```
 
 Green smoke + the Emulator UI (`http://127.0.0.1:4000`) showing Firestore reads
@@ -31,14 +34,15 @@ during the run = the harness works.
 
 ## Prerequisites (one-time)
 
-| Requirement       | Check / Install                                                                                      |
-| ----------------- | ---------------------------------------------------------------------------------------------------- |
-| Maestro CLI       | `maestro --version` (expect ≥ 2.6.0). Install: `curl -fsSL "https://get.maestro.mobile.dev" \| bash` |
-| Java 17+          | `java -version` (Maestro needs it). Set `JAVA_HOME` if unset.                                        |
-| Firebase CLI      | `firebase --version`. Emulators run from `regroup/`.                                                 |
-| iOS toolchain     | Xcode + `xcrun simctl` (iOS runs only).                                                              |
-| Android toolchain | Android SDK + an AVD (Android runs — **currently blocked**, see Known Gaps).                         |
-| Node deps         | `npm install` in `regroup/mobile/`.                                                                  |
+| Requirement       | Check / Install                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Maestro CLI       | `maestro --version` (expect ≥ 2.6.0). Install: `curl -fsSL "https://get.maestro.mobile.dev" \| bash`                                  |
+| Java 21           | `java -version`. firebase-tools ≥ 15 needs JDK 21 for the emulators; `scripts/test-prep.sh` selects a Homebrew `openjdk@21` if found. |
+| Firebase CLI      | `firebase --version`. Start the emulators with `scripts/test-prep.sh` (repo root), not a bare `firebase emulators:start`.             |
+| iOS toolchain     | Xcode + `xcrun simctl` (iOS runs only).                                                                                               |
+| Android toolchain | Android SDK + an AVD. Build `./gradlew assembleE2eEmulator`; see `maestro/README.md` for the Android steps.                           |
+| Node deps         | `npm install` in `regroup/mobile/`; `npm ci` once in `recovery-api/` (test-prep.sh builds it).                                        |
+| Test password     | `E2E_TEST_PASSWORD`, never committed (`e2e/SECURITY-test-credentials.md`).                                                            |
 
 Verify a device is available before a run:
 
@@ -51,96 +55,119 @@ xcrun simctl list devices booted   # iOS sims that are booted
 
 ## How the emulator switch works (read this once)
 
-E2E runs against the **local Firebase emulator**, not production. The wiring:
+E2E runs against the **local Firebase emulators**, not production. The switch is
+the bundle-time `E2E_VARIANT`, not a launch argument or `__DEV__`:
 
-1. Maestro launches the app with `arguments: { IS_E2E_TEST: "1" }` (set in every flow's
-   `launchApp`).
-2. On iOS that lands in `NSUserDefaults`, which React Native's `Settings` module reads.
-3. `firebase-setup.ts` calls `connectToEmulators()` at startup (guarded by `__DEV__`).
-   When `Settings.get('IS_E2E_TEST') === '1'`, it points Auth/Firestore/Storage at
-   `127.0.0.1:{9099,8080,9199}`.
+1. The E2E build sets it. The Xcode `E2EEmulator` configuration (scheme
+   `rats-e2e-emulator`) and the Gradle `e2eEmulator` build type bundle the JS with
+   `E2E_VARIANT=emulator`; `e2eVariant()` (`src/config/env.ts`) reads the inlined value.
+2. At startup `firebase-setup.ts` checks that the native Firebase project is the
+   variant's own (`demo-regroup-e2e`) and that the Stripe key is not a live (`pk_live_`) key, then calls
+   `connectToEmulators()` (`src/config/firebase-emulator.ts`) for Auth, Firestore,
+   Storage and Functions on `127.0.0.1` (Android: `10.0.2.2`).
+3. It fails closed: an unreachable emulator port rejects and the app stops. It never
+   falls back to a real project.
 
-So three things must all be true for a run to hit the emulator:
+So a run hits the emulators only when:
 
-- a **debug** build (`__DEV__` true),
-- the flow sets `IS_E2E_TEST`,
-- the emulator is running and seeded.
+- the installed app is the **E2EEmulator** build (`com.rats.dev.e2e.emu` /
+  `com.regroup.app.e2e.emu`), and
+- the emulators are running and seeded.
 
-> **iOS only today.** RN `Settings` is iOS-only, so the launch arg does not reach the app
-> on Android — see Known Gaps.
+**A Debug build (`com.rats.dev`) talks to production Firebase**, with or without
+Metro. The guard subflow and `maestro/scripts/e2e-build-guard.js` refuse to drive it.
+
+`IS_E2E_TEST` is something else. The flows' `launchApp` may pass it, and on iOS a
+Debug build reads it (`src/util/e2e.ts`) only to relax automation-hostile UI, such as
+the secure password field. It does not route Firebase anywhere.
 
 ---
 
-## Step 1 — Start the emulator
+## Step 1 — Start the emulators
 
-From `regroup/`:
+From the repo root:
 
 ```bash
-firebase emulators:start
+./scripts/test-prep.sh
 ```
 
-Leave it running. Confirm the UI at `http://127.0.0.1:4000`. Ports: Firestore `8080`,
-Functions `5001`, Auth `9099`, Storage `9199`.
+It builds `regroup/functions` and `recovery-api`, starts the emulators from
+`regroup/firebase.e2e.json` with `--project demo-regroup-e2e`, starts the recovery-api
+directory emulator, seeds both, and stays running (`Ctrl-C` stops everything). Confirm
+the UI at `http://127.0.0.1:4000`. Ports: Firestore `8080`, Functions `5001`, Auth
+`9099`, Storage `9199`; recovery-api functions `5002`, Firestore `8082`.
+
+`cd regroup && firebase emulators:start` is not a substitute: `regroup/firebase.json`
+holds only the functions predeploy hook, and the default project is the production
+`phoenix-cleanhouse`.
 
 > Do not run another product's emulator (homegroups) at the same time — same ports.
 
 ## Step 2 — Seed test data
 
-From `regroup/mobile/` (emulator must be up):
+`test-prep.sh` seeds on start. To re-seed (emulators up, `E2E_TEST_PASSWORD` set),
+from `regroup/mobile/`:
 
 ```bash
 npm run maestro:seed     # = ./maestro/scripts/reset-and-seed.sh
 ```
 
-This runs `e2e/setup/seedTestData.js` against the emulator and creates the
-`testAccounts.json` users (with **map-shaped** role claims so Firestore rules engage),
-plus houses/activities/disputes. Re-run any time to reset seeded entities.
+This runs `maestro/scripts/seed/index.js`, which wipes the emulators and writes the
+accounts from `e2e/setup/testAccounts.json` (uids `e2e-<id>`, with **map-shaped** role
+claims so Firestore rules engage), the test and Oxford houses, activities, a dispute
+and payments. It refuses any project that is not `demo-` and any non-loopback host
+(`seed/guard.js`). Re-run any time to reset.
 
 Accounts (password `$E2E_TEST_PASSWORD`):
 
-| Email                           | Role                                            | House            |
-| ------------------------------- | ----------------------------------------------- | ---------------- |
-| `test-manager@rats-e2e.com`     | admin                                           | `test-house-123` |
-| `test-guest-a@rats-e2e.com`     | guest                                           | `test-house-123` |
-| `test-guest-b@rats-e2e.com`     | guest                                           | `test-house-123` |
-| `test-multi-house@rats-e2e.com` | admin (`test-house-a`) + guest (`test-house-b`) | —                |
+| Email                               | Role  | House               |
+| ----------------------------------- | ----- | ------------------- |
+| `test-manager@rats-e2e.com`         | admin | `test-house-123`    |
+| `test-guest-a@rats-e2e.com`         | guest | `test-house-123`    |
+| `test-guest-b@rats-e2e.com`         | guest | `test-house-123`    |
+| `test-oxford-operator@rats-e2e.com` | admin | `test-house-oxford` |
 
-## Step 3 — Build the debug app
+`testAccounts.json` also lists `test-multi-house@rats-e2e.com`, but the seed does not
+create it.
 
-```bash
-npm run test:e2e:build:ios       # ios/build/.../rats.app  (first build ~15-20 min)
-```
+## Step 3 — Build the E2EEmulator app
 
-Rebuild only when native code or the JS bundle entry changes. Pure flow/YAML edits do
-**not** need a rebuild.
+Follow "Which app build" in [`maestro/README.md`](../maestro/README.md): `xcodebuild`
+the `rats-e2e-emulator` scheme with the `E2EEmulator` configuration, then
+`xcrun simctl install`. On Android, `./gradlew assembleE2eEmulator` in `android/`. The
+build embeds its JS bundle, so Metro is not needed.
+
+Rebuild after native changes or JS changes. Pure flow/YAML edits do **not** need a
+rebuild.
 
 ## Step 4 — Boot a simulator
 
 ```bash
-xcrun simctl boot "iPhone 14 Pro"     # or any installed device; must match a booted sim
+xcrun simctl boot "$SIM_UDID"     # run-flows.sh boots it too (default: the E2E-iPhone sim)
 ```
 
 ## Step 5 — Run flows
 
 ```bash
-npm run maestro:smoke:ios        # just the smoke flow (fast sanity)
-npm run maestro:ios              # the whole maestro/flows/ directory
+maestro/scripts/run-flows.sh --sim "$SIM_UDID"          # whole suite, one flow at a time
+npm run maestro:smoke:ios                               # just the smoke flow (fast sanity)
+npm run maestro:suite:ios                               # maestro/flows/run-all.yaml
 ```
 
 Under the hood these pass the per-platform appId:
 
 ```bash
-maestro test -e APP_ID=com.rats.dev.e2e.emu      maestro/flows/smoke.yaml   # iOS
-maestro test -e APP_ID=com.regroup.app.e2e.emu   maestro/flows/smoke.yaml   # Android
+maestro test -e APP_ID=com.rats.dev.e2e.emu      -e E2E_TEST_PASSWORD="$E2E_TEST_PASSWORD" maestro/flows/smoke.yaml   # iOS
+maestro test -e APP_ID=com.regroup.app.e2e.emu   -e E2E_TEST_PASSWORD="$E2E_TEST_PASSWORD" maestro/flows/smoke.yaml   # Android
 ```
 
 ### Run a subset by tag
 
-Flows are tagged (`smoke`, and later `operator`/`guest`/`payment`):
+Flows are tagged (`smoke`, `operator`, `guest`, `payments`, `oxford`, and others):
 
 ```bash
-maestro test -e APP_ID=com.rats.dev.e2e.emu --include-tags=smoke   maestro/flows/
-maestro test -e APP_ID=com.rats.dev.e2e.emu --exclude-tags=payment maestro/flows/
+maestro test -e APP_ID=com.rats.dev.e2e.emu --include-tags=smoke    maestro/flows/
+maestro test -e APP_ID=com.rats.dev.e2e.emu --exclude-tags=payments maestro/flows/
 ```
 
 ### Run a single flow
@@ -179,8 +206,9 @@ maestro studio        # live inspector — see the accessibility tree + testIDs,
 maestro record        # record a session to video (handy for flaky-flow triage)
 ```
 
-- **Selectors:** RN `testID` maps to Maestro `id`. The app has ~737 `testID`s; prefer
-  `id:` over `text:`. Both are **regex** (use `.*` for dynamic values).
+- **Selectors:** RN `testID` maps to Maestro `id`. `src/` has about 484 `testID=`
+  occurrences in non-test files; prefer `id:` over `text:`. Both are **regex** (use
+  `.*` for dynamic values).
 - **Waits:** rely on `assertVisible` auto-wait (~7s) and `extendedWaitUntil` timeouts;
   avoid manual sleeps. Cold anonymous Firebase login can take 10–15s — login waits up to 60s.
 - **Reusable steps:** `subflows/login.yaml` + `logout.yaml`. Invoke with env:
@@ -191,6 +219,7 @@ maestro record        # record a session to video (handy for flaky-flow triage)
         EMAIL: test-manager@rats-e2e.com
         PASSWORD: $E2E_TEST_PASSWORD
   ```
+- Every flow must start with `- runFlow: ../subflows/guard-e2e-app.yaml`.
 
 ### Output artifacts
 
@@ -204,36 +233,35 @@ maestro test -e APP_ID=com.rats.dev.e2e.emu --format=JUNIT maestro/flows/
 
 ## Troubleshooting
 
-| Symptom                                        | Likely cause / fix                                                                                                                                                    |
-| ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| App shows **prod** data / writes to prod       | Not in emulator mode. Confirm it's a **debug** build, the flow sets `IS_E2E_TEST: "1"`, and the emulator is up. Check device logs for `[Firebase] E2E mode detected`. |
-| `maestro:seed` errors "Emulator not reachable" | Emulator isn't running. `cd regroup && firebase emulators:start`.                                                                                                     |
-| Login flow times out at `house-tab`            | Cold auth is slow; the 60s wait usually covers it. Verify the account was seeded (Emulator UI → Auth) and the emulator is reachable.                                  |
-| Operator (admin) screens denied                | Stale **array** claims. Re-run `npm run maestro:seed` (it mints map-shaped claims that the `.keys().hasAny` rules require).                                           |
-| `assertVisible` can't find an element          | Open `maestro studio` to confirm the real `testID`; the element may need a missing `testID` added in `src/`.                                                          |
-| No device found                                | `xcrun simctl boot "<device>"`, then `maestro list-devices`.                                                                                                          |
-| Build is stale after JS change                 | Metro caches; restart `npm start` or rebuild. Native changes always need `test:e2e:build:ios`.                                                                        |
+| Symptom                                         | Likely cause / fix                                                                                                                                                      |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App shows **prod** data / writes to prod        | Not the E2EEmulator build. Only `com.rats.dev.e2e.emu` / `com.regroup.app.e2e.emu` connect to the emulators; uninstall `com.rats.dev` / `com.regroup.app` from the sim. |
+| App stops at startup (`E2EEmulatorUnreachable`) | The E2EEmulator build can't reach an emulator port. Start `./scripts/test-prep.sh` from the repo root.                                                                  |
+| `maestro:seed` errors "Emulator not reachable"  | Emulator isn't running. From the repo root: `./scripts/test-prep.sh`.                                                                                                   |
+| Login flow times out at `house-tab`             | Cold auth is slow; the 60s wait usually covers it. Verify the account was seeded (Emulator UI → Auth) and the emulator is reachable.                                    |
+| Operator (admin) screens denied                 | Stale **array** claims. Re-run `npm run maestro:seed` (it mints map-shaped claims that the `.keys().hasAny` rules require).                                             |
+| `assertVisible` can't find an element           | Open `maestro studio` to confirm the real `testID`; the element may need a missing `testID` added in `src/`.                                                            |
+| No device found                                 | `xcrun simctl boot "<device>"`, then `maestro list-devices`.                                                                                                            |
+| Build is stale after a JS change                | The E2EEmulator build embeds its bundle: rebuild and reinstall it.                                                                                                      |
 
 ---
 
 ## CI (future)
 
-Not wired yet (see plan Phase 7). Intended shape: GitHub Actions installs Java 17 +
-Maestro, builds the debug app, boots a device, starts the Firebase emulator + seeds, then
-`maestro test --format JUNIT --include-tags=smoke maestro/flows/` on PRs, fuller tiers
-nightly. Android-on-Linux runners are cheapest; iOS needs a macOS runner. Never run E2E
-against prod from CI — emulator only.
+Not wired yet. CI runs no regroup Maestro flow (the old `maestro-smoke` job is
+build-only since 2026-11-06, as `regroup-android-build`). Intended shape: install Java 21
+
+- Maestro, build the E2EEmulator variant, boot a device, start the emulators + seed, then
+  `maestro test --format JUNIT --include-tags=smoke maestro/flows/` on PRs, fuller tiers
+  nightly. Android-on-Linux runners are cheapest; iOS needs a macOS runner. Never run E2E
+  against prod from CI — emulator only.
 
 ---
 
 ## Known gaps
 
-- **Android is blocked.** RN `Settings` is iOS-only, so `IS_E2E_TEST` never reaches the app
-  on Android. Needs a launch-arg reader (`react-native-launch-arguments`) or a
-  `react-native-config` build-time flag baked into a dedicated E2E debug build. The
-  `maestro:android` scripts exist but won't connect to the emulator until then.
-- **iOS launch-arg spike unconfirmed.** The wiring is in place; a device run still needs to
-  confirm Maestro's `launchApp.arguments` surfaces in `Settings.get` on iOS. This is the
-  first thing to validate (Step 1–5 above).
-- **Seed fixtures untracked.** `e2e/setup/*.js` (incl. `seedTestData.js`) is gitignored by
-  `regroup/.gitignore`'s blanket `**/*.js`; the seed lives only locally.
+- **`run-flows.sh` is iOS-only.** On Android, run flows with `maestro --device …`
+  directly (steps in `maestro/README.md`).
+- **`testActivities.json` and `testDisputes.json`** in `e2e/setup/` are not read by
+  anything; the seed builds its own activities and dispute (`maestro/scripts/seed/docs.js`).
+  The seed itself is tracked in git under `maestro/scripts/seed/`.

@@ -1,10 +1,11 @@
 ---
 name: regroup-web-new-firestore-service
-description: Scaffold a new Angular service extending BaseFirestoreService<T> with its spec file and entity type. Usage: /new-firestore-service EntityName collectionName
+description: Scaffold a new Angular service extending BaseFirestoreService<T> with its spec file and entity type. Usage: /regroup-web-new-firestore-service EntityName collectionName
 ---
 
 > **Unit:** `regroup/web/` — all relative paths below resolve from there. From the repo root:
 > `cd "${CLAUDE_PROJECT_DIR:-$(pwd)}/regroup/web"` first.
+
 # New Firestore Service
 
 Given `EntityName` and `collectionName` arguments from the user, generate the following:
@@ -49,13 +50,18 @@ Create `src/app/services/<entity-name>.service.spec.ts`:
 
 ```typescript
 import { TestBed } from '@angular/core/testing';
+import { AngularFirestore } from '@angular/fire/firestore';
 import { <EntityName>Service } from './<entity-name>.service';
 
 describe('<EntityName>Service', () => {
   let service: <EntityName>Service;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({});
+    TestBed.configureTestingModule({
+      providers: [
+        { provide: AngularFirestore, useValue: { collection: () => ({}) } },
+      ],
+    });
     service = TestBed.inject(<EntityName>Service);
   });
 
@@ -68,6 +74,7 @@ describe('<EntityName>Service', () => {
 ## Notes
 
 - `<entity-name>` is the kebab-case version of `<EntityName>` (e.g., `WeeklyReport` → `weekly-report`).
+- The spec must provide an `AngularFirestore` stub, as `src/app/services/house.service.spec.ts` does: the base constructor calls `firestore.collection(...)`, and without a provider `TestBed.inject` throws `NullInjectorError`. CI only typechecks specs, so it would not catch a missing provider. If the service injects anything else (e.g. `FormBuilder`), provide that too.
 - `BaseFirestoreService` provides: `get(id)`, `getByAttribute(attr, op, val)`, `create(obj)`, `update(id, partial)`, `delete(id)`, `add(obj)`.
 - Add domain-specific methods (like `HouseService.getHouses()`) after generation.
 - The entity must extend `BaseEntity` from `src/app/entities/BaseEntity.ts`.

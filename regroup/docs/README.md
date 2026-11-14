@@ -42,9 +42,11 @@ Regroup is a React Native sober living house management app backed by Firebase. 
 
 | Doc                                                                                                      | Description                                                               | Status   |
 | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- | -------- |
-| [`ARCHITECTURE.md`](./ARCHITECTURE.md)                                                                   | End-to-end architecture: Redux, React Query, navigation, Firebase         | CURRENT  |
-| [`FIRESTORE_DATA_MODEL.md`](./FIRESTORE_DATA_MODEL.md)                                                   | Firestore collection schemas and access patterns                          | CURRENT  |
-| [`PERFORMANCE_SCALABILITY_ANALYSIS.md`](./PERFORMANCE_SCALABILITY_ANALYSIS.md)                           | Firestore query patterns, indexing, scale limits                          | CURRENT  |
+| [`technical/architecture.md`](./technical/architecture.md)                                               | End-to-end architecture: Redux, React Query, navigation, Firebase         | CURRENT  |
+| [`technical/mobile/firestore-data-model.md`](./technical/mobile/firestore-data-model.md)                 | Firestore collection schemas and access patterns                          | CURRENT  |
+| [`technical/performance-scalability.md`](./technical/performance-scalability.md)                         | Firestore query patterns, indexing, scale limits (2026-02 analysis)       | AGING    |
+| [`technical/development.md`](./technical/development.md)                                                 | Local setup: points to the `mobile/`, `functions/` and `web/` CLAUDE.md   | STUB     |
+| [`technical/web/`](./technical/web/)                                                                     | Web app notes: Claude Code automations, 2026-05-26 iterative review       | CURRENT  |
 | [`archive/CODEBASE_ANALYSIS_REWRITE_VS_REFACTOR.md`](./archive/CODEBASE_ANALYSIS_REWRITE_VS_REFACTOR.md) | Historical: rewrite vs refactor decision (Nov 2025) — archived 2026-05-25 | ARCHIVED |
 
 Also see the `.claude/` directory for conventions used by Claude Code:
