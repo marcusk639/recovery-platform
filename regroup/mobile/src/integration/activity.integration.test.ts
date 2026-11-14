@@ -21,6 +21,8 @@ const TEST_HOUSE = 'integration-house-1';
 // Week of 2026-02-16 (Monday)
 const TEST_WEEK_START = new Date('2026-02-16T00:00:00.000Z');
 const TEST_WEEK_END = new Date('2026-02-22T23:59:59.000Z');
+// Logged inside the week the tests list, not at today's date.
+const IN_TEST_WEEK = new Date('2026-02-17T12:00:00.000Z');
 
 /**
  * Fetch an activity document directly from Firestore by ID.
@@ -72,6 +74,7 @@ describe('activity service (integration)', () => {
         ActivityType.CHORE,
         ActivityDataFactory.chore('daily', 'Kitchen'),
         'user-1',
+        IN_TEST_WEEK,
       );
       createdActivityIds.push(activity.id);
 
@@ -100,6 +103,7 @@ describe('activity service (integration)', () => {
         ActivityType.MEETING,
         ActivityDataFactory.meeting('AA Tuesday', 'AA', 60),
         'user-1',
+        IN_TEST_WEEK,
       );
       createdActivityIds.push(activity.id);
 
