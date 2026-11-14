@@ -1,9 +1,9 @@
 /**
  * channels.test.ts
  *
- * ensureNotificationChannels creates the two Android channels the app posts to
- * ('default' for server pushes, 'default-channel-id' for rent reminders), once
- * per process, and does nothing on iOS. Each case loads a fresh copy of the
+ * ensureNotificationChannels creates the Android channel the app posts to,
+ * 'default-channel-id', once per process, and does nothing on iOS. Server pushes
+ * and rent reminders share it: the server sends on that id (F-ac2098). Each case loads a fresh copy of the
  * module (and of the notify-kit mock) so the per-process memo starts empty.
  */
 jest.mock('react-native-notify-kit', () => require('react-native-notify-kit/jest-mock'));
@@ -45,15 +45,14 @@ afterEach(() => {
 describe('ensureNotificationChannels on Android', () => {
   beforeEach(() => setOS('android'));
 
-  it('creates the server-push and reminder channels with HIGH importance', async () => {
+  it('creates the one channel the server and the reminders post to, with HIGH importance', async () => {
     const m = load();
 
     await m.ensureNotificationChannels();
 
     expect(m.createChannels).toHaveBeenCalledTimes(1);
     expect(m.createChannels).toHaveBeenCalledWith([
-      { id: 'default', name: 'General', importance: m.HIGH },
-      { id: 'default-channel-id', name: 'Reminders', importance: m.HIGH },
+      { id: 'default-channel-id', name: 'General', importance: m.HIGH },
     ]);
   });
 

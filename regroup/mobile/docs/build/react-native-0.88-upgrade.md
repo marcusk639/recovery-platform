@@ -949,8 +949,9 @@ Pinned exactly so the migration cannot change them; none is fixed here.
   is gone). The `@notifee` entry left `transformIgnorePatterns` in both Jest configs, and the stale
   `gradle.properties` comment about the patch now says it is gone.
 - **Wrapper.** `src/services/notifications/` is the only importer (`.eslintrc.js` allowlist entry):
-  - `channels.ts`: `ensureNotificationChannels()` creates `default` ("General", HIGH) and
-    `default-channel-id` ("Reminders", HIGH) in one `createChannels` call, memoized per process
+  - `channels.ts`: `ensureNotificationChannels()` creates `default-channel-id` ("General",
+    HIGH), the id the server sends on and the rent reminder uses (a second `default` channel
+    went unused and was dropped, F-ac2098), in one `createChannels` call, memoized per process
     (a failed call is logged and retried by the next caller); Android only. **This fixes the
     pre-existing bug in spec 5.3:** no live code created a channel, so Android 8+ showed neither
     server pushes nor rent reminders. `index.js` calls it right after `firebase-setup`.
@@ -1656,7 +1657,7 @@ The original list of device checks:
 - Upgrade in place from the current store build, on both platforms: no forced sign-out, FCM still
   delivers, and (iOS) paying leaves no stale rent reminder.
 - Pushes: a data-only push and a `notification`-type push in the foreground, a background push on
-  Android landing in the `default` channel. The rent reminder scheduled and cancelled on a device.
+  Android landing in the `default-channel-id` channel. The rent reminder scheduled and cancelled on a device.
 - Stripe: decline and 3DS cards on a device.
 - Store `Release` builds with the live key; a Sentry Release upload of a Hermes source map with a
   debug ID.

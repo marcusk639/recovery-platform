@@ -3,9 +3,10 @@
  *
  * services/documents.ts uploads to houses/{houseId}/documents/{docId} and
  * houses/{houseId}/guests/{guestId}/documents/{docId}. No rule matched either
- * path, so the catch-all denied every upload. Only house admins may read or
- * write them, matching the documents collection in firestore.rules. The
- * document picker offers PDFs and images only.
+ * path, so the catch-all denied every upload. Only house admins may write them,
+ * matching the documents collection in firestore.rules, and nobody reads them
+ * directly: they open through getDocumentLink. The document picker offers PDFs
+ * and images only.
  *
  * Requires the Storage emulator (FIREBASE_STORAGE_EMULATOR_HOST, set by
  * `firebase emulators:exec`).
@@ -71,10 +72,12 @@ const upload = (ctx: RulesTestContext, filePath: string, data: Buffer, type: str
   uploadBytes(ref(ctx.storage(), filePath), data, { contentType: type });
 
 describe.each(Object.entries(PATHS))('%s documents', (_kind, filePath) => {
-  test('a house admin can upload a PDF, read it and delete it', async () => {
+  // Documents open only through getDocumentLink's short-lived signed link. A
+  // download-token URL would bypass the rules and outlive the admin's access.
+  test('a house admin can upload a PDF and delete it, but cannot get a download link', async () => {
     const ctx = admin();
     await assertSucceeds(upload(ctx, filePath, TINY_PDF, 'application/pdf'));
-    await assertSucceeds(getDownloadURL(ref(ctx.storage(), filePath)));
+    await assertFails(getDownloadURL(ref(ctx.storage(), filePath)));
     await assertSucceeds(deleteObject(ref(ctx.storage(), filePath)));
   });
 

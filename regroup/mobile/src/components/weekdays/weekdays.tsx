@@ -134,8 +134,7 @@ const Weekday = (props: WeekdayProps) => {
     textColor = color.white;
   }
   if (dayNumber === currentDay) {
-    weekdayStyles.presentDay.borderColor = theme.primaryColor;
-    containerStyle = weekdayStyles.presentDay;
+    containerStyle = { ...weekdayStyles.presentDay, borderColor: theme.primaryColor };
     textColor = theme.primaryColor;
   }
   if (dayNumber > currentDay) {
