@@ -7,10 +7,10 @@
 # operator (or reuses PUSH_EMAIL / PUSH_PASSWORD), signs it in, waits for the app
 # to store its FCM token, then sends with the server's message shapes
 # (push-fcm.js) and reads what Android posted (check-notifications.js):
-#   1. resident push, app in the foreground: shown, on channel `default`;
+#   1. resident push, app in the foreground: shown, on channel `default-channel-id`;
 #   2. data-only push, app in the foreground: the app keeps running, no crash;
-#   3. admin push, app in the background: shown, on channel `default`;
-#   4. resident push, app in the background: shown, on channel `default`.
+#   3. admin push, app in the background: shown, on channel `default-channel-id`;
+#   4. resident push, app in the background: shown, on channel `default-channel-id`.
 # Also reported, not required: an admin push in the foreground (the app shows
 # only notifee payloads itself; see services/notifications/remoteMessage.ts).
 #
@@ -94,8 +94,8 @@ if [[ -n "${DEVICE}" ]]; then
 
   m="push-e2e-resident-fg-${RUN}"; send resident "$m"
   if ch="$(posted "$m")"; then
-    [[ "$ch" == default ]] && pass "resident push, foreground: shown on default" ||
-      fail "resident push, foreground: shown on ${ch}, not default"
+    [[ "$ch" == default-channel-id ]] && pass "resident push, foreground: shown on default-channel-id" ||
+      fail "resident push, foreground: shown on ${ch}, not default-channel-id"
   else
     fail "resident push, foreground: not shown"
   fi
@@ -117,16 +117,16 @@ if [[ -n "${DEVICE}" ]]; then
   sleep 3
   m="push-e2e-admin-bg-${RUN}"; send admin "$m"
   if ch="$(posted "$m")"; then
-    [[ "$ch" == default ]] && pass "admin push, background: shown on default" ||
-      fail "admin push, background: shown on ${ch}, not default"
+    [[ "$ch" == default-channel-id ]] && pass "admin push, background: shown on default-channel-id" ||
+      fail "admin push, background: shown on ${ch}, not default-channel-id"
   else
     fail "admin push, background: not shown"
   fi
 
   m="push-e2e-resident-bg-${RUN}"; send resident "$m"
   if ch="$(posted "$m")"; then
-    [[ "$ch" == default ]] && pass "resident push, background: shown on default" ||
-      fail "resident push, background: shown on ${ch}, not default"
+    [[ "$ch" == default-channel-id ]] && pass "resident push, background: shown on default-channel-id" ||
+      fail "resident push, background: shown on ${ch}, not default-channel-id"
   else
     fail "resident push, background: not shown"
   fi

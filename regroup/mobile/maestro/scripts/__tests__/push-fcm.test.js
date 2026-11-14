@@ -7,22 +7,22 @@ describe('push-fcm', () => {
     expect(msg).toEqual({
       token: 'tok-1',
       notification: { title: 'push-e2e-resident-1', body: 'Device pass push check' },
-      android: { notification: { channelId: 'default' } },
+      android: { notification: { channelId: 'default-channel-id' } },
       data: { notifee: expect.any(String) },
     });
     expect(JSON.parse(msg.data.notifee)).toEqual({
       title: 'push-e2e-resident-1',
       body: 'Device pass push check',
       data: {},
-      android: { channelId: 'default' },
+      android: { channelId: 'default-channel-id' },
     });
   });
 
-  it('builds an admin push the way sendFcmToHouseAdmins does: a notification on default', () => {
+  it('builds an admin push the way sendFcmToHouseAdmins does: a notification on default-channel-id', () => {
     expect(buildMessage('admin', 'tok-1', 'push-e2e-admin-1')).toEqual({
       token: 'tok-1',
       notification: { title: 'push-e2e-admin-1', body: 'Device pass push check' },
-      android: { notification: { channelId: 'default' } },
+      android: { notification: { channelId: 'default-channel-id' } },
     });
   });
 
