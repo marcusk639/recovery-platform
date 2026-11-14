@@ -1,7 +1,8 @@
 // Mounts every first-release screen and records what happens for the go/no-go
 // report, then fails a screen that isn't ok: one that crashes, refuses a read or
-// shows a deferred feature, or throws an uncaught page error. The report is written
-// either way, so it still shows the whole set.
+// shows a deferred feature, or throws an uncaught page error. A screen the portal
+// leaves unregistered on purpose must instead give the "use the phone" alert. The
+// report is written either way, so it still shows the whole set.
 import fs from 'node:fs';
 import { expect, reseed, signInAs, test } from './helpers';
 
@@ -39,9 +40,11 @@ const SCREENS: [string, object?][] = [
 
 // Deferred modules a screen may show and still pass, because they're deferred on
 // purpose (tools/replacements.mjs). Any other deferral or refused read fails.
-const EXPECTED_DEFERRED: Record<string, string[]> = {
-  EditUserInfo: ['react-native-date-picker'],
-};
+const EXPECTED_DEFERRED: Record<string, string[]> = {};
+
+// Unregistered on purpose (routes.tsx): EditUserInfo edits the signed-in person,
+// not the resident.
+const EXPECTED_UNREGISTERED = new Set(['EditUserInfo']);
 
 const OUT = 'dist/screen-survey.json';
 const rows: object[] = [];
@@ -70,16 +73,12 @@ for (const [route, params] of SCREENS) {
     const allowed = EXPECTED_DEFERRED[route] ?? [];
     const unexpectedDeferred = deferredShown.filter((text) => !allowed.some((name) => text.endsWith(`: ${name}`)));
     const degraded = consoleErrors.length > 0 || unexpectedDeferred.length > 0;
-    rows.push({
-      screen: route,
-      status: crashed ? 'crashed' : degraded ? 'degraded' : 'ok',
-      pageErrors,
-      consoleErrors: [...new Set(consoleErrors)],
-      deferredShown,
-      alerts: await page.getByRole('alertdialog').allInnerTexts(),
-    });
+    const alerts = await page.getByRole('alertdialog').allInnerTexts();
+    const unregistered = alerts.some((text) => /use the Regroup app on your phone/i.test(text));
+    const status = crashed ? 'crashed' : degraded ? 'degraded' : unregistered ? 'unregistered' : 'ok';
+    rows.push({ screen: route, status, pageErrors, consoleErrors: [...new Set(consoleErrors)], deferredShown, alerts });
     await page.screenshot({ path: `dist/survey/${route}.png` });
-    const status = crashed ? 'crashed' : degraded ? 'degraded' : 'ok';
-    expect(status, `${route}: ${JSON.stringify(rows[rows.length - 1])}`).toBe('ok');
+    const expected = EXPECTED_UNREGISTERED.has(route) ? 'unregistered' : 'ok';
+    expect(status, `${route}: ${JSON.stringify(rows[rows.length - 1])}`).toBe(expected);
   });
 }
