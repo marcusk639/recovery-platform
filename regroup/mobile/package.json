@@ -21,7 +21,6 @@
     "maestro:suite:ios": ": \"${E2E_TEST_PASSWORD:?Set E2E_TEST_PASSWORD (see e2e/SECURITY-test-credentials.md)}\" && node maestro/scripts/e2e-build-guard.js --platform ios --app-id com.rats.dev.e2e.emu && maestro test -e E2E_TEST_PASSWORD=\"$E2E_TEST_PASSWORD\" -e APP_ID=com.rats.dev.e2e.emu maestro/flows/run-all.yaml",
     "pod:install": "cd ios && pod install && cd ..",
     "postinstall": "patch-package && pod-install",
-    "seed-e2e": "node e2e/setup/seedTestData.js",
     "start": "react-native start",
     "start:android": "react-native start && adb shell am start -n com.regroup.app/com.rats.dev.MainActivity",
     "test": "jest",

@@ -23,7 +23,7 @@ build can start from a settled contract.
 
 | Metric                    | Definition                                                        | Notes                                                                                                            |
 | ------------------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| **Collected $**           | Sum of successful rent payments (cents) over the period.          | Net of refunds/disputes. From payment records.                                                                   |
+| **Collected $**           | Sum of successful rent payments (cents) over the period.          | Net of refunds only (`refundedAmountCents`, floored at 0); disputes are not netted. From payment records.        |
 | **On-time rate %**        | `on_time_payments / due_payments` for the period.                 | "On time" = paid on/before the rent due date. Requires a due date per charge.                                    |
 | **Hours saved**           | Estimated admin hours avoided via automated collection/reminders. | Heuristic: `automated_collections × minutes_per_manual_collection`. Document the constant; label as an estimate. |
 | **Outstanding balance $** | Unpaid/overdue rent at period end.                                | Secondary metric.                                                                                                |
@@ -49,6 +49,8 @@ build can start from a settled contract.
 
 ## Open questions
 
-- Is a per-charge **due date** persisted today? On-time rate depends on it.
+- ~~Is a per-charge **due date** persisted today?~~ Answered: yes, `payments.dueDate`
+  (`YYYY-MM-DD`, captured at charge time). `rentRoiMetrics` (`functions/src/callable/analytics.ts`)
+  counts only payments that have one toward the on-time rate and says so in its response.
 - Aggregation home: compute in a callable on demand vs a periodic rollup doc.
 - "Hours saved" constant — pick a defensible minutes-per-manual-collection value.

@@ -6,22 +6,25 @@ This document describes every Claude Code automation configured for this project
 
 ## Overview
 
-| Type       | Name                        | Trigger                                                         |
-| ---------- | --------------------------- | --------------------------------------------------------------- |
-| MCP Server | context7                    | Automatic (on `use context7` in prompts)                        |
-| Skill      | `firebase-deploy`           | User types `/firebase-deploy`                                   |
-| Skill      | `new-firestore-service`     | User types `/new-firestore-service EntityName collectionName`   |
-| Hook       | Block `environment.prod.ts` | Automatic (PreToolUse on Edit/Write)                            |
-| Hook       | TSLint on edit              | Automatic (PostToolUse on Edit/Write)                           |
-| Subagent   | `security-reviewer`         | Claude invokes it, or user asks Claude to run a security review |
+| Type       | Name                                | Trigger                                                                   |
+| ---------- | ----------------------------------- | ------------------------------------------------------------------------- |
+| MCP Server | context7                            | Automatic (on `use context7` in prompts)                                  |
+| Skill      | `regroup-web-deploy`                | User types `/regroup-web-deploy`                                          |
+| Skill      | `regroup-web-new-firestore-service` | User types `/regroup-web-new-firestore-service EntityName collectionName` |
+| Hook       | Block `environment.prod.ts`         | Automatic (PreToolUse on Edit/Write)                                      |
+| Hook       | TSLint on edit                      | Automatic (PostToolUse on Edit/Write)                                     |
+| Subagent   | `security-reviewer`                 | Claude invokes it, or user asks Claude to run a security review           |
 
-All config lives under `.claude/` and is checked into git so every developer gets the same automations automatically.
+All of it is checked into git, in two places:
+
+- The MCP server, hooks and subagent live in `regroup/web/.mcp.json` and `regroup/web/.claude/`. Claude Code loads these only when a session is started in `regroup/web`; a session started at the repo root or in `regroup/` doesn't get them.
+- The two skills live in the repo-root `.claude/skills/` (`regroup-web-deploy/`, `regroup-web-new-firestore-service/`), and each `cd`s into `regroup/web` before it runs anything.
 
 ---
 
 ## MCP Server: context7
 
-**File**: `.mcp.json`
+**File**: `regroup/web/.mcp.json`
 
 ### What it does
 
@@ -64,69 +67,49 @@ Claude will resolve the library, fetch the relevant docs section, and answer bas
 }
 ```
 
-The server runs via `npx` on demand — no separate install step needed. Because it's in `.mcp.json` (checked into git), every developer who opens this project in Claude Code gets context7 automatically.
+The server runs via `npx` on demand — no separate install step needed. Because `regroup/web/.mcp.json` is checked into git, a Claude Code session started in `regroup/web` offers context7 (after the usual project-MCP approval prompt). Sessions started elsewhere in the monorepo use the repo-root `.mcp.json` instead.
 
 ---
 
-## Skill: `firebase-deploy`
+## Skill: `regroup-web-deploy`
 
-**File**: `.claude/skills/firebase-deploy/SKILL.md`
-**Invocation**: user-only (Claude cannot invoke this on its own)
+**File**: `.claude/skills/regroup-web-deploy/SKILL.md` (repo root; formerly documented here as `firebase-deploy`)
+**Invocation**: user-only (`disable-model-invocation: true`; Claude cannot invoke this on its own)
+
+The authoritative build and deploy commands are in the **Build & Deploy** section of `regroup/web/CLAUDE.md`. This section only summarizes them.
 
 ### What it does
 
-Orchestrates the full multi-step Firebase deploy pipeline as a single command. The deploy sequence for this project is:
+Wraps the web build and deploy as a single command. The real pipeline (`regroup/web/package.json`) is:
 
 ```
-ng build  →  copy:hosting  →  build:ssr  →  build:functions  →  firebase deploy
+npm run build   =  build:ssr        (ng build --prod && ng run sapp:server:production)
+                 → build:functions  (functions: tsc && npm run build:copy-to-functions)
+npm run deploy  =  firebase deploy --only hosting,functions:web:ssr
 ```
 
-Each step depends on the previous one. A partial run (e.g., deploying hosting before SSR is built) leaves the live site serving a stale server bundle. This skill ensures the full pipeline runs in the correct order and provides partial-deploy flags for targeted updates.
+There is no `copy:hosting` step. Both the hosting and functions `predeploy` hooks in `firebase.json` run `scripts/verify-ssr-target.js`, which refuses a bundle built for another project and, with `--identical`, a deploy whose hosted `dist/sapp/browser/index.html` differs from the `ssr` function's copy.
 
 ### Why this project needs it
 
-The `npm run build` script chains four sub-commands. The functions build also physically copies `../dist` into `functions/dist/` before compiling TypeScript — if Angular's build hasn't completed first, the functions bundle will be stale. Developers frequently run just `firebase deploy` without rebuilding, which causes SSR to serve old HTML on production.
+Hosting doesn't upload `index.html`; the `ssr` function serves every page's HTML from its own copy of `dist/`, which `build:copy-to-functions` refreshes. An Angular change therefore needs both the hosting files and the `ssr` function rebuilt and redeployed together. Running just `firebase deploy` without rebuilding ships whatever `dist/` holds, and the predeploy check doesn't test freshness.
 
 ### How to use it
 
-**Full deploy** (rebuilds everything, then deploys hosting + functions):
-
 ```
-/firebase-deploy
-```
-
-Claude will ask for confirmation (production project: `phoenix-cleanhouse`), run the full build pipeline, and report the deploy URL.
-
-**Functions only** (when you've only changed Cloud Functions):
-
-```
-/firebase-deploy --functions-only
+/regroup-web-deploy                    # full: npm run build, then npm run deploy
+/regroup-web-deploy --functions-only   # npm run build, then firebase deploy --only functions:web:ssr
+/regroup-web-deploy --hosting-only     # npm run build, then firebase deploy --only hosting
 ```
 
-Runs `npm run build:functions` then `firebase deploy --only functions`.
-
-**Hosting only** (when you've only changed frontend code):
-
-```
-/firebase-deploy --hosting-only
-```
-
-Runs `npm run build:ssr` and `copy:hosting`, then `firebase deploy --only hosting`.
-
-### When to use each flag
-
-| Changed                            | Use                     |
-| ---------------------------------- | ----------------------- |
-| Angular components, styles, routes | `--hosting-only`        |
-| Cloud Functions (`functions/src/`) | `--functions-only`      |
-| Both, or SSR server (`server.ts`)  | (no flag — full deploy) |
+Claude asks for confirmation (production project: `phoenix-cleanhouse`) before deploying. Both partial modes still run the full `npm run build`, because the `--identical` predeploy check compares the hosted `index.html` with the `ssr` function's copy. A hosting-only deploy leaves the deployed `ssr` function rendering its previous bundle, so prefer the full deploy for any Angular change.
 
 ---
 
-## Skill: `new-firestore-service`
+## Skill: `regroup-web-new-firestore-service`
 
-**File**: `.claude/skills/new-firestore-service/SKILL.md`
-**Invocation**: user-only
+**File**: `.claude/skills/regroup-web-new-firestore-service/SKILL.md` (repo root)
+**Invocation**: the user or Claude (the frontmatter doesn't set `disable-model-invocation`)
 
 ### What it does
 
@@ -157,11 +140,11 @@ This skill generates all three files correctly in one step, enforcing the `BaseF
 ### How to use it
 
 ```
-/new-firestore-service WeeklyReport weekly-reports
+/regroup-web-new-firestore-service WeeklyReport weekly-reports
 ```
 
 ```
-/new-firestore-service Application applications
+/regroup-web-new-firestore-service Application applications
 ```
 
 The first argument is the **PascalCase entity name**. The second is the **Firestore collection name** (usually plural, kebab-case).
@@ -170,7 +153,7 @@ Claude will generate:
 
 - `src/app/entities/WeeklyReport.ts` — entity class extending `BaseEntity`
 - `src/app/services/weekly-report.service.ts` — service extending `BaseFirestoreService<WeeklyReport>`
-- `src/app/services/weekly-report.service.spec.ts` — minimal spec
+- `src/app/services/weekly-report.service.spec.ts` — minimal spec that provides an `AngularFirestore` stub (as `house.service.spec.ts` does); without one, `TestBed.inject` throws `NullInjectorError`. CI only typechecks specs, so a missing provider would not fail CI.
 
 After generation, add domain-specific methods to the service (e.g., custom queries using `getByAttribute`). The `BaseFirestoreService` base provides `get`, `getByAttribute`, `create`, `update`, `delete`, and `add` for free.
 
@@ -202,7 +185,7 @@ Neither layer covers shell commands. A `Bash` call that writes the file (`sed -i
 
 `environment.prod.ts` contains the production Firebase project ID, API key, app ID, and analytics measurement ID hardcoded in plain text. An accidental edit (wrong project ID, wrong API key) would silently break authentication, Firestore access, or analytics for all production users. The consequences may not be immediately visible — they surface as auth failures or missing data after a deploy.
 
-Since the file never needs to change during routine development (environment-specific values belong in `.env` or Firebase config, not this file), blocking it entirely is the safest policy.
+Since the file never needs to change during routine development, blocking it entirely is the safest policy.
 
 ### Behavior
 
@@ -308,10 +291,10 @@ This app stores and processes highly sensitive data:
 
 - **SSN** (last 4 digits) and personal identifiers on `User` entities
 - **Stripe payment methods** managed through Cloud Functions
-- **Firebase Auth** state with a password cache in `AuthService.cachedDetails`
+- **Firebase Auth** state, plus an email cache in `AuthService.cachedDetails` (typed `{ email?: string }`; it holds no password)
 - **Recovery-related health data** (sobriety date, housing status, gender)
 
-A general-purpose code reviewer will catch many bugs, but won't know to check whether `cachedDetails` is cleared post-login, or whether callable Cloud Functions re-verify `context.auth.uid` rather than trusting the client-supplied `user` object.
+A general-purpose code reviewer will catch many bugs, but won't know to check that `cachedDetails` never starts caching a password, or whether callable Cloud Functions re-verify `context.auth.uid` rather than trusting the client-supplied `user` object.
 
 ### How to use it
 
@@ -336,7 +319,7 @@ Claude will spawn the `security-reviewer` subagent, which reads the relevant fil
 | Area              | Specific Checks                                                                       |
 | ----------------- | ------------------------------------------------------------------------------------- |
 | PII leakage       | SSN, DOB, sobriety date not in `console.log` or `localStorage`                        |
-| Auth cache        | `cachedDetails` (email + password) cleared after use, not persisted                   |
+| Auth cache        | `cachedDetails` (email only) not persisted, and no password added to it               |
 | Auth listeners    | `onAuthStateChanged` stored in `authSubscription` for cleanup                         |
 | Firestore rules   | Every client-writable collection has corresponding security rules                     |
 | Stripe compliance | Card data never read back from Stripe Elements into component state                   |
@@ -348,11 +331,11 @@ Claude will spawn the `security-reviewer` subagent, which reads the relevant fil
 ```
 CRITICAL — functions/src/index.ts:34 — createOperatorSubscription does not verify context.auth before processing Stripe subscription. An unauthenticated caller could create subscriptions for arbitrary user IDs. Add: if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Auth required');
 
-HIGH — src/app/services/auth/auth-service.service.ts:22 — cachedDetails stores the user's plaintext password in memory. Clear this object immediately after login completes, not just when the component unmounts.
+HIGH — src/app/services/auth/auth-service.service.ts:24 — a change adds a password field to cachedDetails, which holds only the email today. Don't cache credentials; pass the password straight to signInWithEmailAndPassword.
 
 MEDIUM — src/app/components/accounts/my-account/my-account.component.ts:89 — user.ssn is included in a template binding. Verify this value is masked (last-4 display only) and not logged anywhere in the component's error handlers.
 
-INFO — No firestore.rules file found at project root. Firestore rules should be defined and deployed alongside the app.
+INFO — The new `weekly-reports` collection written by WeeklyReportService has no match block in regroup/mobile/firebase/firestore.rules. Add a rule there before shipping the write.
 
 Summary: 1 CRITICAL, 1 HIGH, 1 MEDIUM, 1 INFO
 ```
@@ -362,21 +345,23 @@ Summary: 1 CRITICAL, 1 HIGH, 1 MEDIUM, 1 INFO
 ## File Structure
 
 ```
-regroup-web/
-├── .mcp.json                              # context7 MCP server (project-level)
-├── .claude/
-│   ├── settings.json                      # Hook registrations
-│   ├── hooks/
-│   │   ├── block-prod-env.sh              # PreToolUse: block environment.prod.ts
-│   │   └── lint-on-edit.sh               # PostToolUse: TSLint on .ts edits
-│   ├── skills/
-│   │   ├── firebase-deploy/SKILL.md       # /firebase-deploy skill
-│   │   └── new-firestore-service/SKILL.md # /new-firestore-service skill
-│   └── agents/
-│       └── security/
-│           └── security-reviewer.md       # Security review subagent
-└── docs/
-    └── claude-automations.md              # This file
+recovery-platform/                         # monorepo root
+├── .claude/skills/
+│   ├── regroup-web-deploy/SKILL.md        # /regroup-web-deploy skill
+│   └── regroup-web-new-firestore-service/SKILL.md  # /regroup-web-new-firestore-service skill
+└── regroup/
+    ├── docs/technical/web/
+    │   └── claude-automations.md          # This file
+    └── web/                               # start the session here for the items below
+        ├── .mcp.json                      # context7 MCP server
+        └── .claude/
+            ├── settings.json              # Hook registrations + permissions.deny
+            ├── hooks/
+            │   ├── block-prod-env.sh      # PreToolUse: block environment.prod.ts
+            │   └── lint-on-edit.sh        # PostToolUse: TSLint on .ts edits
+            └── agents/
+                └── security/
+                    └── security-reviewer.md   # Security review subagent
 ```
 
 ---
@@ -392,7 +377,7 @@ regroup-web/
 
 ### Adding a new skill
 
-1. Create `.claude/skills/<name>/SKILL.md` with YAML frontmatter
+1. Create `.claude/skills/regroup-web-<name>/SKILL.md` at the repo root (where the existing web skills live) with YAML frontmatter, and start it with the same "`cd` into `regroup/web`" unit note
 2. Set `disable-model-invocation: true` for user-only skills (deploy, send, destructive ops)
 3. Set `user-invocable: false` for Claude-only skills (background knowledge, conventions)
 4. Omit both for skills either party can invoke

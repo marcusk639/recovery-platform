@@ -9,11 +9,11 @@ export * from './callable/auth';
 // Callable functions — meetings
 export * from './callable/meetings';
 
-// Callable functions — payments
+// Callable functions — payments (rent payments, plus Stripe Connect account
+// management: connectStripeAccount, disconnectStripeAccount, getStripeAccountStatus)
 export * from './callable/payments';
 
-// Callable functions — subscriptions (includes Stripe Connect account management,
-// sendConfirmationEmail)
+// Callable functions — subscriptions (operator billing, sendConfirmationEmail)
 export * from './callable/subscriptions';
 
 // Callable functions — Oxford House management

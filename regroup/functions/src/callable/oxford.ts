@@ -26,17 +26,21 @@ const setOxfordEnabledSchema = z.object({
 // ─────────────────────────────────────────────────────────────────────────────
 // setOxfordEnabled
 //
-// Atomically toggles Oxford-House mode for a house and its operator:
-//   1. Authorises — caller must be the house superAdminId (subscription owner)
-//   2. Swaps Stripe subscription item price (HOUSE↔OXFORD) — Firestore untouched
-//      if this fails
-//   3. Batch-writes houseType + subscriptionMetadata.oxfordEnabled to Firestore
-//   4. If Firestore batch fails, rolls back the Stripe price swap
-//
-// This is the single source of truth for Oxford billing state.
-// Both the house doc (houseType: "oxford") and the user doc
-// (subscriptionMetadata.oxfordEnabled: true) must agree — this CF is the only
-// place that writes them together.
+// In practice this refuses every switch. The plan chosen at checkout sets the
+// house type (owner decision 2026-11-10, #225), and no tier key is in both
+// catalogs (traditional starter/professional/enterprise vs Oxford
+// standard/plus/network), so the tierInCatalog check below throws
+// failed-precondition before Stripe is touched. Changing type means a new
+// subscription. What it does, in order:
+//   1. Authorises: the caller must be the house superAdminId, and the house
+//      must pass enforceHouseEntitlement.
+//   2. Requires a tier subscription (subscriptionItemId + tier).
+//   3. Returns { changed: false } when the house is already in the asked mode.
+//   4. Refuses the switch (tierInCatalog), as above.
+// The price-swap path after that (swap the tier item to the other catalog's
+// price, batch-write houseType + subscriptionMetadata.oxfordEnabled/houseType,
+// roll the swap back if the batch fails) is kept but unreachable while no tier
+// spans both catalogs.
 // ─────────────────────────────────────────────────────────────────────────────
 export const setOxfordEnabled = onCall(
   { secrets: [STRIPE_SECRET_KEY] },

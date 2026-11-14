@@ -154,6 +154,11 @@ const CONFIG_REQUIRED = [
   // before relying on this removal.
   ...TIER_PRICE_VARS,
   ...ANNUAL_PRICE_VARS,
+  // Stripe Connect onboarding return/refresh origin (the /connect Hosting
+  // rewrite prefix in web/firebase.json). connectBaseUrl() throws when it is
+  // unset, so without it no house can connect a bank account to collect rent
+  // (functions/src/util/connectUrls.ts).
+  'CONNECT_BASE_URL',
 ];
 
 // [SECRET] — defineSecret() vars in Firebase Secret Manager, NOT .env files.
@@ -186,6 +191,15 @@ const SECRET_NAMES = [
   // on the deploy as a backstop, rather than as a documented behaviour.
   'STRIPE_TEST_WEBHOOK_SECRET',
   'STRIPE_CONNECT_TEST_WEBHOOK_SECRET',
+  // The remaining secrets bound by deployed functions (functions/src/config.ts).
+  // Not billing secrets; checked here because every bound secret must exist for
+  // its function to deploy and run. Same warn-only treatment as above (an error
+  // only under --strict); what the deploy itself does with a missing bound
+  // secret is unverified (see above). SENDGRID_API_KEY is also bound on the
+  // platform webhook (stripeEvents).
+  'SENDGRID_API_KEY',
+  'GOOGLE_MAPS_API_KEY',
+  'RECOVERY_PLATFORM_API_KEY',
 ];
 
 // The API version this service is written against, read out of the source of
@@ -277,7 +291,8 @@ function main() {
   if (!billingEnabled) {
     warnings.push(
       'TIER_BILLING_ENABLED is not "true" in the deployed config — tier billing is NOT ' +
-        'live: every NEW checkout falls through to the legacy per-house+per-guest model, ' +
+        'live: every NEW checkout and reactivation is refused (failed-precondition, ' +
+        '"New subscriptions are not available right now"; there is no legacy fallback), ' +
         'and any missing billing CONFIG below is a warning, not a deploy blocker (pass ' +
         '--strict, or set TIER_BILLING_ENABLED=true, to enforce).',
     );
@@ -353,7 +368,8 @@ function main() {
     );
     for (const k of missingConfig) console.error(`    - ${k}`);
     console.error(
-      '\n  Put these (price IDs, API version, TIER_BILLING_ENABLED) in functions/.env or ' +
+      '\n  Put these (price IDs, API version, CONNECT_BASE_URL — prod ' +
+        'https://regroup-app.com/connect — and TIER_BILLING_ENABLED) in functions/.env or ' +
         `functions/.env.${projectId || '<projectId>'} — reference values are in ` +
         'regroup/scripts/stripe-prices.env. Do NOT use functions/.env.local (emulator-only, not deployed). ' +
         'Do NOT put Stripe SECRET/webhook keys here — those go in Secret Manager.',
@@ -366,7 +382,8 @@ function main() {
     }
     console.warn(
       '[preflight-billing] ⚠ tier billing is not live (TIER_BILLING_ENABLED≠true) — allowing ' +
-        'this deploy, but any tier checkout WILL 500 until the vars above are set + billing enabled.',
+        'this deploy, but checkout is refused until billing is enabled, and once it is, a ' +
+        'checkout whose price var is missing fails with internal until the vars above are set.',
     );
     return;
   }

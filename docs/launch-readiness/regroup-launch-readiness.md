@@ -35,7 +35,7 @@ Regroup is a full-stack platform for running sober living homes, targeting opera
 | Officer term reminders             | Complete | Automated job: `officerTermReminder.ts`                                          |
 | Invitation system                  | Complete | Create/peek/redeem with email delivery                                           |
 | Stripe Connect account management  | Complete | Onboard/deauthorize, `isAlreadyDeauthorized` idempotency                         |
-| Marketing web portal               | Partial  | Angular 9 with SSR, 6 theme variants, billing portal exists                      |
+| Marketing web portal               | Partial  | Angular 9 with SSR, 6 theme components (5 routed), billing portal exists         |
 
 ### 2.2 Subscription Tier Architecture
 
@@ -115,15 +115,15 @@ Each step is individually coded but the **integrated flow has not been tested en
 
 The web app is **Angular 9** -- released February 2020, end-of-life since August 2020. This creates:
 
-| Risk                                      | Impact                                          |
-| ----------------------------------------- | ----------------------------------------------- |
-| No security patches since 2020            | Vulnerability surface in SSR rendering pipeline |
-| Angular 9 uses View Engine (not Ivy)      | Performance and bundle size penalty             |
-| TypeScript version locked to ~3.8         | Cannot use modern TS features                   |
-| Dependency conflicts with modern packages | Limits adding new web features                  |
-| Investor/partner due diligence            | "6-year-old EOL frontend" is a red flag         |
+| Risk                                                                       | Impact                                          |
+| -------------------------------------------------------------------------- | ----------------------------------------------- |
+| No security patches since 2020                                             | Vulnerability surface in SSR rendering pipeline |
+| Angular 9 toolchain (Ivy, the v9 default; nothing sets `enableIvy: false`) | Missing later compiler and bundle-size gains    |
+| TypeScript version locked to ~3.8                                          | Cannot use modern TS features                   |
+| Dependency conflicts with modern packages                                  | Limits adding new web features                  |
+| Investor/partner due diligence                                             | "6-year-old EOL frontend" is a red flag         |
 
-The Angular web app serves the marketing site (6 themes), billing portal, and SSR for link previews. It is **functional but technically indebted**.
+The Angular web app serves the marketing site (6 theme components, 5 of them routed), billing portal, and SSR for link previews. It is **functional but technically indebted**.
 
 **Spec-ready action**: Either (a) accept Angular 9 for launch and plan a rewrite post-revenue, or (b) scope a minimal Next.js/React replacement for the billing portal + marketing pages. Option (a) is pragmatic if the web app is not customer-facing for core operations. Option (b) is required if the web billing portal is in the critical revenue path.
 

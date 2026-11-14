@@ -1,6 +1,6 @@
 ---
 description: Provider tree, state management, navigation, entities, domain concepts
-paths: "src/**/*.{ts,tsx}"
+paths: 'src/**/*.{ts,tsx}'
 ---
 
 # Architecture
@@ -14,11 +14,13 @@ ErrorBoundary > SafeAreaProvider > StripeProvider > ThemeProvider
 
 ## State Management (hybrid)
 
-**Redux Toolkit** for client/UI state — 12 slices in `src/state/slices/`:
+**Redux Toolkit** for client/UI state — 10 slices in `src/state/slices/` (re-exported from `src/state/slices/index.ts`):
 
-- UI: `uiSlice`, `authSlice`, `themeSlice`, `navigationSlice`
+- UI: `authSlice`, `themeSlice`
 - Entities (async thunks): `userSlice`, `housesSlice`, `guestsSlice`, `meetingsSlice`, `adminSlice`
-- Features: `chatSlice`, `setupSlice`, `notificationsSlice`
+- Features: `chatSlice`, `setupSlice` (plus `setupSelectors.ts`, `setupRecoveryThunk.ts`), `notificationsSlice`
+
+There is no `uiSlice`, `navigationSlice` or `cacheSlice`.
 
 **React Query** (`@tanstack/react-query`) for server data — `src/state/queries/`:
 
@@ -49,13 +51,14 @@ Typed hooks: `useAppSelector` / `useAppDispatch` from `src/state/store.ts`.
 
 React Navigation 7 native stack. Route names: `Routes` enum in `src/navigation/types.ts`.
 
-**Phase 6.1 (current):** Flat `RootStack` — all screens registered directly in `RootStackParamList`. Nested sub-stacks (HouseStack, GuestStack, ContactsStack) were removed. Only `AuthStack` and `MainTab` remain as child navigators.
+**Phase 6.1 (current):** Flat `RootStack` — all screens registered directly in `RootStackParamList`. Nested sub-stacks (HouseStack, GuestStack, ContactsStack) were removed. Three child navigators remain: `AuthStack`, `SetupStack` and `MainTab` (`src/navigation/navigators.tsx`).
 
 - `AuthStackParamList` — login, signup, onboarding, house search, manager intro
+- `SetupStackParamList` — operator onboarding: `OrgSetup`, `OperatorSetupWizard` (`SetupNavigator`)
 - `MainTabParamList` — bottom tabs: House, Guest, Activities, Contacts, HouseChat, Personal
 - `RootStackParamList` — everything else pushed as full-screen modals from any tab
 
-Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetings, OxfordVoting, CharterCompliance, TreasuryDashboard, ResidentPayment, PaymentHistory, PaymentDashboard, RentPayment, HouseSettings, StripeSettings, Notifications, DrugTesting, DrugTestForm, DrugTestHistory, StaffNotes, ResidentIntake, Documents, BalanceDashboard, ApplicationList, ApplicationDetail, GuestImport, AdminReport, PhaseSetup, ChoreRotationSetup.
+Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetings, OxfordVoting, CharterCompliance, TreasuryDashboard, ResidentPayment, PaymentHistory, PaymentDashboard, RentPayment, HouseSettings, StripeSettings, Notifications, DrugTesting, DrugTestForm, DrugTestHistory, StaffNotes, ResidentIntake, Documents, BalanceDashboard, ApplicationList, ApplicationDetail, GuestImport, AdminReport, PhaseSetup. (`ChoreRotationSetupScreen` exists in `src/screens/HouseSettings/` but is not registered as a route.)
 
 ## Service Layer
 
@@ -77,7 +80,7 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 | `guest.tsx`                     | CRUD with optimistic locking, transactions, stat merging  |
 | `guestImport.ts`                | Bulk guest import from CSV/data                           |
 | `house.tsx`                     | CRUD, nearby search, admin management, batch create       |
-| `invitations.ts`                | Invitations via the `createInvitation` callable           |
+| `invitations.ts`                | Invitation callables: create, peek, redeem                 |
 | `issues.ts`                     | House maintenance issue CRUD                              |
 | `meeting.ts`                    | Search, check-in (calls Cloud Functions)                  |
 | `message.tsx`                   | DM conversations, house chat messages                     |
@@ -87,7 +90,7 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 | `notifications/remoteMessage.ts`| FCM message handling                                      |
 | `organization.ts`               | Multi-house organization management                       |
 | `payments.ts`                   | Payment intent creation, history (calls Cloud Functions)  |
-| `paywall.ts`                    | Subscription status gate — operator vs guest grace period |
+| `paywall.ts`                    | `paywallConfigRef` only (the `paywall/config` kill switch) |
 | `phaseAdvancement.ts`           | Phase advancement eligibility + automation                |
 | `receiptService.ts`             | Payment receipt generation                                |
 | `reportExport.ts`               | PDF/CSV export for activity and compliance reports        |
@@ -105,6 +108,8 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 | `oxford/charterCompliance.ts`   | Charter compliance scoring and monitoring                 |
 | `oxford/ees.ts`                 | Equal Expense Share calculations                          |
 | `oxford/votes.ts`               | Vote creation, casting (with Firestore transactions)      |
+
+There is no offline write queue: no `offlineQueue` service exists, and a failed write surfaces to its caller.
 
 ## DataContext
 
@@ -125,7 +130,7 @@ Firebase custom claims: `guest`, `admin`, `superAdmin`, `potentialSuperAdmin`.
 
 ## Subscription & Paywall
 
-`src/services/paywall.ts` reads `user.subscriptionMetadata.status` on foreground resume. Gate logic:
+The gate is `SubscriptionGate` (`src/components/subscription/SubscriptionGate.tsx`), which wraps the main navigator and renders the result of `useSubscriptionGate()` (`src/hooks/useSubscriptionGate.ts`). For operators and guests alike it reads the selected house's `subscriptionStatus` and `guestGraceEndsAt` (the fields the Stripe webhook writes), not `user.subscriptionMetadata.status`. A house with no status yet shows a spinner, not a paywall. The `paywall/config` kill switch (`paywallConfigRef` in `src/services/paywall.ts`) can turn the gate off. On a background → active change, the gate invalidates the user and house queries so status refreshes after the billing portal. Gate logic:
 
 - **Operators (admin/superAdmin):** lapsed subscription → `SubscriptionRequiredScreen` blocks all app access
 - **Guests:** 7-day grace window after operator lapses → dismissible banner → `GraceExpiredScreen`

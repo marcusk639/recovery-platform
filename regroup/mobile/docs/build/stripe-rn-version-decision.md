@@ -12,8 +12,9 @@ Date: 2026-10-21. Scope: `@stripe/stripe-react-native` in `regroup/mobile`, Reac
 
 **Use `@stripe/stripe-react-native` exactly `0.44.0`** on both platforms. Fallback: `0.43.0`.
 
-The `package.json` range `^0.44.0` already resolves to 0.44.0 (it is the only 0.44.x release), and
-`package-lock.json` pins it. The mismatch is on the iOS side: `ios/Podfile.lock` was generated with
+`package.json` now pins it exactly (`"@stripe/stripe-react-native": "0.44.0"`, no range); when this
+was written it was the range `^0.44.0`, which also resolved to 0.44.0 (the only 0.44.x release).
+`package-lock.json` pins it too. The mismatch is on the iOS side: `ios/Podfile.lock` was generated with
 0.67.0 (native Stripe iOS 25.17.0). The fix is to regenerate the iOS pods against 0.44.0 (done in the same PR),
 not to raise the JS package.
 

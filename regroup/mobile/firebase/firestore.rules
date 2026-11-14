@@ -1218,6 +1218,24 @@ service cloud.firestore {
         (d.type == 'resident_note' && d.guestId is string && d.guestId.size() > 0 &&
           get(/databases/$(database)/documents/guests/$(d.guestId)).data.houseId == d.houseId);
     }
+    // A house's chore rotation (services/choreRotation.ts), keyed by house id.
+    // House Summary's useAutoAdvanceRotation reads it for anyone who opens the
+    // house, so the house's residents read it too; only its staff set or advance
+    // it, since a resident who could write it could skip their own turn (#196).
+    function choreRotationShape(d) {
+      return d.keys().hasOnly(['choreName', 'guestIds', 'currentIndex', 'lastRotatedAt']) &&
+        d.choreName is string &&
+        d.guestIds is list &&
+        d.currentIndex is int && d.currentIndex >= 0 &&
+        d.lastRotatedAt is string;
+    }
+
+    match /choreRotations/{houseId} {
+      allow read: if isGuestOrAdmin([houseId]);
+      allow create, update: if isAdmin([houseId]) && choreRotationShape(request.resource.data);
+      allow delete: if false;
+    }
+
     match /staffNotes/{noteId} {
       allow read: if isAdmin([resource.data.houseId]);
       allow create: if isAdmin([request.resource.data.houseId]) &&

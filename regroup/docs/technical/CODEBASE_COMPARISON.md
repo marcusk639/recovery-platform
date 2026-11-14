@@ -123,13 +123,13 @@ The following commits exist in `Regroup/main` and represent features/fixes whose
 | `scheduled/scheduledRentCollection.ts` | Automated rent collection |
 | `scheduled/overdueRentNotification.ts` | Overdue payment alerts |
 | `scheduled/officerTermReminder.ts` | Oxford officer term reminders |
-| `scheduled/weeklyTransfers.ts` | Weekly Stripe payouts |
+| `scheduled/weeklyTransfers.ts` | ~~Weekly Stripe payouts~~ Weekly week-stat rollover; no Stripe calls (corrected 2026-11-14) |
 
 **HTTP endpoints:**
 | File | Purpose |
 |------|---------|
-| `http/stripeConnect.ts` | Stripe Connect OAuth flow |
-| `http/universal.ts` | Universal link handler |
+| `http/stripeConnect.ts` | ~~Stripe Connect OAuth flow~~ Connect onboarding redirect targets (AccountLink refresh and return page; corrected 2026-11-14) |
+| `http/universal.ts` | ~~Universal link handler~~ Health probe: `/health`, `/healthz` return 200, anything else 404 (corrected 2026-11-14) |
 | `webhooks/stripeWebhook.ts` | Stripe webhook processor |
 
 **Utilities (backend-only):**

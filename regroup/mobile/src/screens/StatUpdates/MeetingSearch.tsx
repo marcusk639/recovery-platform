@@ -117,7 +117,7 @@ const MeetingSearch: React.FC<Props> = ({ navigation }) => {
         }}>
         {!searchingForMeetings && searchFailed && (
           <EmptyScreen
-            icon="error-outline"
+            icon="exclamation-triangle"
             buttonTitle="TRY AGAIN"
             onPress={executeSearch}
             message="Couldn't load meetings. Please try again."

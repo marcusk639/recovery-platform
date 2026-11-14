@@ -28,7 +28,6 @@ import { firestore, functions } from '../../firebase-setup';
 import * as houseService from './house';
 import { User } from '../entities/User';
 import * as crud from './crud';
-import { getFirebaseUserFromUserCredential } from '../util/user';
 import { Guest } from '../entities/Guest';
 import Admin from '../entities/Admin';
 import { guestCollection } from './guest';
@@ -208,10 +207,12 @@ export async function createAnonUser(anonUser: User) {
 
 export async function createUser(_user: Partial<User>): Promise<User> {
   const user = cloneDeep(_user);
-  let userCredential = user.isAnonymous
+  // Pass the credential itself: convertFirebaseUserToRatsUser reads
+  // credential.user, which the bare native user from
+  // getFirebaseUserFromUserCredential doesn't have (#182).
+  const userCredential = user.isAnonymous
     ? await convertAnonymousUser(user.email!, user.password!)
     : await createUserWithEmail(user.email!, user.password!);
-  userCredential = getFirebaseUserFromUserCredential(userCredential);
   const newUser = convertFirebaseUserToRatsUser(user, userCredential);
   await setDoc(doc(userCollection, newUser.uid), newUser);
   return newUser;

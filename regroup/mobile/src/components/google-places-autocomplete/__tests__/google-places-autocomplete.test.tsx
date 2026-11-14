@@ -114,9 +114,11 @@ describe('RatsGooglePlacesAutocomplete', () => {
     render(<RatsGooglePlacesAutocomplete {...defaultProps} />);
 
     expect(mockLibProps.current.isNewPlacesAPI).toBe(true);
+    // The JSON Content-Type is what lets Android send the search at all.
     expect(mockLibProps.current.requestUrl).toEqual({
       useOnPlatform: 'all',
       url: 'https://places.googleapis.com',
+      headers: { 'Content-Type': 'application/json' },
     });
     // The library passes `fields` to GET /v1/places/{id} as the Place Details
     // field mask. Names must be UNPREFIXED: a `places.` prefix belongs to search

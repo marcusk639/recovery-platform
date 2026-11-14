@@ -8,6 +8,8 @@
 
 **Tech Stack:** Firebase Cloud Functions v2 (TypeScript), Stripe Node SDK, **Stripe CLI** (price creation, per-subscription migration, webhook forwarding/triggering — run per-app via `--project-name`, per-mode via `--live`), Zod validation, Jest, Firebase Secret Manager.
 
+> **Superseded note (2026-11):** the separate `regroup-functions` repo named below was merged into the monorepo (archived at `regroup/_legacy/regroup-functions`); the web app's billing callables now live in `regroup/functions`, so the cross-repo steps no longer apply as written.
+
 **Scope note:** This plan covers ONLY `regroup/functions` (the mobile-side Cloud Functions). The Angular web app's billing callables live in the **separate `regroup-functions` repo** and are out of scope here (tracked in Phase 6 as a cross-repo follow-up). The web _marketing_ pricing page was already updated separately.
 
 ---

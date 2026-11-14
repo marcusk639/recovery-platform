@@ -26,6 +26,13 @@ tags:
     visible:
       id: "chore-summary-screen"
     timeout: 30000
+# The seed gives guest-a one chore this week (test-activity-123, disputed, which
+# still counts), so the count starts at 1. Pin it, so the wait below can only
+# pass once the new chore is counted.
+- extendedWaitUntil:
+    visible:
+      text: "1 of 1"
+    timeout: 30000
 - assertVisible:
     id: "complete-chore-button"
 - tapOn:
@@ -44,10 +51,10 @@ tags:
     timeout: 30000
 - tapOn:
     text: "OK"
-# The server updates the weekly count after the write.
+# The server updates the weekly count after the write: 2 or more.
 - extendedWaitUntil:
     visible:
-      text: "[1-9][0-9]* of 1"
+      text: "([2-9]|[1-9][0-9]+) of 1"
     timeout: 60000
 - runFlow:
     file: ../subflows/logout.yaml

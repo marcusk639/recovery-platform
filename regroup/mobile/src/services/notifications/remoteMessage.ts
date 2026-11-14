@@ -3,13 +3,15 @@
  *
  * Shows a foreground FCM message whose data carries a Notifee-shaped
  * `notifee` JSON string: the server contract of `sendNotification` in
- * regroup/functions/src/util/notifications.ts. Messages without it (those
- * with a `notification` block) are presented by RNFirebase itself, per the
- * `messaging_ios_foreground_presentation_options` in firebase.json.
+ * regroup/functions/src/util/notifications.ts. On iOS, a message with a
+ * `notification` block is presented by RNFirebase itself, per the
+ * `messaging_ios_foreground_presentation_options` in firebase.json, so it is
+ * not shown again here. Android shows nothing in the foreground, so it is.
  *
  * Payload contents (title, body, data) are never logged.
  */
 
+import { Platform } from 'react-native';
 import notifee, {
   type IOSForegroundPresentationOptions,
   type Notification,
@@ -41,7 +43,7 @@ function parsePayload(raw: string): Record<string, unknown> | null {
 
 export async function displayRemoteMessage(message: RemoteMessage): Promise<void> {
   const raw = message?.data?.notifee;
-  if (raw === undefined) {
+  if (raw === undefined || (Platform.OS === 'ios' && message.notification)) {
     return;
   }
   const payload = typeof raw === 'string' ? parsePayload(raw) : null;

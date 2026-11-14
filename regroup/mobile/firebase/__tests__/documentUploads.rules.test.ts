@@ -3,12 +3,19 @@
  *
  * services/documents.ts uploads to houses/{houseId}/documents/{docId} and
  * houses/{houseId}/guests/{guestId}/documents/{docId}. No rule matched either
- * path, so the catch-all denied every upload. Only house admins may read or
- * write them, matching the documents collection in firestore.rules. The
- * document picker offers PDFs and images only.
+ * path, so the catch-all denied every upload. Only house admins may write them,
+ * matching the documents collection in firestore.rules, and nobody reads them
+ * directly: they open through getDocumentLink. The document picker offers PDFs
+ * and images only.
  *
  * Requires the Storage emulator (FIREBASE_STORAGE_EMULATOR_HOST, set by
  * `firebase emulators:exec`).
+ *
+ * The suite tests the ruleset the emulator loaded from firebase.json at start
+ * (storage.rules) and does not upload its own. The Storage emulator holds one
+ * ruleset for every suite, so a suite that re-uploads it leaves the others a
+ * moment with none ("no Storage ruleset is currently loaded"), and their
+ * requests are denied when the rules suites run in parallel.
  */
 import {
   initializeTestEnvironment,
@@ -18,8 +25,6 @@ import {
   RulesTestContext,
 } from '@firebase/rules-unit-testing';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import * as fs from 'fs';
-import * as path from 'path';
 
 const [STORAGE_HOST, STORAGE_PORT] = (
   process.env.FIREBASE_STORAGE_EMULATOR_HOST ?? '127.0.0.1:9199'
@@ -42,7 +47,6 @@ beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: 'rats-document-uploads-rules-test',
     storage: {
-      rules: fs.readFileSync(path.resolve(__dirname, '../storage.rules'), 'utf8'),
       host: STORAGE_HOST,
       port: Number(STORAGE_PORT),
     },
@@ -68,10 +72,12 @@ const upload = (ctx: RulesTestContext, filePath: string, data: Buffer, type: str
   uploadBytes(ref(ctx.storage(), filePath), data, { contentType: type });
 
 describe.each(Object.entries(PATHS))('%s documents', (_kind, filePath) => {
-  test('a house admin can upload a PDF, read it and delete it', async () => {
+  // Documents open only through getDocumentLink's short-lived signed link. A
+  // download-token URL would bypass the rules and outlive the admin's access.
+  test('a house admin can upload a PDF and delete it, but cannot get a download link', async () => {
     const ctx = admin();
     await assertSucceeds(upload(ctx, filePath, TINY_PDF, 'application/pdf'));
-    await assertSucceeds(getDownloadURL(ref(ctx.storage(), filePath)));
+    await assertFails(getDownloadURL(ref(ctx.storage(), filePath)));
     await assertSucceeds(deleteObject(ref(ctx.storage(), filePath)));
   });
 

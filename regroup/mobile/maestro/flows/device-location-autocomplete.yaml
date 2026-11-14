@@ -1,5 +1,5 @@
 # Location autocomplete in the house search filter: typing a place shows
-# suggestions, and picking one fills the field.
+# suggestions, and picking one fills the field and closes the list.
 # Regression: from react-native-google-places-autocomplete 2.6.5 a boolean
 # `listViewDisplayed` controls the list outright, and the app's wrapper always
 # passed false, so the dropdown never appeared (house search filter, house
@@ -40,6 +40,9 @@ tags:
     visible: "Begin typing to see addresses..."
     timeout: 10000
 - tapOn: "Begin typing to see addresses..."
+# With location granted, house search may already be using the device's
+# position, and the field then reads "Current Location": clear it first.
+- eraseText: 40
 - inputText: "Austin"
 # A suggestion row from the live API, below the field.
 - extendedWaitUntil:
@@ -47,10 +50,11 @@ tags:
     timeout: 15000
 - takeScreenshot: device-location-autocomplete-suggestions
 - tapOn: "Austin, TX, USA"
-# The pick fills the field (the row and the field read the same, so the list
-# closing is pinned by the unit tests, not here).
+# The pick fetches the place's details and fills the field with its short
+# name; the list closes. (Before the place-details fix the app crashed here.)
 - extendedWaitUntil:
-    visible: "Austin, TX, USA"
+    visible: "Austin, TX"
     timeout: 10000
+- assertNotVisible: "Austin, TX, USA"
 - assertVisible: "Gender"
 - takeScreenshot: device-location-autocomplete-picked

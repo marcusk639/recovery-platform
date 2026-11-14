@@ -103,7 +103,9 @@ export const RECOVERY_PLATFORM_API_KEY = defineSecret(
  * - ACH / bank transfer: a flat per-transaction margin (cheap, to nudge bank
  *   pay). If `RENT_FEE_ACH_RATE` is set > 0, a percentage-with-cap model is
  *   used instead (0.5% capped at $3, per P-1's alternative).
- * - Legacy houses are grandfathered at the old flat 2% (P-3) until migrated.
+ * - There is no legacy 2% rate: every house pays this model. The P-3
+ *   grandfathering was never built (computeApplicationFee in util/rentFee.ts
+ *   has no legacy branch, and the legacyRentFee input is never read).
  *
  * All values are integer-cents / decimal-rate, env-overridable for tuning.
  * Stripe's published US rates are the defaults; see stripe.com/pricing.

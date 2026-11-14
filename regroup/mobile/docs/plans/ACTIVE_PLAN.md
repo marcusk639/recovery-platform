@@ -1,5 +1,7 @@
 # Regroup — Active Plan (Single Source of Truth)
 
+> **Superseded (2026-11-14):** this May 2026 plan is no longer the source of truth. Now true: 10 Redux slices (not 16), iOS deployment target 15.0 (not 13.0), Cloud Functions inside this monorepo at `regroup/functions` (not a separate repo), and no regroup e2e job in CI. See [`docs/superpowers/specs/2026-11-06-regroup-launch-reboot-design.md`](../../../../docs/superpowers/specs/2026-11-06-regroup-launch-reboot-design.md) (repo root) and [`regroup/mobile/CLAUDE.md`](../../CLAUDE.md).
+
 **Date:** May 22, 2026 (v3 — false alarm resolved, score updated)
 **Previous revision:** February 27, 2026 (v2 — backend repo context)
 **Branch:** main

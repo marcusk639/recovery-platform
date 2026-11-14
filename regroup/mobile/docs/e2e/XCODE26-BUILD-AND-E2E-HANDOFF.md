@@ -1,5 +1,7 @@
 # Xcode 26 Build Unblock + E2E Run — Handoff
 
+> **Superseded (2026-11-14):** a June 2026 handoff; its open items are done or reversed. Stripe is pinned to `0.44.0` (the 0.67 upgrade was reversed; see [`../build/stripe-rn-version-decision.md`](../build/stripe-rn-version-decision.md)), the offline queue (`useOfflineSync`, `useFlushOfflineQueue`) was removed, the Yoga fix lives in `ios/Podfile`'s `post_install` (`-Wno-deprecated-literal-operator`) rather than patch-package, and the Xcode bundle phase now skips the Sentry upload when `SENTRY_DISABLE_AUTO_UPLOAD=true`. See [`maestro/README.md`](../../maestro/README.md) and [`regroup/mobile/CLAUDE.md`](../../CLAUDE.md).
+
 **Date:** 2026-06-26
 **Branch:** `test/e2e-launch-prep` (off `main`; PR #36 already merged to main)
 **Working dir for all paths below:** `regroup/mobile/`
