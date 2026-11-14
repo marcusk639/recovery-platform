@@ -23,6 +23,8 @@ Two revenue lines, both implemented:
 
 **B. Rent collection — 2% platform fee** via Stripe Connect (`payments.ts:151` `Math.round(amount * 0.02)` as `application_fee_amount`; `scheduledRentCollection.ts` mirrors it). Bundle coupons exist (`api/stripe.ts`: 3+ houses → `bundle3`, 5+ → `bundle5`).
 
+> **Status (2026-11-14): the 2% above is the 2026-06-22 state, no longer live.** The fee is now method-aware and recovers Stripe's cost from the house: `computeApplicationFee` in `functions/src/util/rentFee.ts` (rates in `RENT_FEE`, `functions/src/config.ts`), called by `createPaymentIntent` and `scheduledRentCollection`. Margin $2.00 per ACH payment or 0.75% per card payment, plus estimated Stripe cost (ACH 0.8% capped at $5; card 2.9% + 30¢): **$6.00 on a $500 ACH payment, $18.55 on a $500 card payment**. The convenience fee proposed in §6a (P-2) was not built and was reversed; no legacy 2% rate exists (P-3 was never implemented). See the status note in [regroup-pricing-revision-plan.md](./regroup-pricing-revision-plan.md) §0.1. The §4 and §6a analysis of "the 2% flat fee" is kept as the rationale for that change.
+
 **Legacy:** per-house + per-guest model (`STRIPE_GUEST_PRICE_ID`) retained only for the ~5 existing houses.
 
 ---

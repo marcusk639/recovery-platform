@@ -2,10 +2,13 @@
 
 **Mode:** TEST  
 **Generated:** 2026-06-28 via `scripts/setup-stripe-all.js`  
-**API Version:** `2026-01-28.clover` — matches `functions/src/util/stripe.ts` [`S7`]
+**API Version:** `2026-01-28.clover` — matches `PINNED_API_VERSION` in `functions/src/util/stripeApiVersion.ts` [`S7`]
 
-> Copy these values into `functions/.env.local` (Firebase emulator) or set them
-> as Firebase Secret Manager secrets before deploying.
+> Non-secret values (price IDs, `STRIPE_API_VERSION`, `TIER_BILLING_ENABLED`) go in
+> `functions/.env` or `functions/.env.<projectId>` for a deploy; those are the only
+> files Firebase bundles. `functions/.env.local` is read by the emulator only and is
+> never deployed. Secrets go in Firebase Secret Manager. The production steps are in
+> `docs/launch-readiness/billing-go-live-runbook.md`.
 >
 > **Firebase Secret Manager command (for secrets):**
 > `firebase functions:secrets:set <SECRET_NAME>`
@@ -61,8 +64,19 @@ as env vars consumed by `priceEnvVar` / `annualPriceEnvVar` fields in config.
 ## 2. Legacy Prices (Grandfathered Subscribers)
 
 Source: `functions/src/api/stripe.ts` [`S2`] — `planIds` object and `OXFORD_PRICE_ID`.
-These are still actively consumed by `createSubscription()`, `reactivateSubscription()`,
-and `initializeSubscription()`. Do NOT remove until legacy billing is fully retired.
+These are still read at module load and used by the legacy code path
+(`createSubscription()`, the legacy branch of `reactivateSubscription()`,
+`initializeSubscription()`). Do NOT remove until legacy billing is fully retired.
+
+> **Status (2026-11-14):** since #254 that path is unreachable from the callables:
+> `createOperatorSubscription` refuses when `TIER_BILLING_ENABLED` is off, and
+> `reactivateOperatorSubscription` refuses a subscription with no `tier`. The code
+> stays until post-launch cleanup. The launch plan cancels the live legacy subscriptions
+> at launch with `npm run legacy:cancel` (`functions/src/scripts/cancelLegacySubscriptions.ts`),
+> whose `LEGACY_PRICE_IDS` are `plan_HFkfwM5lQx6oud` and `plan_HFkh7QvRnNjMy8`, the
+> live $10 Home and $1 Resident prices. The launch design
+> (`docs/superpowers/specs/2026-11-06-regroup-launch-reboot-design.md`) notes that
+> the house and Oxford IDs below are not live IDs.
 
 | Env Var                  | Price ID                         | Description                                                          |
 | ------------------------ | -------------------------------- | -------------------------------------------------------------------- |
@@ -76,7 +90,8 @@ and `initializeSubscription()`. Do NOT remove until legacy billing is fully reti
 
 Source: `functions/src/api/stripe.ts` [`S2`] — `bundleCouponIds`, `getBundleCoupon()`,
 `applyBundleDiscountToSubscription()`. Applied to legacy (per-house) subscriptions only;
-tier-based subscriptions skip bundle discounts (`subscriptions.ts` line 784).
+tier-based subscriptions skip bundle discounts (the `tier` check in the
+`applyBundleDiscount` callable, `functions/src/callable/subscriptions.ts`).
 
 | Coupon ID          | Discount | Condition                     | Duration |
 | ------------------ | -------- | ----------------------------- | -------- |
@@ -96,6 +111,13 @@ Source: `functions/src/webhooks/stripeWebhook.ts` [`S4`] — two separate export
 handler functions, each verified with its own signing secret. Both endpoints are
 in the live `regroup-app.com` account (`acct_1GfryQKsstp3aqoP`), were created
 2026-10-06 and are pinned to API version `2026-01-28.clover`.
+
+> **Unverified — check the Stripe Dashboard.** `docs/operations/stripe-testing.md`
+> ("Known gaps") describes four live endpoints on three API versions; this section
+> describes two, both on `2026-01-28.clover`. The code cannot settle which is
+> current. Inbound payload shapes follow each endpoint's Dashboard API version, not
+> `STRIPE_API_VERSION`, so confirm the count and versions there and correct
+> whichever doc is wrong.
 
 ### 4a. Platform Webhook
 
@@ -122,6 +144,21 @@ in the live `regroup-app.com` account (`acct_1GfryQKsstp3aqoP`), were created
 The handler also has an `account.updated` case, but this endpoint does not
 subscribe to it: connected-account updates arrive through the Connect webhook (§4b).
 
+Since #254 the handler also acts on `customer.subscription.created`,
+`customer.subscription.trial_will_end` and `invoice.payment_action_required`,
+which the list above (the endpoint's recorded subscriptions) does not include.
+Add them to the live endpoint, then update this list.
+
+> **Caution — `payout.failed` may never reach its handler [unverified].** The
+> handler (`handlePayoutFailed`) needs `event.account`, the connected account the
+> payout belongs to. Per Stripe's Connect model, events that happen on a connected
+> account (its payouts included) are delivered to **Connect** endpoints ("events on
+> connected accounts"), not to a platform endpoint like this one. The Connect
+> handler (§4b, `handleStripeConnectWebhook`) currently has no `payout.failed`
+> case: it acts only on `account.updated` and `account.application.deauthorized`.
+> So the "Payout failures" alert in §7 may not fire. Confirm with a test-mode
+> payout failure before relying on it.
+
 ### 4b. Stripe Connect Webhook
 
 **Endpoint ID:** `we_1UNgzIKsstp3aqoPeAGheDy3`  
@@ -138,7 +175,17 @@ subscribe to it: connected-account updates arrive through the Connect webhook (�
 ### 4c. Rotating a webhook signing secret
 
 The Stripe API cannot roll a signing secret, and recreating an endpoint while the
-old one is live delivers every event twice. Rotate from the Dashboard instead:
+old one is live delivers every event twice. Rotate from the Dashboard instead.
+
+> **Conflicts with a code comment.** `functions/src/util/stripeWebhookSecrets.ts`
+> says rotation is "NOT yet survivable": there is one secret var per mode, so the
+> function can hold only the old or the new same-mode secret, and it says in-flight
+> events signed with the old one are dropped. The procedure below relies instead on
+> Stripe signing every delivery with **both** secrets until the old one expires, so
+> whichever single secret the deployed function holds still matches one signature.
+> That rests on Stripe's roll behaviour, which this repo cannot prove; until it is
+> confirmed (e.g. a test-mode roll), treat a roll as possibly dropping deliveries and
+> watch the endpoint for failures.
 
 1. Dashboard → Developers → Webhooks → the endpoint → **Roll secret**, with an
    expiry long enough to finish the steps below (Stripe signs with both secrets
@@ -160,6 +207,7 @@ old one is live delivers every event twice. Rotate from the Dashboard instead:
    ```
 
    A hash of `e3b0c44298fc` means an empty read, not a secret.
+
 4. Redeploy the function that uses it (`stripeEvents` or
    `handleStripeConnectWebhook`). A deployed function keeps the secret version
    it was deployed with, so storing a new version alone changes nothing.
@@ -201,12 +249,13 @@ Source: `functions/src/config.ts` [`S3`] — `defineSecret()` declarations;
 
 ## 6. Other Config
 
-Source: `functions/src/util/stripe.ts` [`S7`]; `functions/src/config.ts` [`S3`].
+Source: `functions/src/util/stripeApiVersion.ts` [`S7`]; `functions/src/config.ts` [`S3`].
 
-| Env Var                | Value               | Description                                                         |
-| ---------------------- | ------------------- | ------------------------------------------------------------------- |
-| `STRIPE_API_VERSION`   | `2026-01-28.clover` | Must match `apiVersion` arg in `createStripeClient()`               |
-| `TIER_BILLING_ENABLED` | `true`              | Gates new tier subscriptions; legacy path used when absent or false |
+| Env Var                | Value                             | Description                                                                                                                                                                      |
+| ---------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `STRIPE_API_VERSION`   | `2026-01-28.clover`               | Must equal `PINNED_API_VERSION` in `util/stripeApiVersion.ts`; a deployed value overrides the pin for every Stripe client, and `scripts/preflight-billing.js` reports a mismatch |
+| `TIER_BILLING_ENABLED` | `true`                            | Gates new tier subscriptions. When absent or false, checkout and canceled-subscription reactivation refuse (`failed-precondition`); there is no legacy fallback since #254       |
+| `CONNECT_BASE_URL`     | `https://regroup-app.com/connect` | Required: the prefix of the `/connect/*` Hosting rewrites in `web/firebase.json`; `connectBaseUrl()` (`util/connectUrls.ts`) throws without it                                   |
 
 ---
 
@@ -222,10 +271,10 @@ Connect accounts are created per-house (not scripted — created at operator onb
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Account type    | Chosen by `CONNECT_ACCOUNTS_API` for new accounts; each house records its own in `houses.stripeAccountApi` (absent = v1). **v1 (default, live):** created from controller properties — `stripe_dashboard.type: express`, `fees.payer: application`, `losses.payments: application`, `requirement_collection: stripe`, `country: US` — requesting `card_payments` and `transfers` (transfers alone needs Stripe's approval). **v2 (needs Stripe to enable Accounts v2 for the platform):** a **recipient**, Express dashboard; `configuration.merchant` and `card_payments` deliberately not requested. Houses receive transfers and never charge anyone either way. |
 | Onboarding flow | `stripe.accountLinks.create()` → redirect → `stripeConnectReturn` HTTP endpoint                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Reauth URL      | `https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeConnectReauth?stripeAccountId={id}`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| Return URL      | `https://us-central1-phoenix-cleanhouse.cloudfunctions.net/stripeConnectReturn`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| Reauth URL      | `${CONNECT_BASE_URL}/stripe-refresh?stripeAccountId={id}`, i.e. `https://regroup-app.com/connect/stripe-refresh?stripeAccountId={id}` in production; a Hosting rewrite in `web/firebase.json` sends it to `stripeConnectReauth` (`util/connectUrls.ts`, `connectRefreshUrl`)                                                                                                                                                                                                                                                                                                                                                                                        |
+| Return URL      | `${CONNECT_BASE_URL}/stripe-return`, i.e. `https://regroup-app.com/connect/stripe-return`; rewritten to `stripeConnectReturn` (`connectReturnUrl`). `CONNECT_BASE_URL` is required: with it unset, building either URL throws                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Disconnect      | v2: `stripe.v2.core.accounts.close(id, { applied_configurations: ['recipient'] })`. v1: the house is unlinked and the account left open — never deleted, so transfer reversals for refunds and disputes stay possible.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Payout failures | Handled by `payout.failed` event → FCM push + email to house admins                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| Payout failures | `payout.failed` → FCM push + email to house admins, handled on the platform endpoint only. See the caution in §4a: connected-account payout events go to Connect endpoints, whose handler has no `payout.failed` case                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 
 ---
 
@@ -241,5 +290,5 @@ Connect accounts are created per-house (not scripted — created at operator onb
 | `S6`  | `functions/src/callable/payments.ts`            | Connect onboarding and disconnect callables                                                              |
 | `S6a` | `functions/src/util/connectAccountLifecycle.ts` | v1 and v2 account create params, v2 close, orphan cleanup, already-gone tolerance                        |
 | `S6b` | `functions/src/util/connectAccountStatus.ts`    | The one mapping from the transfers capability (v1 or v2) to house status, and the per-house API dispatch |
-| `S7`  | `functions/src/util/stripe.ts`                  | API version string `"2026-01-28.clover"`                                                                 |
+| `S7`  | `functions/src/util/stripeApiVersion.ts`        | `PINNED_API_VERSION = '2026-01-28.clover'` and the `STRIPE_API_VERSION` every Stripe client uses         |
 | `S8`  | `web/src/environments/environment*.ts`          | Angular publishable key per environment                                                                  |

@@ -1,6 +1,7 @@
 # Flow 09 — Operator: applications review -> approve -> intake
-# Persona: manager (admin of test-house-123). Seeded: pending application
-# test-app-1 (see e2e/setup/seedTestData.js seedTestApplications()).
+# Persona: manager (admin of test-house-123). Needs a pending application
+# test-app-1 on test-house-123. The current seed (maestro/scripts/seed, run by
+# reset-and-seed.sh) does NOT create one, so seed it before running this flow.
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/operator-applications.yaml
 appId: ${APP_ID}
 tags:

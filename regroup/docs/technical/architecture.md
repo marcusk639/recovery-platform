@@ -31,18 +31,18 @@ This document provides a comprehensive breakdown of the Regroup sober living man
 | - iOS & Android     |        | - Cloud Functions    |        | - Stripe         |
 | - React Navigation  |        | - Firestore          |        | - Google Maps    |
 | - Redux Toolkit     |        | - Auth (custom claims)|        | - SendGrid       |
-| - React Query       |        | - Cloud Messaging    |        | - AA/NA/CR APIs  |
+| - React Query       |        | - Cloud Messaging    |        | - recovery-api   |
 | - Formik + Yup      |        | - Cloud Storage      |        | - Sentry         |
 +---------------------+        +----------------------+        +------------------+
 ```
 
 ### Repository Structure
 
-| Component                | Path                 | Purpose                                     | Key Tech                                                  |
-| ------------------------ | -------------------- | ------------------------------------------- | --------------------------------------------------------- |
-| **Regroup mobile**       | `regroup/mobile/`    | Mobile client + Firestore rules + E2E tests | React Native 0.72, TypeScript, Redux Toolkit, React Query |
-| **Regroup functions**    | `regroup/functions/` | Cloud Functions backend                     | TypeScript, Firebase Admin SDK, Stripe SDK                |
-| **Regroup web**          | `regroup/web/`       | Marketing/landing page + web portal         | Angular, TypeScript, Firebase Hosting                     |
+| Component             | Path                 | Purpose                                     | Key Tech                                                  |
+| --------------------- | -------------------- | ------------------------------------------- | --------------------------------------------------------- |
+| **Regroup mobile**    | `regroup/mobile/`    | Mobile client + Firestore rules + E2E tests | React Native 0.72, TypeScript, Redux Toolkit, React Query |
+| **Regroup functions** | `regroup/functions/` | Cloud Functions backend                     | TypeScript, Firebase Admin SDK, Stripe SDK                |
+| **Regroup web**       | `regroup/web/`       | Marketing/landing page + web portal         | Angular, TypeScript, Firebase Hosting                     |
 
 ### Data Flow Summary
 
@@ -127,7 +127,7 @@ The app uses a dual state management approach, currently migrating from Redux-on
 
 #### Redux Toolkit (Client/UI State)
 
-13 slices in `src/state/slices/`:
+10 slices in `src/state/slices/` (there is no `cacheSlice`, `uiSlice` or `navigationSlice`):
 
 | Slice                | Purpose                 | Key Data                          |
 | -------------------- | ----------------------- | --------------------------------- |
@@ -139,11 +139,8 @@ The app uses a dual state management approach, currently migrating from Redux-on
 | `adminSlice`         | Admin records           | admin list, selected admin        |
 | `chatSlice`          | Messaging state         | conversations, active chat        |
 | `setupSlice`         | Onboarding wizard       | current step, org config          |
-| `cacheSlice`         | Entity cache with TTL   | cached guests/houses/meetings     |
 | `notificationsSlice` | Notification state      | notification list, unread count   |
-| `uiSlice`            | UI state flags          | loading, modal visibility, toast  |
 | `themeSlice`         | Theme preference        | light/dark mode                   |
-| `navigationSlice`    | Nav metadata            | screen title, modal state         |
 
 Typed hooks: `useAppSelector` / `useAppDispatch` from `src/state/store.ts`.
 
@@ -168,9 +165,9 @@ Query files in `src/state/queries/` wrap service calls with caching, refetching,
 export const activityKeys = {
   all: ['activities'],
   lists: () => [...activityKeys.all, 'list'],
-  list: filters => [...activityKeys.lists(), filters],
+  list: (filters) => [...activityKeys.lists(), filters],
   details: () => [...activityKeys.all, 'detail'],
-  detail: id => [...activityKeys.details(), id],
+  detail: (id) => [...activityKeys.details(), id],
 };
 ```
 
@@ -252,126 +249,137 @@ TypeScript interfaces in `src/entities/` define Firestore document shapes. Key e
 
 ## 3. Backend: Firebase Cloud Functions
 
-Cloud Functions live in the **regroup-functions** repository. They are organized into callable functions, triggers, scheduled jobs, HTTP handlers, and webhooks.
+Cloud Functions live in `regroup/functions/` in this monorepo (the old standalone `regroup-functions` repository is archived in `regroup/_legacy/regroup-functions/`). `src/index.ts` re-exports 62 deployed functions: callables, Firestore triggers, scheduled jobs, HTTP handlers and two Stripe webhooks. `regroup/FUNCTION_AUDIT.md` is the generated inventory (source file, path or schedule, bound secrets), and `regroup/scripts/deploy-batched.sh` `ALL_FUNCTIONS` lists the same names (a test keeps it equal to the exports). The web app's SSR function is a separate codebase; see §3.7.
 
 ### 3.1 Callable Functions (httpsCallable)
 
-These are invoked from the mobile client via `functions.httpsCallable('functionName')(payload)`:
+These are invoked from the mobile client (and the web operator portal) via `httpsCallable('functionName')(payload)`. Every callable rejects an unauthenticated caller except `getTierCatalog` (public pricing) and `peekInvitation` (the invitation token is the credential). Contracts for the billing and payment callables are in `regroup/functions/CLAUDE.md` ("Callable contracts").
 
 #### Auth Functions (`src/callable/auth.ts`)
 
-| Function                           | Purpose                                 |
-| ---------------------------------- | --------------------------------------- |
-| `addGuestAuthorization`            | Assigns guest custom claims for a house |
-| `addAdminAuthorization`            | Assigns admin/superAdmin claims         |
-| `deleteAdminAuthorization`         | Removes admin/superAdmin claims         |
-| `promoteGuestsToAdmin`             | Batch promote guests to admin role      |
-| `removePrivilegesForGuests`        | Batch remove role from guests           |
-| `verifyUserEmail`                  | Triggers email verification             |
-| `givePotentialSuperAdminPrivilege` | Grants potentialSuperAdmin flag         |
+| Function                           | Purpose                                                                                                                                                     |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `addGuestAuthorization`            | Grants the guest claim for a house; with `isAdmin`, also admin (peer leader). Writes the `house-roles` record                                               |
+| `addAdminAuthorization`            | Grants admin (manager), or admin + superAdmin (co-owner; primary owner only)                                                                                |
+| `deleteAdminAuthorization`         | Removes admin/superAdmin claims and re-derives the record                                                                                                   |
+| `promoteGuestsToAdmin`             | Batch-promotes residents to peer leader (admin claim)                                                                                                       |
+| `removePrivilegesForGuests`        | Batch-removes a role from residents                                                                                                                         |
+| `verifyUserEmail`                  | Sets `emailVerified: true` directly on the caller's own Auth account (`util/user.ts` `_verifyUserEmail`); sends no email and checks nothing else            |
+| `givePotentialSuperAdminPrivilege` | Merges `potentialSuperAdmin: true` into the caller's claims; refused when the caller already holds any `admin` or `superAdmin` claim (token or live claims) |
 
-#### House Functions (`src/callable/houses.ts`)
+#### House, Invitation and Account Functions
 
-| Function           | Purpose                                   |
-| ------------------ | ----------------------------------------- |
-| `addNewHouseAdmin` | Adds a user as admin to a house           |
-| `searchForHouses`  | Geo-proximity search using geohash ranges |
+| Function              | File                              | Purpose                                                                                                                            |
+| --------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `createHouses`        | `callable/houses.ts`              | Creates the operator's houses in one transaction (house type from the plan, primary owner record, property cap, tombstone check)   |
+| `finishOperatorSetup` | `callable/finishOperatorSetup.ts` | Recovers a half-finished operator setup: re-grants missing house claims for houses with the caller's primary owner record (max 25) |
+| `myHouseTiers`        | `callable/myHouseTiers.ts`        | The caller's own tier per house, for the operator portal's display                                                                 |
+| `createInvitation`    | `callable/invitations.ts`         | Issues a server-side invitation token (7-day expiry) and emails the link (SendGrid)                                                |
+| `peekInvitation`      | `callable/invitations.ts`         | **Unauthenticated.** Returns `houseId`, `role`, `invitedEmail`, `initialPhase` and `expiresAt` for a usable token                  |
+| `redeemInvitation`    | `callable/invitations.ts`         | Grants the invited role's claims and tier record once the gates pass                                                               |
+| `deleteAccount`       | `callable/account.ts`             | In-app account deletion (recent sign-in required; resumable orchestrator in `accountDeletion/`)                                    |
 
 #### Meeting Functions (`src/callable/meetings.ts`)
 
-| Function                     | Purpose                                    | External API                             |
-| ---------------------------- | ------------------------------------------ | ---------------------------------------- |
-| `findMeetings`               | Search 12-step meetings by location & type | AA Meeting Guide, NA, Celebrate Recovery |
-| `userIsAtMeeting`            | Verify user is within 200m of a meeting    | Google Maps                              |
-| `narcoticsAnonymousMeetings` | Get NA meetings for a location             | NA database                              |
-| `getCurrentAddress`          | Reverse geocode coordinates to address     | Google Maps                              |
+| Function          | Purpose                                                    | Source                                                                                                                                                                  |
+| ----------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `findMeetings`    | Search 12-step meetings by location & type (auth required) | Shared directory types: recovery-api `fetchDirectoryMeetings` (`api/recoveryApi.ts`, 10 km radius). `Custom`: regroup Firestore. `AL-ANON` and `Religious`: always `[]` |
+| `userIsAtMeeting` | Verify the user is within 200 m of a meeting               | Google Maps geocoding                                                                                                                                                   |
 
 #### Payment Functions (`src/callable/payments.ts`)
 
-| Function                  | Purpose                                  | Stripe API                  |
-| ------------------------- | ---------------------------------------- | --------------------------- |
-| `createPaymentIntent`     | Create destination charge for rent       | PaymentIntents (2% app fee) |
-| `listPayments`            | Get payment history for a guest          | PaymentIntents list         |
-| `listHousePayments`       | Batch fetch all house payments           | PaymentIntents list         |
-| `savePaymentMethod`       | Store card reference in Firestore        | PaymentMethods              |
-| `connectStripeAccount`    | Create house account (v1 by default, v2 behind a switch) + onboarding link | Accounts v1/v2, AccountLinks |
-| `disconnectStripeAccount` | Unlink (v1) or close (v2) the house account (idempotent) | Accounts v1/v2 |
-| `getStripeAccountStatus`  | Fetch + sync account status with the house's own API | Accounts v1/v2 |
+| Function                  | Purpose                                                                    | Stripe API                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `createPaymentIntent`     | Create destination charge for rent                                         | PaymentIntents; method-aware fee from `computeApplicationFee` (`util/rentFee.ts`), USD only |
+| `listPayments`            | Payment history for one resident (the resident or a house admin)           | `charges.list` on the house's connected account; amounts returned in dollars                |
+| `listHousePayments`       | All of a house's payments (house admins only)                              | `charges.list` on the house's connected account; amounts returned in dollars                |
+| `getPaymentMethod`        | The caller's Stripe customer's default payment method                      | Customers, PaymentMethods                                                                   |
+| `updatePaymentInfo`       | Attach a payment method and make it the default                            | PaymentMethods, Customers                                                                   |
+| `connectStripeAccount`    | Create house account (v1 by default, v2 behind a switch) + onboarding link | Accounts v1/v2, AccountLinks                                                                |
+| `disconnectStripeAccount` | Unlink (v1) or close (v2) the house account (idempotent)                   | Accounts v1/v2                                                                              |
+| `getStripeAccountStatus`  | Fetch + sync account status with the house's own API                       | Accounts v1/v2                                                                              |
 
-#### Subscription Functions (`src/callable/subscriptions.ts`)
+#### Subscription and Billing Functions (`src/callable/subscriptions.ts` unless noted)
 
-| Function                         | Purpose                                                     |
-| -------------------------------- | ----------------------------------------------------------- |
-| `createOperatorSubscription`     | Initialize subscription (7-day trial, house + guest items)  |
-| `reactivateOperatorSubscription` | Reactivate cancelled/paused subscription                    |
-| `cancelUserSubscription`         | Mark for cancellation at period end                         |
-| `updateSubscriptionGuests`       | Adjust guest item quantity                                  |
-| `updateSubscriptionHouses`       | Adjust house item quantity                                  |
-| `sendInviteEmails`               | Send admin/guest invitation emails (SendGrid)               |
-| `sendConfirmationEmail`          | Send onboarding confirmation email                          |
+| Function                         | Purpose                                                                                                                                                                                                           |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `createOperatorSubscription`     | Single-item tier subscription with a trial (`TRIAL_PERIOD_DAYS`); monthly or annual. Refused while `TIER_BILLING_ENABLED` is off or the sales switch is closed                                                    |
+| `reactivateOperatorSubscription` | `active`/`trialing`: returned as is. `cancelling`: un-cancelled in Stripe. `canceled`: a **new** tier subscription (tier billing on, a stored tier, sales open). `past_due`/`unpaid`/other: `failed-precondition` |
+| `cancelUserSubscription`         | Mark for cancellation at period end                                                                                                                                                                               |
+| `updateSubscriptionGuests`       | No Stripe call: records resident occupancy in `subscriptionMetadata.houses` against the tier's `maxResidents`                                                                                                     |
+| `updateSubscriptionHouses`       | No Stripe call: adds or removes houses in `subscriptionMetadata.houses` against the tier's `maxProperties`                                                                                                        |
+| `applyBundleDiscount`            | Legacy per-house bundle coupon; a no-op for every tier subscription                                                                                                                                               |
+| `createBillingPortalSession`     | Stripe billing portal URL for the caller's customer                                                                                                                                                               |
+| `sendConfirmationEmail`          | Send onboarding confirmation email                                                                                                                                                                                |
+| `getTierCatalog`                 | `callable/getTierCatalog.ts`. **Unauthenticated** public price list (prices from Stripe, cached 1 h; `salesOpen`, `trialDays`)                                                                                    |
+| `setOxfordEnabled`               | `callable/oxford.ts`. Refuses any traditional↔Oxford switch: the plan chosen at checkout sets the house type, and no tier is in both catalogs                                                                     |
+| `castOxfordVote`                 | `callable/oxford.ts`. The only writer of `votes/{voteId}` (see §8.2)                                                                                                                                              |
+| `complianceExport`               | `callable/compliance.ts`. Tier-gated court/drug-court export, `format: csv` (default) or `pdf` (`pdfBase64`)                                                                                                      |
+| `rentRoiMetrics`                 | `callable/analytics.ts`. Tier-gated rent-collection ROI metrics                                                                                                                                                   |
 
 ### 3.2 Firestore Triggers
 
 These execute automatically when documents are created, updated, or deleted:
 
-| Trigger                        | Document Path         | Event    | Side Effect                          |
-| ------------------------------ | --------------------- | -------- | ------------------------------------ |
-| `notify`                       | `/notifications/{id}` | onCreate | Sends FCM push notification          |
-| `notifyNewHouseCreated`        | `/houses/{id}`        | onCreate | Emails admin                         |
-| `sendContactEmail`             | `/contact/{id}`       | onCreate | Emails support team                  |
-| `sendSubscriptionUpdateEmail`  | `/users/{id}`         | onUpdate | Emails on subscription status change |
-| `reportBug`                    | `/bugs/{id}`          | onCreate | Emails dev team                      |
-| `submitFeedback`               | `/feedback/{id}`      | onCreate | Emails product team                  |
-| `addDeleteGuestAuthorization`  | `/guests/{id}`        | onDelete | Removes auth claims                  |
-| `eesRecalculationOnGuestWrite` | `/guests/{id}`        | onWrite  | Recalculates EES for current week    |
+| Trigger                              | Document Path                       | Event    | Side Effect                                                                                                                         |
+| ------------------------------------ | ----------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `notify`                             | `/notifications/{id}`               | onCreate | Sends FCM push notification                                                                                                         |
+| `notifyNewHouseCreated`              | `/houses/{id}`                      | onCreate | Emails admin                                                                                                                        |
+| `setHouseSubscriptionStatusOnCreate` | `/houses/{id}`                      | onCreate | Stamps `house.subscriptionStatus` from the operator's subscription status (`canceled` when it is unrecognised)                      |
+| `notifyOperatorOnApplication`        | `/houses/{id}/applications/{appId}` | onCreate | Notifies house staff of a new application (`triggers/firestore/applicationNotice.ts`)                                               |
+| `onHouseRentSettingsWrite`           | `/houses/{id}`                      | onWrite  | Stamps or clears `rentHouseStates/{id}` (the day rent charging turned on) when rent fields, timezone or house type change           |
+| `onHouseDeleted`                     | `/houses/{id}`                      | onDelete | Writes `houseTombstones/{id}` (createHouses refuses the id) and frees the owner's subscription house slot                           |
+| `onGuestWrite`                       | `/guests/{id}`                      | onWrite  | Departures and moves revoke the old house's claims; creates settle the admission ticket; every write re-splits the house's EES week |
+| `onGuestLinkedRestamp`               | `/guests/{id}`                      | onWrite  | Fills empty `residentUid` stamps on the guest's activities when its `userId` is linked or changed                                   |
+| `onActivityWritten`                  | `/activities/{id}`                  | onWrite  | Recomputes week-summaries; stamps `residentUid`; dispute notifications, live dispute list, decision log and archive                 |
+| `sendContactEmail`                   | `/contact/{id}`                     | onCreate | Emails support team                                                                                                                 |
+| `sendSubscriptionUpdateEmail`        | `/users/{id}`                       | onUpdate | Emails on subscription status change                                                                                                |
+| `reportBug`                          | `/bugs/{id}`                        | onCreate | Emails dev team                                                                                                                     |
+| `submitFeedback`                     | `/feedback/{id}`                    | onCreate | Emails product team                                                                                                                 |
 
-**RTDB Trigger:**
-
-| Trigger          | Path                                | Event          | Side Effect                     |
-| ---------------- | ----------------------------------- | -------------- | ------------------------------- |
-| `dmNotification` | `/direct-messages/{convId}/{msgId}` | onValueCreated | Sends push notification for DMs |
+There is no RTDB trigger: `dmNotification` (and the older `addDeleteGuestAuthorization` and `eesRecalculationOnGuestWrite`) are no longer exported; `onGuestWrite` covers the last two.
 
 ### 3.3 Scheduled Functions
 
-| Function                          | Schedule    | Timezone            | Purpose                                              |
-| --------------------------------- | ----------- | ------------------- | ---------------------------------------------------- |
-| `updateDisputes`                  | `0 2 * * *` | UTC                 | Auto-resolves disputes older than 2 days             |
-| `scheduledWeeklyTransferEST`      | `0 0 * * 0` | America/New_York    | Weekly stats transfer (current -> previous week)     |
-| `scheduledWeeklyTransferCST`      | `0 0 * * 0` | America/Chicago     | Weekly stats transfer                                |
-| `scheduledWeeklyTransferMST`      | `0 0 * * 0` | America/Denver      | Weekly stats transfer                                |
-| `scheduledWeeklyTransferPST`      | `0 0 * * 0` | America/Los_Angeles | Weekly stats transfer                                |
-| `scheduledWeeklyTransferFallback` | `0 0 * * 0` | UTC                 | Weekly transfer for houses without timezone          |
-| `warmWebsite`                     | Every 5 min | N/A                 | Keeps Cloud Functions warm (prevents cold starts)    |
-| `officerTermReminder`             | `0 8 * * *` | UTC                 | Notifies officers with terms expiring within 30 days |
+| Function                  | Schedule          | Timezone | Purpose                                                                                                                   |
+| ------------------------- | ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `updateDisputes`          | `0 2 * * *`       | UTC      | Old dispute model: resolves `house.disputes` entries via `runDisputeTransaction` (`util/disputes.ts`)                     |
+| `weeklyTransfers`         | `0 8 * * 0`       | UTC      | Weekly week-stat rollover, one pass per supported timezone plus a fallback pass; no Stripe calls                          |
+| `warmWebsite`             | `every 5 minutes` | —        | Logs a line and makes no outbound call, so it warms nothing but itself: a no-op and a deletion candidate                  |
+| `officerTermReminder`     | `0 8 * * *`       | UTC      | Notifies officers with terms expiring within 30 days                                                                      |
+| `overdueRentNotification` | `0 9 * * *`       | UTC      | Notifies each house's admins of residents with rent overdue                                                               |
+| `scheduledRentCollection` | `0 10 * * *`      | UTC      | Auto-pay: a Stripe PaymentIntent for each resident with `autoPayEnabled` and `rentOwed > 0`                               |
+| `rentCharges`             | `5 * * * *`       | UTC      | Hourly rent charging (540 s timeout): charges each resident whose next chargeable day has come, on the house's local date |
+
+The five per-timezone `scheduledWeeklyTransfer*` jobs were consolidated into `weeklyTransfers`.
 
 ### 3.4 HTTP Handlers & Webhooks
 
 **HTTP Handlers:**
 
-- `universal` — Health check endpoint (`/health`, `/healthz`)
+- `universal` — Health check endpoint (`/health`, `/healthz` → 200; anything else 404). Not the SSR function.
 - `stripeConnectReauth` — Handles expired Stripe AccountLinks; generates fresh onboarding link
-- `stripeConnectReturn` — Stripe redirect post-onboarding; syncs account status to Firestore
+- `stripeConnectReturn` — Stripe redirect post-onboarding; a read-only status page that shows `house.stripeStatus` and writes nothing. The status itself is synced by the `account.updated` webhook.
 
-**Stripe Webhook (`stripeWebhook`):**
+**Stripe webhooks** (`src/webhooks/stripeWebhook.ts`, both signature-verified with live and test secrets):
 
-- `payment_intent.succeeded` — Records payment in Firestore, decrements guest balance, notifies guest & admins
-- `payment_intent.payment_failed` — Logs failure, records failure details, notifies guest & admins
-- Connect account events — Syncs account status changes
+- **`stripeEvents`** (exported from the module as `stripeWebhook`, deployed as `stripeEvents`), the platform endpoint: `payment_intent.succeeded` / `payment_intent.payment_failed` (record the payment in cents, decrement `rentOwed`, notify), `charge.refunded`, `charge.refund.updated`, `charge.dispute.created`, `charge.dispute.closed`, `invoice.payment_succeeded`, `invoice.payment_failed`, `invoice.payment_action_required`, `customer.subscription.created` / `updated` / `deleted` / `trial_will_end`, `account.updated` and `payout.failed`. The endpoint event list to subscribe is in `regroup/scripts/stripe-product-values.md` §4a.
+- **`handleStripeConnectWebhook`**, the Connect endpoint: `account.updated` (syncs `house.stripeStatus`) and `account.application.deauthorized`.
 
 ### 3.5 Backend Utilities
 
-| Utility            | File            | Purpose                                                                                    |
-| ------------------ | --------------- | ------------------------------------------------------------------------------------------ |
-| `claims.ts`        | Auth claims     | `createClaims()`, `deleteClaim()` — add/remove house IDs from role claims                  |
-| `houseAuth.ts`     | Authorization   | `isHouseAdmin()`, `assertHouseAdmin()`, `checkIsMember()`, `assertHouseMemberFromClaims()` |
-| `stripe.ts`        | Stripe helpers  | `createStripeClient()`, `mapStripeError()`, `isAlreadyDeauthorized()`                      |
-| `notifications.ts` | FCM push        | `sendNotification()` — multicast to user's messagingToken[], cleans stale tokens           |
-| `email.ts`         | SendGrid        | `sendEmail()` — transactional emails                                                       |
-| `geohash.ts`       | Geo queries     | `getGeohashRange()`, `getQueriesForDocumentsAround()`                                      |
-| `meetings.ts`      | External APIs   | AA/NA/Celebrate Recovery meeting search                                                    |
-| `disputes.ts`      | Dispute logic   | `disputeResult()`, `runDisputeTransaction()`                                               |
-| `guest.ts`         | Weekly transfer | `transferStats()` — moves current week -> previous, initializes new week                   |
-| `date.ts`          | Date math       | Timezone-aware date calculations                                                           |
+| Utility            | File            | Purpose                                                                                                                                 |
+| ------------------ | --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `claims.ts`        | Auth claims     | `createClaims()`, `deleteClaim()` — add/remove house IDs from role claims                                                               |
+| `houseAuth.ts`     | Authorization   | `isHouseAdmin()`, `assertHouseAdmin()`, `checkIsMember()`, `assertHouseMemberFromClaims()`                                              |
+| `stripe.ts`        | Stripe helpers  | `createStripeClient()`, `mapStripeError()`, `isAlreadyDeauthorized()`                                                                   |
+| `notifications.ts` | FCM push        | `sendNotification()` — multicast to user's messagingToken[], cleans stale tokens                                                        |
+| `email.ts`         | SendGrid        | `sendEmail()` — transactional emails                                                                                                    |
+| `geohash.ts`       | Geo queries     | `getGeohashRange()`, `getQueriesForDocumentsAround()`                                                                                   |
+| `meetings.ts`      | Meetings        | `getCustomMeetings()` (regroup's own meetings), `geocodeNAMeeting()`; directory search goes through recovery-api (`api/recoveryApi.ts`) |
+| `disputes.ts`      | Dispute logic   | `disputeResult()`, `runDisputeTransaction()`                                                                                            |
+| `guest.ts`         | Weekly transfer | `transferStats()` — moves current week -> previous, initializes new week                                                                |
+| `date.ts`          | Date math       | Timezone-aware date calculations                                                                                                        |
 
 ### 3.6 Error Handling Patterns
 
@@ -382,12 +390,21 @@ Callable Functions:  throw HttpsError(code, message)
 
 Triggers:            logger.error() + re-throw (enables Firebase retries)
 
-Webhooks:            Log errors, continue processing (non-fatal for notifications)
+Stripe webhooks:     two-phase claim per event id (webhookEvents/{eventId}):
+                       already done           -> 200 (duplicate)
+                       another delivery busy  -> 409 (Stripe retries)
+                       handler throws         -> claim released, 500 (Stripe retries)
+                       PermanentWebhookError  -> logged, marked done, 200 (no retry)
+                       secret not configured  -> 500
 
 External APIs:       try-catch -> return null/empty (graceful degradation)
 
 Stripe:              mapStripeError(err) -> HttpsError with appropriate code
 ```
+
+### 3.7 Web App Runtime (`regroup/web/`)
+
+The Angular app is served by Firebase Hosting from `web/firebase.json`, a separate deploy from the backend. Its server-side rendering runs in the function **`ssr`** (`web/functions/src/index.ts`, Node 22), deployed from its own functions codebase **`web`** (`"codebase": "web"`), not from `regroup/functions/`. Hosting rewrites `/connect/stripe-return` to `stripeConnectReturn` and `/connect/stripe-refresh` to `stripeConnectReauth` (both in `regroup/functions/`, us-central1), and every other path (`**`) to `ssr`. Details: `regroup/web/CLAUDE.md`.
 
 ---
 
@@ -566,14 +583,16 @@ Firebase Auth custom claims are set by Cloud Functions (never by the client):
 
 ```ts
 interface UserClaims {
-  admin: string[]; // House IDs where user is admin
-  guest: string[]; // House IDs where user is guest
-  superAdmin: string[]; // House IDs where user is super admin
-  potentialSuperAdmin?: boolean; // Flag for users who may become superAdmin
+  admin: { [houseId: string]: true }; // houses where the user is staff (owner, manager or peer leader)
+  guest: { [houseId: string]: true }; // houses where the user is a resident
+  superAdmin: { [houseId: string]: true }; // houses the user owns or co-owns
+  potentialSuperAdmin?: boolean; // an operator who may create houses
 }
 ```
 
-**Role hierarchy:** `superAdmin > admin > guest`
+Each role claim is a map keyed by house id (`functions/src/util/claims.ts`; older array-shaped claims are read and rewritten as maps).
+
+**Authority comes from house tiers, not from the claim alone:** owner > manager > peer leader > resident, recorded server-side in `house-roles/{houseId}_{uid}` (the owner is the record with `primary: true`). A superAdmin claim marks the primary owner or a co-owner; managers and peer leaders hold the same `admin` claim and differ only by their record. The tier model (grants, ranks, revokes) is in `regroup/functions/CLAUDE.md` ("Invitations, admission tickets and house tiers").
 
 The `isAdmin()` helper in security rules returns true for both `admin` and `superAdmin` — always use it instead of checking individual roles.
 
@@ -627,9 +646,9 @@ Storage rules (`firebase/storage.rules`) validate both content type and file siz
 │ Mobile App  │      │ Cloud Functions   │      │   Stripe    │
 │             │      │                   │      │             │
 │ Payment UI  │─────>│ createPaymentIntent│─────>│ PaymentIntent│
-│             │      │   (2% app fee)    │      │  (dest charge)│
+│             │      │ (method-aware fee)│      │  (dest charge)│
 │             │      │                   │      │             │
-│             │      │ stripeWebhook     │<─────│  Webhooks   │
+│             │      │ stripeEvents      │<─────│  Webhooks   │
 │             │      │  (payment result) │      │             │
 │             │      │                   │      │             │
 │ Stripe      │─────>│ connectStripeAccount│────>│  Express    │
@@ -641,24 +660,28 @@ Storage rules (`firebase/storage.rules`) validate both content type and file siz
 ### 6.2 Payment Flow
 
 1. **House operator connects Stripe** via `connectStripeAccount` → Creates the house's connected account (Accounts v1 controller properties by default; a v2 recipient when `CONNECT_ACCOUNTS_API=v2`), Express dashboard → Onboarding link
-2. **Guest initiates rent payment** → `createPaymentIntent` → Stripe destination charge with 2% app fee
-3. **Stripe processes payment** → Webhook → `payment_intent.succeeded` or `payment_intent.payment_failed`
-4. **Cloud Function records result** → Updates `payments` collection → Decrements `guest.rentOwed` → Sends notifications
+2. **Guest initiates rent payment** → `createPaymentIntent` → Stripe destination charge; the application fee is method-aware (`computeApplicationFee` in `functions/src/util/rentFee.ts`: card = 0.75% platform margin plus the estimated 2.9% + 30¢ Stripe cost; ACH = $2 plus the estimated min(0.8%, $5) Stripe cost; rates env-overridable in `functions/src/config.ts` `RENT_FEE`)
+3. **Stripe processes payment** → Webhook (`stripeEvents`) → `payment_intent.succeeded` or `payment_intent.payment_failed`
+4. **Cloud Function records result** → Updates `payments` collection (`amount` in integer cents) → Decrements `guest.rentOwed` → Sends notifications
 
 ### 6.3 Operator Subscription (SaaS Billing)
 
-House operators pay per house and per guest:
+House operators pay a flat fee for one of six tiers (`SUBSCRIPTION_TIERS` in `functions/src/config.ts`), monthly or annual, when `TIER_BILLING_ENABLED=true`:
 
 ```
 Subscription
-  ├── House item (quantity = number of houses managed)
-  └── Guest item (quantity = total residents across all houses)
+  └── One tier item (quantity 1): price from STRIPE_PRICE_<TIER> or STRIPE_PRICE_<TIER>_ANNUAL
+
+Traditional: Starter $69 (10 residents, 1 house), Professional $129 (20, 3), Enterprise $249 (no caps)
+Oxford:      Standard $49 (15, 1), Plus $89 (25, 1), Network $299 (no caps; not for sale)
 ```
 
-- 7-day free trial on creation (`TRIAL_PERIOD_DAYS`, `functions/src/api/stripe.ts`)
-- Quantity adjustments via `updateSubscriptionGuests` / `updateSubscriptionHouses`
-- Cancellation at period end (not immediate)
-- Subscription metadata synced to `users.subscriptionMetadata`
+- Trial on creation (`TRIAL_PERIOD_DAYS`, `functions/src/api/stripe.ts`)
+- With the flag off, or the sales switch (`config/sales.open`) closed, `createOperatorSubscription` refuses; there is no fallback to the old per-house + per-guest items. That legacy two-item code is still in `api/stripe.ts` but unreachable from checkout and reactivation
+- Caps, not quantities: `updateSubscriptionGuests` / `updateSubscriptionHouses` make no Stripe call; they record occupancy in `subscriptionMetadata.houses` against the tier's `maxResidents` / `maxProperties`
+- The plan sets the house type (traditional or Oxford); `setOxfordEnabled` refuses a switch
+- Cancellation at period end (not immediate); reactivation un-cancels a `cancelling` subscription or creates a new one for a `canceled` one (see §3.1)
+- Subscription state is synced to `users.subscriptionMetadata`, the `subscriptions` doc and the houses by the subscription webhooks, which re-read the subscription from Stripe
 
 ---
 
@@ -677,11 +700,11 @@ firestore
   .orderBy('sortKey', 'desc')
   .limit(50)
   .onSnapshot(
-    snapshot => {
+    (snapshot) => {
       const messages = snapshot.docs.map(mapMessageDoc);
       callback(messages);
     },
-    error => logException(error),
+    (error) => logException(error),
   );
 // Returns unsubscribe function — called on component unmount
 ```
@@ -746,7 +769,7 @@ Oxford House features are gated behind the `oxfordEnabled` subscription flag and
 Votes are **immutable once created** (security rules deny updates/deletes). Vote casting uses Firestore transactions to prevent race conditions:
 
 ```ts
-await firestore.runTransaction(async transaction => {
+await firestore.runTransaction(async (transaction) => {
   const voteDoc = await transaction.get(voteRef);
   const voteData = voteDoc.data();
   const updatedResults = { ...voteData.results };
@@ -777,11 +800,10 @@ Event (payment, dispute, invite, DM, officer term expiry)
   ├── Client creates notification doc in Firestore
   │     └── Firestore trigger: notify() → FCM multicast
   │
-  ├── Cloud Function creates notification doc
-  │     └── Same trigger path
-  │
-  └── RTDB trigger (DMs only)
-        └── dmNotification() → FCM to recipient
+  └── Cloud Function creates notification doc, or pushes directly
+        └── through functions/src/util/notifications.ts (FCM)
+
+(There is no RTDB DM trigger: dmNotification is no longer exported.)
 ```
 
 ### 9.2 FCM Token Management
@@ -861,4 +883,5 @@ Important: Always use `127.0.0.1`, not `localhost` (IPv6 issues on macOS).
 | `jest.setup.js`                       | Global test mocks                    |
 
 ---
-*Last reviewed: 2026-05-24 | Audience: developer | Type: reference*
+
+_Last reviewed: 2026-05-24 | Audience: developer | Type: reference_
