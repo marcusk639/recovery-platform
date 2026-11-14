@@ -94,6 +94,21 @@ export async function primaryOwnerUid(houseId: string): Promise<string | null> {
   return id ? id.slice(houseId.length + 1) : null;
 }
 
+/** The uids holding a staff tier (owner, manager, peer leader) on a house, from the records. */
+export async function staffUids(houseId: string): Promise<string[]> {
+  const snap = await admin
+    .firestore()
+    .collection('house-roles')
+    .where('houseId', '==', houseId)
+    .get();
+  return snap.docs
+    .filter((doc) => {
+      const tier = parseTier(doc.data().tier);
+      return tier !== null && tier !== 'resident';
+    })
+    .map((doc) => doc.id.slice(houseId.length + 1));
+}
+
 /** The primary owner record createHouses writes (in its transaction) and the backfill writes. */
 export const primaryOwnerRecord = (
   uid: string,

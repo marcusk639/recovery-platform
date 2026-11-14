@@ -2,62 +2,53 @@ import {
   onDocumentCreated,
   onDocumentUpdated,
   onDocumentWritten,
-} from "firebase-functions/v2/firestore";
-import { auth } from "firebase-admin";
-import { logger } from "firebase-functions";
-import { Notification } from "../../entities/Notification";
-import { House } from "../../entities/House";
-import { Contact } from "../../entities/Contact";
-import { BugReport } from "../../entities/BugReport";
-import { Feedback } from "../../entities/Feedback";
-import { User } from "../../entities/User";
-import { Guest } from "../../entities/Guest";
-import { sendNotification } from "../../util/notifications";
-import { sendEmail, regroupEmail } from "../../util/email";
-import {
-  getUser,
-  guestCollection,
-  houseCollection,
-  notificationCollection,
-  ratsFirestore,
-  updateContact,
-} from "../../api/firestore";
-import { getCurrentTime } from "../../util/date";
-import { deleteClaim } from "../../util/claims";
-import { SENDGRID_API_KEY } from "../../config";
-import { operatorStatusToHouseStatus } from "../../util/entitlement";
-import { selectLegitimateGuests } from "../../util/guestMembership";
-import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from "../../util/eventAge";
+} from 'firebase-functions/v2/firestore';
+import { auth } from 'firebase-admin';
+import { logger } from 'firebase-functions';
+import { Notification } from '../../entities/Notification';
+import { House } from '../../entities/House';
+import { Contact } from '../../entities/Contact';
+import { BugReport } from '../../entities/BugReport';
+import { Feedback } from '../../entities/Feedback';
+import { User } from '../../entities/User';
+import { Guest } from '../../entities/Guest';
+import { sendNotification } from '../../util/notifications';
+import { sendEmail, regroupEmail } from '../../util/email';
+import { getUser, guestCollection, updateContact } from '../../api/firestore';
+import { getCurrentTime } from '../../util/date';
+import { deleteClaim } from '../../util/claims';
+import { SENDGRID_API_KEY } from '../../config';
+import { operatorStatusToHouseStatus } from '../../util/entitlement';
+import { selectLegitimateGuests } from '../../util/guestMembership';
+import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from '../../util/eventAge';
 
-export { onHouseDeleted } from "./houseTombstone";
-export { onActivityWritten } from "./activityWeekSummary";
-export { onGuestLinkedRestamp } from "./guestRestamp";
-export { onGuestWrite } from "./guestWrite";
-export { onHouseRentSettingsWrite } from "./houseRentSettings";
+export { onHouseDeleted } from './houseTombstone';
+export { onActivityWritten } from './activityWeekSummary';
+export { onGuestLinkedRestamp } from './guestRestamp';
+export { onGuestWrite } from './guestWrite';
+export { onHouseRentSettingsWrite } from './houseRentSettings';
+export { notifyOperatorOnApplication } from './applicationNotice';
 
 /**
  * Sends a push notification when a new document is created in /notifications/{notificationId}.
  */
-export const notify = onDocumentCreated(
-  "/notifications/{notificationId}",
-  async (event) => {
-    const data = event.data?.data();
-    if (!data) return;
+export const notify = onDocumentCreated('/notifications/{notificationId}', async (event) => {
+  const data = event.data?.data();
+  if (!data) return;
 
-    const notification = data as Notification;
-    return sendNotification({
-      recipientId: notification.userId,
-      body: notification.message ?? "",
-      title: notification.subject ?? "",
-    });
-  },
-);
+  const notification = data as Notification;
+  return sendNotification({
+    recipientId: notification.userId,
+    body: notification.message ?? '',
+    title: notification.subject ?? '',
+  });
+});
 
 /**
  * Sends an admin email when a new house document is created in /houses/{houseId}.
  */
 export const notifyNewHouseCreated = onDocumentCreated(
-  { document: "/houses/{houseId}", secrets: [SENDGRID_API_KEY] },
+  { document: '/houses/{houseId}', secrets: [SENDGRID_API_KEY] },
   async (event) => {
     const data = event.data?.data();
     if (!data) return;
@@ -73,10 +64,10 @@ export const notifyNewHouseCreated = onDocumentCreated(
         Super Admin: ${house.superAdminId}
         Date: ${(house as House & { createdAt?: string }).createdAt ?? house.createdDate}
       `,
-        subject: "New house created",
+        subject: 'New house created',
       });
     } catch (error) {
-      logger.error("notifyNewHouseCreated: email delivery failed", { error });
+      logger.error('notifyNewHouseCreated: email delivery failed', { error });
     }
   },
 );
@@ -97,7 +88,7 @@ export const notifyNewHouseCreated = onDocumentCreated(
  * able to prevent the entitlement write.
  */
 export const setHouseSubscriptionStatusOnCreate = onDocumentCreated(
-  "/houses/{houseId}",
+  '/houses/{houseId}',
   async (event) => {
     const houseId = event.params.houseId;
     const data = event.data?.data();
@@ -106,7 +97,7 @@ export const setHouseSubscriptionStatusOnCreate = onDocumentCreated(
     const house = data as House;
     const operatorId = house.superAdminId || house.ownerId;
     if (!operatorId) {
-      logger.error("house.created_without_operator", { houseId });
+      logger.error('house.created_without_operator', { houseId });
       return;
     }
 
@@ -119,17 +110,17 @@ export const setHouseSubscriptionStatusOnCreate = onDocumentCreated(
       // even a trialing one. Reaching here means the signup funnel created a
       // house too early, or the operator's status is unrecognized — a bug, not a
       // state to model. Deny, and log loudly enough to be noticed.
-      logger.error("house.created_without_subscription", {
+      logger.error('house.created_without_subscription', {
         houseId,
         operatorId,
         operatorStatus: operatorStatus ?? null,
       });
-      await event.data!.ref.update({ subscriptionStatus: "canceled" });
+      await event.data!.ref.update({ subscriptionStatus: 'canceled' });
       return;
     }
 
     await event.data!.ref.update({ subscriptionStatus: status });
-    logger.info("house.subscription_status_stamped", { houseId, status });
+    logger.info('house.subscription_status_stamped', { houseId, status });
   },
 );
 
@@ -138,7 +129,7 @@ export const setHouseSubscriptionStatusOnCreate = onDocumentCreated(
  * is created in /contact/{contactId}.
  */
 export const sendContactEmail = onDocumentCreated(
-  { document: "/contact/{contactId}", secrets: [SENDGRID_API_KEY] },
+  { document: '/contact/{contactId}', secrets: [SENDGRID_API_KEY] },
   async (event) => {
     const data = event.data?.data();
     if (!data) return;
@@ -168,7 +159,7 @@ export const sendContactEmail = onDocumentCreated(
  * Listens for updates on /users/{userId}.
  */
 export const sendSubscriptionUpdateEmail = onDocumentUpdated(
-  { document: "/users/{userId}", secrets: [SENDGRID_API_KEY] },
+  { document: '/users/{userId}', secrets: [SENDGRID_API_KEY] },
   async (event) => {
     const before = event.data?.before.data() as User | undefined;
     const after = event.data?.after.data() as User | undefined;
@@ -186,10 +177,10 @@ export const sendSubscriptionUpdateEmail = onDocumentUpdated(
           Subscription status updated for user ${before.id}
           Status changed from ${statusBefore} to ${statusAfter}
         `,
-          subject: "User subscription changed",
+          subject: 'User subscription changed',
         });
       } catch (error) {
-        logger.error("sendSubscriptionUpdateEmail: email delivery failed", {
+        logger.error('sendSubscriptionUpdateEmail: email delivery failed', {
           error,
         });
       }
@@ -201,7 +192,7 @@ export const sendSubscriptionUpdateEmail = onDocumentUpdated(
  * Sends an admin email when a new bug report is created in /bugs/{bugId}.
  */
 export const reportBug = onDocumentCreated(
-  { document: "/bugs/{bugId}", secrets: [SENDGRID_API_KEY] },
+  { document: '/bugs/{bugId}', secrets: [SENDGRID_API_KEY] },
   async (event) => {
     const data = event.data?.data();
     if (!data) return;
@@ -217,10 +208,10 @@ export const reportBug = onDocumentCreated(
         ID: ${bugReport.id}
         Date: ${bugReport.createdDate}
       `,
-        subject: "New bug report",
+        subject: 'New bug report',
       });
     } catch (error) {
-      logger.error("reportBug: email delivery failed", { error });
+      logger.error('reportBug: email delivery failed', { error });
     }
   },
 );
@@ -229,7 +220,7 @@ export const reportBug = onDocumentCreated(
  * Sends an admin email when new feedback is submitted in /feedback/{feedbackId}.
  */
 export const submitFeedback = onDocumentCreated(
-  { document: "/feedback/{feedbackId}", secrets: [SENDGRID_API_KEY] },
+  { document: '/feedback/{feedbackId}', secrets: [SENDGRID_API_KEY] },
   async (event) => {
     const data = event.data?.data();
     if (!data) return;
@@ -245,67 +236,10 @@ export const submitFeedback = onDocumentCreated(
         ID: ${feedback.id}
         Date: ${feedback.createdDate}
       `,
-        subject: "New feedback",
+        subject: 'New feedback',
       });
     } catch (error) {
-      logger.error("submitFeedback: email delivery failed", { error });
-    }
-  },
-);
-
-/**
- * Notifies all house admins when a new resident application is submitted.
- *
- * Fires on: create of houses/{houseId}/applications/{appId}
- * Action:   creates a /notifications/{id} document for each admin, which
- *           triggers the existing `notify` function to send push notifications.
- */
-export const notifyOperatorOnApplication = onDocumentCreated(
-  "houses/{houseId}/applications/{appId}",
-  async (event) => {
-    const data = event.data?.data();
-    if (!data) return;
-
-    const houseId = event.params.houseId;
-    const applicantName = (data.applicantName as string) || "Someone";
-
-    try {
-      const houseSnap = await houseCollection.doc(houseId).get();
-      if (!houseSnap.exists) return;
-
-      const houseData = houseSnap.data()!;
-      const adminIds: string[] = houseData.adminIds ?? [];
-      const superAdminId: string = houseData.superAdminId ?? "";
-
-      const recipientIds = [
-        ...new Set([...adminIds, superAdminId].filter(Boolean)),
-      ];
-      if (recipientIds.length === 0) return;
-
-      const batch = ratsFirestore.batch();
-      recipientIds.forEach((adminId) => {
-        const notifRef = notificationCollection.doc();
-        batch.set(notifRef, {
-          userId: adminId,
-          houseId,
-          subject: "New Application Received",
-          message: `${applicantName} applied to join your house.`,
-          type: "application-received",
-          date: new Date().toISOString(),
-          read: false,
-        });
-      });
-
-      await batch.commit();
-      logger.info(
-        `notifyOperatorOnApplication: sent ${recipientIds.length} notifications for house ${houseId}`,
-      );
-    } catch (error) {
-      logger.error("notifyOperatorOnApplication: failed to notify admins", {
-        houseId,
-        error: (error as Error).message,
-      });
-      throw error;
+      logger.error('submitFeedback: email delivery failed', { error });
     }
   },
 );
