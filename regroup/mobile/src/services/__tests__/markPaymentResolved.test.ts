@@ -1,56 +1,56 @@
-jest.mock('../../../firebase-setup', () => {
-  const mockUpdate = jest.fn().mockResolvedValue(undefined);
-  const mockDoc = jest.fn(() => ({ update: mockUpdate }));
-  const mockCollection = jest.fn(() => ({ doc: mockDoc }));
-  return {
-    firestore: {
-      collection: mockCollection,
-      _mockCollection: mockCollection,
-      _mockUpdate: mockUpdate,
-      _mockDoc: mockDoc,
-    },
-    auth: { currentUser: { uid: 'admin-uid-1' } },
-  };
+/**
+ * markPaymentResolvedOffline asks the server (#238). The payments rules refuse
+ * every client update, so the old direct write to payments/<id> always failed.
+ */
+jest.mock('../../../firebase-setup', () => require('../../../__mocks__/firebase-modular/setup'));
+jest.mock('@react-native-firebase/firestore', () =>
+  require('../../../__mocks__/firebase-modular/firestore'),
+);
+jest.mock('@react-native-firebase/functions', () =>
+  require('../../../__mocks__/firebase-modular/functions'),
+);
+
+import {
+  failNext,
+  getOpLog,
+  readDoc,
+  resetOpLog,
+  seedDoc,
+} from '../../../__mocks__/firebase-modular/log';
+import { markPaymentResolvedOffline } from '../payments';
+
+beforeEach(() => {
+  resetOpLog();
 });
 
-import { firestore } from '../../../firebase-setup';
-import { markPaymentResolvedOffline, paymentsCollection } from '../payments';
-
-const getUpdate = () => (firestore as any)._mockUpdate as jest.Mock;
-
 describe('markPaymentResolvedOffline', () => {
-  it('writes to the payments collection', async () => {
-    // Verify that firestore.collection was called with 'payments' by the paymentsCollection export
-    // We do this by verifying the mock is set up and trying to use the collection
-    const paymentsRef = (firestore as any).collection('payments');
-    expect((firestore as any)._mockCollection).toHaveBeenCalledWith('payments');
-
-    // Verify the chain works: collection('payments').doc('id').update(data)
-    const docRef = paymentsRef.doc('test-id');
-    expect((firestore as any)._mockDoc).toHaveBeenCalledWith('test-id');
-
-    await docRef.update({ test: true });
-    expect(getUpdate()).toHaveBeenCalledWith({ test: true });
+  it('calls the markPaymentResolvedOffline callable with the house and the payment', async () => {
+    await markPaymentResolvedOffline('house-1', 'pay-abc-123');
+    expect(getOpLog()).toEqual([
+      {
+        op: 'call',
+        path: 'markPaymentResolvedOffline',
+        data: { houseId: 'house-1', paymentId: 'pay-abc-123' },
+      },
+    ]);
   });
 
-  beforeEach(() => jest.clearAllMocks());
+  it('writes nothing to Firestore itself', async () => {
+    seedDoc('payments/pay-abc-123', { status: 'failed', amount: 50000 });
+    await markPaymentResolvedOffline('house-1', 'pay-abc-123');
+    expect(getOpLog().filter((e) => e.op !== 'call')).toEqual([]);
+    expect(readDoc('payments/pay-abc-123')).toEqual({ status: 'failed', amount: 50000 });
+  });
 
-  it('updates status to resolved_offline on the payments document', async () => {
-    await markPaymentResolvedOffline('pay-abc-123');
-
-    expect(getUpdate()).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'resolved_offline' }),
+  it("passes the server's refusal on", async () => {
+    failNext('call', new Error('permission-denied'), 'markPaymentResolvedOffline');
+    await expect(markPaymentResolvedOffline('house-1', 'pay-abc-123')).rejects.toThrow(
+      'permission-denied',
     );
   });
 
-  it('writes resolvedAt as a valid ISO string', async () => {
-    await markPaymentResolvedOffline('pay-abc-123');
-    const written = getUpdate().mock.calls[0][0];
-    expect(new Date(written.resolvedAt).toISOString()).toBe(written.resolvedAt);
-  });
-
-  it('targets the correct document id', async () => {
-    await markPaymentResolvedOffline('pay-abc-123');
-    expect((firestore as any)._mockDoc).toHaveBeenCalledWith('pay-abc-123');
+  it('targets the given payment', async () => {
+    await markPaymentResolvedOffline('house-2', 'pay-xyz');
+    expect(getOpLog()[0].data).toEqual({ houseId: 'house-2', paymentId: 'pay-xyz' });
   });
 });

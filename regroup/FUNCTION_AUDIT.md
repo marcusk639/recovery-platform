@@ -9,7 +9,7 @@
 
 **Generated:** 2026-11-14
 **Source:** the `docs/regroup-code-doc-audit-fixes` branch (base `c1931c04` plus its code changes)
-**Total functions:** 62
+**Total functions:** 63
 
 All functions run in the default region (us-central1); none sets `region:`.
 `regroup/functions/src/init.ts` applies `setGlobalOptions({ cpu: 0.167, maxInstances: 2 })`
@@ -42,6 +42,7 @@ as a quota stopgap — see that file's comment for the constraint.
 | `givePotentialSuperAdminPrivilege` | `regroup/functions/src/callable/auth.ts:418`                | yes      | —                                     |
 | `listHousePayments`                | `regroup/functions/src/callable/payments.ts:417`            | yes      | `STRIPE_SECRET_KEY`                   |
 | `listPayments`                     | `regroup/functions/src/callable/payments.ts:323`            | yes      | `STRIPE_SECRET_KEY`                   |
+| `markPaymentResolvedOffline`       | `regroup/functions/src/callable/resolveFailedPayment.ts:21` | yes      | —                                     |
 | `myHouseTiers`                     | `regroup/functions/src/callable/myHouseTiers.ts:21`         | yes      | —                                     |
 | `peekInvitation`                   | `regroup/functions/src/callable/invitations.ts:195`         | yes      | —                                     |
 | `promoteGuestsToAdmin`             | `regroup/functions/src/callable/auth.ts:267`                | yes      | —                                     |
@@ -114,11 +115,11 @@ as a quota stopgap — see that file's comment for the constraint.
 
 ## Deployment surface
 
-All 62 functions are re-exported from `regroup/functions/src/index.ts` and deploy.
+All 63 functions are re-exported from `regroup/functions/src/index.ts` and deploy.
 
 Note: `stripeWebhook` is deployed under the name `stripeEvents` (aliased in `index.ts`).
 
-`scripts/deploy-batched.sh` `ALL_FUNCTIONS` lists the same 62 deployed names; `functions/src/__tests__/deployList.test.ts` keeps it equal to the exports.
+`scripts/deploy-batched.sh` `ALL_FUNCTIONS` lists the same 63 deployed names; `functions/src/__tests__/deployList.test.ts` keeps it equal to the exports.
 
 ## Generator notes
 

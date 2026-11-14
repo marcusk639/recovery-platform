@@ -227,8 +227,10 @@ for a guest with no linked account, has no `guestUserId` and stays out of the
 resident's history. Check for the field before reading an empty history as "no
 payments".
 
-**"Resolve failed payment" cannot work.** `markPaymentResolvedOffline` does a
-client-side update against a rule that sets `update: false`.
+**"Mark Resolved" on a failed payment** goes through the `markPaymentResolvedOffline`
+callable (#238): owners and managers only, a failed record only, and it changes
+the status to `resolved_offline` without moving money. The banner lists the
+house's failed payment records, not Stripe charges.
 
 **`payments.amount` is integer cents** (fixed, #82). The webhook stores
 `amount: amountCents` (`amountDollars` is display-only), mobile's manual

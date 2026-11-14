@@ -481,14 +481,14 @@ export async function recordManualPayment(
 }
 
 /**
- * Mark a failed rent payment as resolved via cash/check/Venmo/Zelle.
- * Updates the payment status to 'resolved_offline' and records the resolution timestamp.
+ * Mark a failed payment as handled off the app, which clears it from the
+ * dashboard's failed list. It changes no balance: money collected by hand is
+ * recorded as a manual payment.
  */
 export async function markPaymentResolvedOffline(
+  houseId: string,
   paymentId: string
 ): Promise<void> {
-  await updateDoc(doc(paymentsCollection, paymentId), {
-    status: "resolved_offline",
-    resolvedAt: new Date().toISOString(),
-  });
+  // The rules refuse client updates to payments, so the server writes it (#238).
+  await httpsCallable(functions, "markPaymentResolvedOffline")({ houseId, paymentId });
 }

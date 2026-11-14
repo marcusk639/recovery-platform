@@ -129,8 +129,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
 
   // Refetch on focus so returning from ManualPaymentModal / payment detail
   // shows the up-to-date list instead of a stale cache.
-  // exact: true prevents also invalidating useFailedPayments (which shares the
-  // same key prefix) and causing a redundant Cloud Function call on every focus.
+  // exact: true leaves the other queries under this key prefix alone.
   useFocusEffect(
     useCallback(() => {
       if (house?.id) {
@@ -303,6 +302,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
           failedPayments={failedPayments}
           houseId={house?.id ?? ""}
           guestNames={guestNames}
+          canResolve={canRecordPayments}
         />
         <StalePendingBanner
           stalePendingPayments={stalePendingPayments}

@@ -293,6 +293,7 @@ These are invoked from the mobile client (and the web operator portal) via `http
 | `createPaymentIntent`     | Create destination charge for rent                                         | PaymentIntents; method-aware fee from `computeApplicationFee` (`util/rentFee.ts`), USD only |
 | `listPayments`            | Payment history for one resident (the resident or a house admin)           | `charges.list` on the house's connected account; amounts returned in dollars                |
 | `listHousePayments`       | All of a house's payments (house admins only)                              | `charges.list` on the house's connected account; amounts returned in dollars                |
+| `markPaymentResolvedOffline` | Mark a failed payment handled off the app (owner or manager); moves no money | None; sets the payment record's status to `resolved_offline` |
 | `getPaymentMethod`        | The caller's Stripe customer's default payment method                      | Customers, PaymentMethods                                                                   |
 | `updatePaymentInfo`       | Attach a payment method and make it the default                            | PaymentMethods, Customers                                                                   |
 | `connectStripeAccount`    | Create house account (v1 by default, v2 behind a switch) + onboarding link | Accounts v1/v2, AccountLinks                                                                |

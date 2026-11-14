@@ -211,6 +211,35 @@ describe("PaymentDashboard", () => {
     expect(queryByTestId("manual-payment-fab")).toBeNull();
   });
 
+  // #238: the failed list is the house's payment records, and only staff who
+  // may act on money (the server's rule) get a Mark Resolved that can work.
+  const failedRecord = {
+    id: "pi_failed_1",
+    guestId: "g1",
+    houseId: "house1",
+    amount: 50000,
+    status: "failed",
+    createdAt: new Date().toISOString(),
+    description: "Rent Payment",
+  };
+
+  it("lists a failed payment record, with Mark Resolved for a manager", async () => {
+    setupStore({ g1: { id: "g1", userId: "u1", firstName: "Alice", lastName: "Smith" } });
+    mockGetHousePaymentRecords.mockResolvedValue([failedRecord]);
+    const { findByTestId } = renderDashboard();
+    await findByTestId("failed-payment-row-pi_failed_1");
+    await findByTestId("mark-resolved-pi_failed_1");
+  });
+
+  it("shows a peer leader the failed payment without a Mark Resolved they can't use", async () => {
+    setupStore({ g1: { id: "g1", userId: "u1", firstName: "Alice", lastName: "Smith" } });
+    mockMayEditRentMoney.mockReturnValue(false);
+    mockGetHousePaymentRecords.mockResolvedValue([failedRecord]);
+    const { findByTestId, queryByTestId } = renderDashboard();
+    await findByTestId("failed-payment-row-pi_failed_1");
+    expect(queryByTestId("mark-resolved-pi_failed_1")).toBeNull();
+  });
+
   it("renders StalePendingBanner when there are stale pending payments", async () => {
     setupStore({
       g1: { id: "g1", userId: "u1", firstName: "Alice", lastName: "Smith" },

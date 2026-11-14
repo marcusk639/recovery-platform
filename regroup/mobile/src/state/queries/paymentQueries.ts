@@ -197,15 +197,16 @@ export function useGuestBalances(houseId: string, guests: Guest[]) {
 
 // ─── Failed Payments ──────────────────────────────────────────────────────────
 
+// The house's payment records, which the Payment Dashboard reads under the same
+// key, so this adds no read. Not Stripe charges: a declined card that a retry
+// paid stays a failed charge at Stripe, but its record reads succeeded (#238).
 export const useFailedPayments = (houseId: string) =>
   useQuery({
-    queryKey: [...paymentKeys.housePayments(houseId), 'failed'],
-    queryFn: async (): Promise<RentPayment[]> => {
-      const all = await listHousePayments(houseId, 100);
-      return all.filter(p => p.status === 'failed');
-    },
+    queryKey: paymentKeys.housePayments(houseId),
+    queryFn: () => getHousePaymentRecords(houseId),
+    select: (records: RentPayment[]) => records.filter(p => p.status === 'failed'),
     enabled: !!houseId,
-    staleTime: 30_000,
+    staleTime: 60_000,
   });
 
 // ─── Stale Pending Payments ───────────────────────────────────────────────────
@@ -230,11 +231,10 @@ export const useStalePendingPayments = (houseId: string) =>
 // ─── Resolve Failed Payment (offline) ────────────────────────────────────────
 
 /**
- * Mark a failed payment as resolved offline.
- * Updates the payment's status to 'resolved_offline' in Firestore
- * and invalidates the failed payments list for the given house.
+ * Mark a failed payment as resolved offline, through the server, then refresh
+ * the house's payment records (the failed list and the dashboard read them).
  *
- * @param houseId - The house ID (used to invalidate the failed payments query)
+ * @param houseId - The house the payment belongs to
  * @returns A mutation hook for resolving payments
  */
 export const useMarkPaymentResolved = (houseId: string) => {
@@ -242,10 +242,11 @@ export const useMarkPaymentResolved = (houseId: string) => {
 
   return useMutation({
     mutationFn: ({ paymentId }: { paymentId: string }) =>
-      paymentService.markPaymentResolvedOffline(paymentId),
+      paymentService.markPaymentResolvedOffline(houseId, paymentId),
     onSettled: () => {
       queryClient.invalidateQueries({
-        queryKey: [...paymentKeys.housePayments(houseId), 'failed'],
+        queryKey: paymentKeys.housePayments(houseId),
+        exact: true,
       });
     },
     onError: error => {

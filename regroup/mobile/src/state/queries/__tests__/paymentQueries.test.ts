@@ -354,31 +354,37 @@ describe('paymentQueries', () => {
   // ─── useFailedPayments ───────────────────────────────────────────────────────
 
   describe('useFailedPayments', () => {
-    it('fetches failed payments for a house', async () => {
-      const failedPayment = {
-        id: 'pay-1',
-        guestId: 'guest-1',
-        houseId: 'house-1',
-        amount: 500,
-        status: 'failed',
-        createdAt: new Date().toISOString(),
-        description: 'Rent Payment',
-        stripePaymentIntentId: 'pi_mock',
-      };
-      (paymentService.listHousePayments as jest.Mock).mockResolvedValue([
-        failedPayment,
+    const record = (id: string, status: string) => ({
+      id,
+      guestId: 'guest-1',
+      houseId: 'house-1',
+      amount: 50000,
+      status,
+      createdAt: new Date().toISOString(),
+      description: 'Rent Payment',
+      stripePaymentIntentId: id,
+    });
+
+    // #238: the house's payment records, not Stripe charges. A declined card
+    // that a retry then paid is one record, now succeeded, so it isn't listed.
+    it("lists the house's failed payment records", async () => {
+      (paymentService.getHousePaymentRecords as jest.Mock).mockResolvedValue([
+        record('pi_failed', 'failed'),
+        record('pi_retried', 'succeeded'),
+        record('pi_handled', 'resolved_offline'),
       ]);
 
       const { result } = renderHook(() => useFailedPayments('house-1'), {
         wrapper,
       });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(result.current.data).toHaveLength(1);
-      expect(result.current.data?.[0].status).toBe('failed');
+      expect(result.current.data?.map(p => p.id)).toEqual(['pi_failed']);
+      expect(paymentService.getHousePaymentRecords).toHaveBeenCalledWith('house-1');
+      expect(paymentService.listHousePayments).not.toHaveBeenCalled();
     });
 
     it('returns empty array when no failed payments', async () => {
-      (paymentService.listHousePayments as jest.Mock).mockResolvedValue([]);
+      (paymentService.getHousePaymentRecords as jest.Mock).mockResolvedValue([]);
       const { result } = renderHook(() => useFailedPayments('house-1'), {
         wrapper,
       });
@@ -389,6 +395,18 @@ describe('paymentQueries', () => {
     it('does not fetch when houseId is empty', () => {
       const { result } = renderHook(() => useFailedPayments(''), { wrapper });
       expect(result.current.fetchStatus).toBe('idle');
+    });
+
+    // A refusal used to read as "no failed payments".
+    it('reports a failed read instead of an empty list', async () => {
+      (paymentService.getHousePaymentRecords as jest.Mock).mockRejectedValue(
+        new Error('permission-denied'),
+      );
+      const { result } = renderHook(() => useFailedPayments('house-1'), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(result.current.data).toBeUndefined();
     });
   });
 
@@ -554,11 +572,12 @@ describe('paymentQueries', () => {
       await result.current.mutateAsync({ paymentId: 'pay-001' });
 
       expect(paymentService.markPaymentResolvedOffline).toHaveBeenCalledWith(
+        'house-1',
         'pay-001',
       );
     });
 
-    it('should invalidate failed payments query on success', async () => {
+    it("should refresh the house's payment records on success", async () => {
       (
         paymentService.markPaymentResolvedOffline as jest.Mock
       ).mockResolvedValue(undefined);
@@ -572,7 +591,8 @@ describe('paymentQueries', () => {
       await result.current.mutateAsync({ paymentId: 'pay-001' });
 
       expect(invalidateSpy).toHaveBeenCalledWith({
-        queryKey: [...paymentKeys.housePayments('house-1'), 'failed'],
+        queryKey: paymentKeys.housePayments('house-1'),
+        exact: true,
       });
     });
 
