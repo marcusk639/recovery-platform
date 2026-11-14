@@ -6,9 +6,9 @@
  * upgrade nothing created these, so neither server pushes nor rent reminders
  * showed on Android.
  *
- * - 'default': server pushes (the `notifee` payload from
- *   regroup/functions/src/util/notifications.ts names it).
- * - 'default-channel-id': rent reminders (rentReminder.ts).
+ * One channel, 'default-channel-id', for both server pushes (the id
+ * regroup/functions/src/util/notifications.ts sends) and rent reminders
+ * (rentReminder.ts).
  *
  * Startup (index.js) starts the work; every display and schedule path awaits
  * the same promise. One native call per process; a failed call is retried by
@@ -19,8 +19,8 @@ import { Platform } from 'react-native';
 import notifee, { AndroidImportance } from 'react-native-notify-kit';
 import { logException } from '../../util/logging';
 
-export const SERVER_PUSH_CHANNEL_ID = 'default';
-export const REMINDER_CHANNEL_ID = 'default-channel-id';
+export const SERVER_PUSH_CHANNEL_ID = 'default-channel-id';
+export const REMINDER_CHANNEL_ID = SERVER_PUSH_CHANNEL_ID;
 
 let channelsReady: Promise<void> | null = null;
 
@@ -32,7 +32,6 @@ export function ensureNotificationChannels(): Promise<void> {
     channelsReady = notifee
       .createChannels([
         { id: SERVER_PUSH_CHANNEL_ID, name: 'General', importance: AndroidImportance.HIGH },
-        { id: REMINDER_CHANNEL_ID, name: 'Reminders', importance: AndroidImportance.HIGH },
       ])
       .catch((error: unknown) => {
         channelsReady = null;

@@ -90,7 +90,7 @@ fail on reads.
 Measured on the upgrade branch: Jest 5,998 tests in 402 suites; `typecheck:ratchet` baseline 121. Decisions and evidence: `docs/build/react-native-0.88-upgrade.md`.
 
 - **Firebase:** RNFirebase 26.4.1, modular API only (`.claude/rules/firebase.md`).
-- **Notifications:** `react-native-notify-kit` 10.10.0. Android channels `default` and `default-channel-id`; the rent reminder is a trigger notification (`src/services/notifications/rentReminder.ts`); iOS foreground presentation is set in `firebase.json`.
+- **Notifications:** `react-native-notify-kit` 10.10.0. one Android channel, `default-channel-id` ("General"), for server pushes and rent reminders; the rent reminder is a trigger notification (`src/services/notifications/rentReminder.ts`); iOS foreground presentation is set in `firebase.json`.
 - **Keyboard:** `react-native-keyboard-controller` 1.22.9 (`src/components/rats-keyboard/`). A modal or native-stack modal route renders its own `RatsKeyboardToolbar` (iOS Prev/Next/Done); the root has one too. keyboard-manager and keyboard-aware-scroll-view are gone.
 - **Modal:** `react-native-modal` 13.0.2 with `patches/react-native-modal+13.0.2.patch` (RN 0.88 removed `InteractionManager`); applied by `postinstall`.
 - **Icons:** per-family `@react-native-vector-icons/fontawesome5`, `/ionicons`, `/material-icons`.
