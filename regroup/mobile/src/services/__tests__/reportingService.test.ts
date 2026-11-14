@@ -2,7 +2,7 @@
  * Reporting Service Tests
  *
  * Tests for getOccupancyReport, getComplianceTrend, getDischargeReport,
- * and the getSundayAnchoredWeekStart utility.
+ * and the complianceWeekStarts utility.
  */
 
 // Mock Firebase before importing the service.
@@ -32,11 +32,12 @@ jest.mock('../../util/logging', () => ({
 }));
 
 import {
-  getSundayAnchoredWeekStart,
+  complianceWeekStarts,
   getOccupancyReport,
   getComplianceTrend,
   getDischargeReport,
 } from '../reportingService';
+import { getWeekDatesForDate } from '../../hooks/activity/useCurrentWeek';
 import { Guest } from '../../entities/Guest';
 import { WeekSummary } from '../../entities/WeekSummary';
 
@@ -95,22 +96,29 @@ function makeWeekSummary(overrides: Partial<WeekSummary> = {}): WeekSummary {
 }
 
 // ---------------------------------------------------------------------------
-// getSundayAnchoredWeekStart
+// complianceWeekStarts (#249: summaries are keyed by their Monday, in the house's zone)
 // ---------------------------------------------------------------------------
 
-describe('getSundayAnchoredWeekStart', () => {
-  it('returns the Sunday of the week for a Wednesday', () => {
-    // 2026-05-20 is a Wednesday; the Sunday prior is 2026-05-17
-    // Use local-time constructor to avoid UTC midnight shifting in negative-offset zones
-    const result = getSundayAnchoredWeekStart(new Date(2026, 4, 20)); // month 4 = May
-    expect(result).toBe('2026-05-17');
+describe('complianceWeekStarts', () => {
+  it("starts each week on its Monday, oldest first", () => {
+    // Wednesday 2026-11-11, midday in New York.
+    expect(complianceWeekStarts(new Date('2026-11-11T17:00:00Z'), 2, 'America/New_York')).toEqual([
+      '2026-11-02',
+      '2026-11-09',
+    ]);
   });
 
-  it('returns the same Sunday when given a Sunday', () => {
-    // 2026-05-17 is itself a Sunday; use local-time constructor to avoid UTC
-    // midnight shifting the date to Saturday in negative-offset time zones
-    const result = getSundayAnchoredWeekStart(new Date(2026, 4, 17)); // month 4 = May
-    expect(result).toBe('2026-05-17');
+  it("puts a late Sunday in the week that began the Monday before, in the house's zone", () => {
+    // Sunday 22:30 in New York is already Monday 03:30 in London.
+    const at = new Date('2026-11-16T03:30:00Z');
+    expect(complianceWeekStarts(at, 1, 'America/New_York')).toEqual(['2026-11-09']);
+    expect(complianceWeekStarts(at, 1, 'Europe/London')).toEqual(['2026-11-16']);
+  });
+
+  it("uses the server's default zone when the house has none", () => {
+    const at = new Date('2026-11-16T03:30:00Z');
+    expect(complianceWeekStarts(at, 1, '')).toEqual(['2026-11-09']);
+    expect(complianceWeekStarts(at, 1)).toEqual(['2026-11-09']);
   });
 });
 
@@ -178,7 +186,7 @@ describe('getComplianceTrend', () => {
     // relative to "now" — derive it dynamically so the test can't go stale.
     const doc1 = makeWeekSummary({
       guestId: 'g1',
-      startDate: getSundayAnchoredWeekStart(new Date()),
+      startDate: getWeekDatesForDate(new Date()).startDate,
       stats: {
         choresCompleted: 2,
         meetingsAttended: 3,

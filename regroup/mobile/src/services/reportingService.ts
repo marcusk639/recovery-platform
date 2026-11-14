@@ -3,14 +3,8 @@ import { firestore, auth } from '../../firebase-setup';
 import { logException } from '../util/logging';
 import { Guest } from '../entities/Guest';
 import { WeekSummary } from '../entities/WeekSummary';
-import {
-  startOfWeek,
-  subWeeks,
-  format,
-  subDays,
-  isAfter,
-  parseISO,
-} from 'date-fns';
+import { subDays, isAfter, parseISO } from 'date-fns';
+import { getWeekDatesForDate } from '../hooks/activity/useCurrentWeek';
 
 export const weekSummaryCollection = collection(firestore, 'week-summaries');
 
@@ -45,8 +39,24 @@ export interface DischargeReport {
   count: number;
 }
 
-export function getSundayAnchoredWeekStart(date: Date): string {
-  return format(startOfWeek(date, { weekStartsOn: 0 }), 'yyyy-MM-dd');
+const shiftDays = (date: string, days: number): string => {
+  const d = new Date(`${date}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+
+/**
+ * The Mondays of the last `weeksBack` weeks, oldest first, in the house's zone.
+ * The server keys week summaries the same way (weekStartFor in the functions'
+ * activities/weekSummaryMath.ts).
+ */
+export function complianceWeekStarts(
+  now: Date,
+  weeksBack: number,
+  timeZone?: string | null,
+): string[] {
+  const current = getWeekDatesForDate(now, timeZone).startDate;
+  return Array.from({ length: weeksBack }, (_, i) => shiftDays(current, -7 * (weeksBack - 1 - i)));
 }
 
 function resolveDisplayName(guest: Partial<Guest>): string {
@@ -80,6 +90,7 @@ export async function getComplianceTrend(
   houseId: string,
   guestIds: string[],
   weeksBack: number = 4,
+  timeZone?: string | null,
 ): Promise<ComplianceTrend> {
   if (!auth.currentUser) {
     throw new Error('getComplianceTrend: user not authenticated');
@@ -89,12 +100,7 @@ export async function getComplianceTrend(
     return { weeks: [] };
   }
 
-  const now = new Date();
-  const weekStarts: string[] = [];
-  for (let i = 0; i < weeksBack; i++) {
-    weekStarts.push(getSundayAnchoredWeekStart(subWeeks(now, i)));
-  }
-  weekStarts.reverse();
+  const weekStarts = complianceWeekStarts(new Date(), weeksBack, timeZone);
 
   const CHUNK = 30;
   const allDocs: WeekSummary[] = [];

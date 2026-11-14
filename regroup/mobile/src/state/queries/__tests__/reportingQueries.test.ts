@@ -99,6 +99,18 @@ describe('useComplianceTrend', () => {
     expect(result.current.data).toEqual(mockData);
   });
 
+  it("asks for the house's own weeks", async () => {
+    mockGetComplianceTrend.mockResolvedValue({ weeks: [] });
+
+    const { result } = renderHook(
+      () => useComplianceTrend('house1', ['g1'], 4, true, 'America/Denver'),
+      { wrapper: makeWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(mockGetComplianceTrend).toHaveBeenCalledWith('house1', ['g1'], 4, 'America/Denver');
+  });
+
   it('is idle when guestIds is empty', () => {
     const { result } = renderHook(() => useComplianceTrend('house1', [], 4), {
       wrapper: makeWrapper(),

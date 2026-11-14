@@ -57,6 +57,7 @@ const AdminReportScreen: React.FC<Props> = ({ navigation }) => {
     activeGuestIds,
     4,
     dataReady,
+    house?.timezone,
   );
   const { data: discharge, isLoading: disLoading } = useDischargeReport(
     houseId ?? '',

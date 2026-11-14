@@ -6,8 +6,9 @@
  * mapping mistake in the rewrite fails here instead of being copied into an
  * edited expectation. Assertions are on outcomes and log entries only, never
  * on mock call chains or snapshot shapes. Auth is not part of the log: the
- * signed-in user comes from the auth mock. Week starts are Sunday-anchored in
- * local time (jest.config.js pins TZ to America/Chicago).
+ * signed-in user comes from the auth mock. Week starts are Mondays in the house's
+ * zone, New York by default, as the server keys week summaries (#249).
+ * jest.config.js pins the device's TZ to America/Chicago.
  */
 jest.mock('../../../firebase-setup', () => require('../../../__mocks__/firebase-modular/setup'));
 jest.mock('@react-native-firebase/firestore', () =>
@@ -36,7 +37,7 @@ const guests = (list: Record<string, unknown>[]) => list as unknown as Guest[];
 beforeEach(() => {
   resetOpLog();
   setCurrentUser({ uid: 'u1' });
-  // Wednesday 2026-10-07, noon local: weeks start 2026-09-27 and 2026-10-04.
+  // Wednesday 2026-10-07, noon local: weeks start 2026-09-28 and 2026-10-05.
   jest.useFakeTimers({ now: new Date(2026, 9, 7, 12, 0, 0) });
 });
 
@@ -47,17 +48,17 @@ afterEach(() => {
 describe('getComplianceTrend', () => {
   it('queries the house per chunk of guests and rates each week client-side', async () => {
     seedQuery('week-summaries', [
-      { id: 'a', houseId: 'h1', guestId: 'g1', startDate: '2026-10-04', stats: stats(1, 3) },
-      { id: 'b', houseId: 'h1', guestId: 'g2', startDate: '2026-10-04', stats: stats(0, 1) },
-      { id: 'c', houseId: 'h1', guestId: 'g1', startDate: '2026-09-27', stats: stats(2, 0) },
-      { id: 'd', houseId: 'h1', guestId: 'g1', startDate: '2026-09-20', stats: stats(9, 9) },
-      { id: 'e', houseId: 'h2', guestId: 'g2', startDate: '2026-10-04', stats: stats(9, 9) },
+      { id: 'a', houseId: 'h1', guestId: 'g1', startDate: '2026-10-05', stats: stats(1, 3) },
+      { id: 'b', houseId: 'h1', guestId: 'g2', startDate: '2026-10-05', stats: stats(0, 1) },
+      { id: 'c', houseId: 'h1', guestId: 'g1', startDate: '2026-09-28', stats: stats(2, 0) },
+      { id: 'd', houseId: 'h1', guestId: 'g1', startDate: '2026-09-21', stats: stats(9, 9) },
+      { id: 'e', houseId: 'h2', guestId: 'g2', startDate: '2026-10-05', stats: stats(9, 9) },
     ]);
 
     expect(await getComplianceTrend('h1', ['g1', 'g2'], 2)).toEqual({
       weeks: [
-        { weekStart: '2026-09-27', choreRate: 0.5, meetingRate: 0, guestCount: 2 },
-        { weekStart: '2026-10-04', choreRate: 0.5, meetingRate: 0.5, guestCount: 2 },
+        { weekStart: '2026-09-28', choreRate: 0.5, meetingRate: 0, guestCount: 2 },
+        { weekStart: '2026-10-05', choreRate: 0.5, meetingRate: 0.5, guestCount: 2 },
       ],
     });
     expect(getOpLog()).toEqual([
@@ -70,6 +71,21 @@ describe('getComplianceTrend', () => {
         ],
       },
     ]);
+  });
+
+  it("counts a late Sunday toward the house's own week", async () => {
+    // Sunday 2026-10-04, 23:30 in Chicago: still Sunday there, Monday in New York.
+    jest.setSystemTime(new Date(2026, 9, 4, 23, 30, 0));
+    seedQuery('week-summaries', [
+      { id: 'a', houseId: 'h1', guestId: 'g1', startDate: '2026-09-28', stats: stats(1, 3) },
+    ]);
+
+    expect(await getComplianceTrend('h1', ['g1'], 1, 'America/Chicago')).toEqual({
+      weeks: [{ weekStart: '2026-09-28', choreRate: 1, meetingRate: 1, guestCount: 1 }],
+    });
+    expect(await getComplianceTrend('h1', ['g1'], 1)).toEqual({
+      weeks: [{ weekStart: '2026-10-05', choreRate: 0, meetingRate: 0, guestCount: 1 }],
+    });
   });
 
   it('splits more than 30 guests into one query per 30', async () => {

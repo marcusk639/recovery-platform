@@ -161,6 +161,12 @@ describe('AdminReportScreen', () => {
     expect(getByTestId('week-row-2026-05-17')).toBeTruthy();
   });
 
+  it("asks for compliance in the house's own weeks", () => {
+    setupMocks({ useSelectedHouse: { house: { maximumCapacity: 8, timezone: 'America/Denver' } } });
+    render(<AdminReportScreen navigation={mockNavigation} />);
+    expect(useComplianceTrend).toHaveBeenCalledWith('house-1', ['g1', 'g2'], 4, true, 'America/Denver');
+  });
+
   it('shows chore rate text correctly', () => {
     const { getByTestId } = render(
       <AdminReportScreen navigation={mockNavigation} />,
