@@ -27,11 +27,11 @@ export function HouseNumbers({ houseId }: { houseId: string }) {
         <CellText cell={summary.beds} render={bedsText} />
       </Figure>
       {(overdue.state === 'ready' || overdue.state === 'error') && (
-        <Figure label="Rent overdue">
+        <Figure label="Overdue">
           <CellText cell={overdue} render={formatCents} />
           {summary.overdueFromDischargedCents > 0 && (
             <div style={{ ...muted, fontSize: 12, fontWeight: 400 }}>
-              includes {formatCents(summary.overdueFromDischargedCents)} from discharged residents
+              not counting {formatCents(summary.overdueFromDischargedCents)} owed by discharged residents
             </div>
           )}
         </Figure>

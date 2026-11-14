@@ -66,12 +66,33 @@ export function subscriptionStateOf(
 const isReadableBalance = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
-export function rentOverdue(guests: { rentOwed?: unknown }[]): number | null {
+type Owing = { rentOwed?: unknown; choreFees?: unknown; status?: string };
+
+// The phone's isCurrentResident (util/paymentDisplay). Copied, not imported: a mobile
+// file can't load under vitest, whose tsconfig lookup hits the phone's preset.
+const isCurrentResident = ({ status }: Owing): boolean => status !== 'discharged' && status !== 'archived';
+
+// The phone's owedNowCents, read strictly: rent plus chore fees, a net credit as
+// nothing, null (nothing owed) as 0, and anything else unreadable.
+function owedNow({ rentOwed, choreFees }: Owing): number | null {
+  let owed = 0;
+  for (const part of [rentOwed, choreFees]) {
+    if (part === undefined || part === null) continue; // the phone reads null as 0
+    if (!isReadableBalance(part)) return null;
+    owed += part;
+  }
+  return Math.max(0, owed);
+}
+
+// The phone's Overdue card (util/paymentDisplay, #233): what current residents owe
+// now, so a house reads the same here as on its Payment Dashboard.
+export function rentOverdue(guests: Owing[]): number | null {
   let total = 0;
-  for (const { rentOwed } of guests) {
-    if (rentOwed === undefined || rentOwed === null) continue; // the phone reads null as 0
-    if (!isReadableBalance(rentOwed)) return null;
-    if (rentOwed > 0) total += rentOwed;
+  for (const guest of guests) {
+    if (!isCurrentResident(guest)) continue;
+    const owed = owedNow(guest);
+    if (owed === null) return null;
+    total += owed;
   }
   return total;
 }

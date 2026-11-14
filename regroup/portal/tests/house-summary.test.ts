@@ -60,6 +60,17 @@ test('an unreadable balance makes the total unknown, not smaller', () => {
 test('a null balance counts as nothing owed, as on the phone', () => {
   expect(rentOverdue([{ rentOwed: null }, { rentOwed: 1000 }])).toBe(1000);
 });
+// The phone's Overdue card (util/paymentDisplay, #233): what each current resident
+// owes now, rent plus chore fees, with a credit counting as nothing.
+test('overdue adds rent and chore fees per resident, a net credit counting as nothing', () => {
+  expect(rentOverdue([{ rentOwed: 15000, choreFees: 2500 }, { rentOwed: -500, choreFees: 1000 }, { rentOwed: -2000 }])).toBe(18000);
+});
+test('discharged and archived residents are left out of overdue, as on the phone', () => {
+  expect(rentOverdue([{ rentOwed: 1000 }, { rentOwed: 500, status: 'discharged' }, { rentOwed: 700, status: 'archived' }])).toBe(1000);
+});
+test('an unreadable chore fee makes overdue unknown', () => {
+  expect(rentOverdue([{ rentOwed: 1000, choreFees: '250' }])).toBeNull();
+});
 test('what discharged residents owe is known separately', () => {
   const guests = [{ rentOwed: 1000, status: 'active' }, { rentOwed: 500, status: 'discharged' }, { status: 'discharged' }];
   expect(overdueFromDischarged(guests)).toBe(500);

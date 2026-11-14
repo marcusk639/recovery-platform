@@ -159,7 +159,7 @@ function Totals({ summaries }: { summaries: HouseSummary[] }) {
     <>
       <div style={cards}>
         {total('Beds filled', `${totals.beds.value.used} / ${totals.beds.value.max}`, 'beds', 'total-beds')}
-        {showOverdue && total('Rent overdue', formatCents(totals.rentOverdueCents.value), 'rentOverdueCents', 'total-overdue')}
+        {showOverdue && total('Overdue', formatCents(totals.rentOverdueCents.value), 'rentOverdueCents', 'total-overdue')}
         {total('Applications waiting', String(totals.applicationsWaiting.value), 'applicationsWaiting', 'total-applications')}
         {total('Open disputes', String(totals.openDisputes.value), 'openDisputes', 'total-disputes')}
       </div>

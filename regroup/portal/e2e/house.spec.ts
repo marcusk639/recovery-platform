@@ -1,4 +1,4 @@
-import { addSecondHouseForManager, admin, expect, reseed, signInAs, test } from './helpers';
+import { addSecondHouseForManager, admin, expect, FIRESTORE_PORT, reseed, signInAs, test } from './helpers';
 
 test.beforeEach(() => reseed({ E2E_RENT_CENTS: '15000' }));
 
@@ -70,7 +70,7 @@ test('opening a house page writes nothing', async ({ page }) => {
   // After sign-in, which writes to its own account.
   const writes: string[] = [];
   page.on('request', (r) => {
-    const isWrite = r.method() === 'POST' && r.url().includes(':18080') && r.url().includes('/Write/');
+    const isWrite = r.method() === 'POST' && r.url().includes(FIRESTORE_PORT) && r.url().includes('/Write/');
     if (isWrite && (r.postData() ?? '').includes('writes')) writes.push(r.url());
   });
   await page.click('#nav-house-summary');
@@ -81,13 +81,15 @@ test('opening a house page writes nothing', async ({ page }) => {
   await expect.poll(() => writes.length, { message: 'control: the watcher sees writes' }).toBeGreaterThan(0);
 });
 
-test('money owed by discharged residents is called out', async ({ page }) => {
+// Overdue counts current residents only, as the phone's Payment Dashboard does (#233).
+test('money owed by discharged residents is left out of overdue, and called out', async ({ page }) => {
   await admin().doc('guests/guest-b').update({ status: 'discharged', rentOwed: 5000 });
   await signInAs(page, 'manager');
   await page.click('#nav-house-summary');
   const numbers = page.getByTestId('house-numbers');
-  await expect(numbers).toContainText('$200.00');
-  await expect(numbers).toContainText('includes $50.00 from discharged residents');
+  await expect(numbers).toContainText('$150.00');
+  await expect(numbers).not.toContainText('$200.00');
+  await expect(numbers).toContainText('not counting $50.00 owed by discharged residents');
 });
 
 test('the page title never holds a house or resident name', async ({ page }) => {
