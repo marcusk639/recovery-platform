@@ -12,6 +12,7 @@ export * from './callable/meetings';
 // Callable functions — payments (rent payments, plus Stripe Connect account
 // management: connectStripeAccount, disconnectStripeAccount, getStripeAccountStatus)
 export * from './callable/payments';
+export * from './callable/resolveFailedPayment';
 
 // Callable functions — subscriptions (operator billing, sendConfirmationEmail)
 export * from './callable/subscriptions';

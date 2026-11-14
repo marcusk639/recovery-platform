@@ -197,12 +197,23 @@ export function useGuestBalances(houseId: string, guests: Guest[]) {
 
 // ─── Failed Payments ──────────────────────────────────────────────────────────
 
+/**
+ * The house's failed payment records. Records are keyed by PaymentIntent, so a
+ * declined card that succeeds on retry leaves the list: Stripe's charge list
+ * keeps the failed charge, which showed paid rent as failed (#238). A read that
+ * fails is an error, not an empty list.
+ */
 export const useFailedPayments = (houseId: string) =>
   useQuery({
     queryKey: [...paymentKeys.housePayments(houseId), 'failed'],
     queryFn: async (): Promise<RentPayment[]> => {
-      const all = await listHousePayments(houseId, 100);
-      return all.filter(p => p.status === 'failed');
+      try {
+        const records = await getHousePaymentRecords(houseId);
+        return records.filter(p => p.status === 'failed');
+      } catch (error) {
+        logException(error);
+        throw error;
+      }
     },
     enabled: !!houseId,
     staleTime: 30_000,

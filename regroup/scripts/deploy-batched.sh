@@ -21,7 +21,7 @@ ALL_FUNCTIONS=(
   createHouses finishOperatorSetup
   createInvitation peekInvitation redeemInvitation
   findMeetings userIsAtMeeting
-  createPaymentIntent listPayments listHousePayments
+  createPaymentIntent listPayments listHousePayments resolveFailedPaymentOffline
   getPaymentMethod updatePaymentInfo
   connectStripeAccount disconnectStripeAccount getStripeAccountStatus
   createOperatorSubscription reactivateOperatorSubscription cancelUserSubscription

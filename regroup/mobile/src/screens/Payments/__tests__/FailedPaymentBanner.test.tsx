@@ -37,6 +37,19 @@ describe('FailedPaymentBanner', () => {
     expect(queryByTestId('failed-payment-banner')).toBeNull();
   });
 
+  it("says so when the failed payments couldn't be loaded, rather than showing nothing", () => {
+    const { getByTestId, getByText } = render(
+      <FailedPaymentBanner
+        failedPayments={[]}
+        houseId="house-1"
+        guestNames={{}}
+        loadError
+      />,
+    );
+    expect(getByTestId('failed-payment-load-error')).toBeTruthy();
+    expect(getByText("Couldn't check for failed payments. Close and reopen this screen to try again.")).toBeTruthy();
+  });
+
   it('renders a row for each failed payment', () => {
     const { getByTestId } = render(
       <FailedPaymentBanner

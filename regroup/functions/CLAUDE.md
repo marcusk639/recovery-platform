@@ -65,6 +65,8 @@ src/
     houses.ts       createHouses
     finishOperatorSetup.ts, getTierCatalog.ts
     myHouseTiers.ts  the caller's own tier per house, for the operator portal's display
+    resolveFailedPayment.ts  resolveFailedPaymentOffline: money staff mark a failed payment
+                     resolved off-platform (status only; payments is server-written)
   triggers/
     firestore/      Firestore document triggers. index.ts: notify, notifyNewHouseCreated,
                     setHouseSubscriptionStatusOnCreate, sendContactEmail,

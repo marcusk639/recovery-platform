@@ -17,7 +17,6 @@ import {
   query,
   runTransaction,
   Timestamp,
-  updateDoc,
   where,
   writeBatch,
 } from "@react-native-firebase/firestore";
@@ -481,14 +480,13 @@ export async function recordManualPayment(
 }
 
 /**
- * Mark a failed rent payment as resolved via cash/check/Venmo/Zelle.
- * Updates the payment status to 'resolved_offline' and records the resolution timestamp.
+ * Mark a failed rent payment as resolved via cash/check/Venmo/Zelle. payments is
+ * server-written only (firestore.rules), so the resolveFailedPaymentOffline
+ * callable sets status 'resolved_offline' (#238). It changes no balance: record
+ * the money itself as a manual payment.
  */
 export async function markPaymentResolvedOffline(
   paymentId: string
 ): Promise<void> {
-  await updateDoc(doc(paymentsCollection, paymentId), {
-    status: "resolved_offline",
-    resolvedAt: new Date().toISOString(),
-  });
+  await httpsCallable(functions, "resolveFailedPaymentOffline")({ paymentId });
 }
