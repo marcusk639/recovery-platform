@@ -1,6 +1,6 @@
 ---
 description: Collection refs, timestamps, transactions, React Query, security rules
-paths: "src/**/*.{ts,tsx},firebase/**"
+paths: 'src/**/*.{ts,tsx},firebase/**'
 ---
 
 # Firebase / Firestore Patterns
@@ -76,7 +76,7 @@ Query files in `src/state/queries/` must follow:
 export const activityKeys = {
   all: ['activities'],
   lists: () => [...activityKeys.all, 'list'],
-  list: filters => [...activityKeys.lists(), filters],
+  list: (filters) => [...activityKeys.lists(), filters],
 };
 ```
 
@@ -88,7 +88,7 @@ export const activityKeys = {
 
 ## Offline Support
 
-Detect network errors by checking `error.code` for `'unavailable'` or `'deadline-exceeded'`. Failed writes → `offlineQueue.enqueue()` from `src/services/offlineQueue.ts` (max 3 retries).
+There is no offline write queue: no `offlineQueue` service exists, so a failed write surfaces to its caller like any other error.
 
 Firestore SDK persistence is **disabled** (commented out in `firebase-setup.ts`).
 

@@ -15,18 +15,25 @@ from data Regroup already captures. Owning this export is the One Step
 differentiator and the strongest justification for Professional+ pricing — it
 also opens the court-referral acquisition channel.
 
-## Current state (Phase 5 stub)
+## Current state (shipped; the Phase 5 stub is gone)
 
-- Callable `complianceExport` exists: `functions/src/callable/compliance.ts`.
-- It enforces auth (house owner only) and the tier gate
-  (`tierAllows(houseType, tier, "complianceExport")`), then returns a structured
-  stub response — **no data is exported and nothing is written**:
+- Callable `complianceExport`: `functions/src/callable/compliance.ts`.
+- **Input:** `houseId`, optional `residentId` (omitted = every resident of the
+  house), optional `startDate` / `endDate` (`YYYY-MM-DD`), optional `format`
+  (`csv` | `pdf`, default `csv`).
+- **Auth: the house owner only** (`house.superAdminId === caller`); anyone else,
+  staff included, gets `permission-denied`.
+- **Tier gate:** `tierAllows(houseType, tier, "complianceExport")` on the owner's
+  subscription. It checks the plan's capability, deliberately not house
+  entitlement, so a lapsed operator keeps export access.
   - tier lacks the capability → `{ status: "upgrade_required", requiredTier }`
-  - tier includes the capability → `{ status: "coming_soon" }`
+  - tier includes it → the real export: per resident, the profile plus
+    window-filtered drug tests and meeting attendance (with dispute status and
+    dispute history). CSV returns `{ available: true, format: "csv", filename,
+csv, counts }`; PDF returns `pdfBase64` in place of `csv`.
+- Read-only: nothing is written. The log line records ids, format and counts,
+  never record contents.
 - Tests: `functions/src/__tests__/callable/compliance.test.ts`.
-
-The gate scaffolding stays when the real export lands; only the terminal stub
-branch is replaced.
 
 ## Data sources (already captured)
 
@@ -47,7 +54,8 @@ branch is replaced.
    - PII / PHI handling — this is health-adjacent data; never log record contents
      (platform PII rule). Generate server-side; deliver via a short-lived signed
      URL or direct response, not a persisted public object.
-   - Auth: house owner / authorized staff only (already enforced in the stub).
+   - Auth: as built, the house owner only (`superAdminId`); "authorized staff"
+     access was not built.
    - Audit: log who exported what (house + resident ids + window), not contents.
 
 ## Acceptance criteria (full build — out of scope for the pricing plan)

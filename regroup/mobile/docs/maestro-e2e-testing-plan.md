@@ -1,5 +1,7 @@
 # Regroup Mobile — Full E2E Testing Plan (Maestro)
 
+> **Superseded (2026-11-14):** the Phase 1 `IS_E2E_TEST` launch-argument spike was replaced by the bundle-time `E2E_VARIANT` build variants: only the E2EEmulator build connects to the emulators, and a Debug build uses production Firebase. See [`maestro/README.md`](../maestro/README.md) and [`maestro-e2e-runbook.md`](./maestro-e2e-runbook.md).
+
 **Goal:** A maintainable Maestro E2E suite that verifies all critical Regroup app
 functionality (operator/admin + guest/resident flows) on iOS and Android, running
 against the Firebase emulator locally and in CI.

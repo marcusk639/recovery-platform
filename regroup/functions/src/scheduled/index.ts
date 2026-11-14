@@ -48,8 +48,8 @@ export const updateDisputes = onSchedule(
 //   - transferStats is idempotent per-house, so sequential per-timezone
 //     execution is safe.
 //
-// Trade-off: the week-boundary now moves to 05:00 UTC Sunday for all
-// timezones, instead of local midnight. This is acceptable because the
+// Trade-off: the week-boundary now moves to 08:00 UTC Sunday (the schedule
+// below) for all timezones, instead of local midnight. This is acceptable because the
 // currentWeek/previousWeek data model is not tied to the exact clock moment.
 // ============================================================================
 
@@ -65,8 +65,9 @@ export const weeklyTransfers = onSchedule(
 // ============================================================================
 // warmWebsite
 // ============================================================================
-// Pings the web app every 5 minutes to prevent cold-start latency on the
-// hosting instance.  This is a lightweight keep-alive scheduler.
+// Logs a line every 5 minutes and makes no outbound call (see
+// runWarmWebsite): it warms only its own Cloud Run service, not the web app
+// or its ssr function. A no-op kept for now; a deletion candidate.
 // ============================================================================
 
 export const warmWebsite = onSchedule(

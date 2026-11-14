@@ -14,9 +14,7 @@
 #     ./maestro/scripts/reset-and-seed.sh
 #
 # The seed only writes to loopback emulators under a demo- project (see
-# maestro/scripts/seed/guard.js). It does NOT call
-# scripts/create-e2e-auth-users.js — that one writes to the real
-# phoenix-cleanhouse project.
+# maestro/scripts/seed/guard.js), and never to a real Firebase project.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

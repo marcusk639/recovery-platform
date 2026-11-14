@@ -26,8 +26,9 @@ const DEFAULT_WEB_BASE_URL = 'https://regroup-app.com';
  * Never returns undefined, which is a separate hazard: homegroups/mobile hit a
  * launch-time SIGTRAP because stripe-react-native's native initialise
  * force-casts the key (`as! String`) and nil crashes the cast. See the comment
- * at homegroups/mobile/App.tsx. That app pins SDK 0.45, which lacks the falsy
- * guard regroup's 0.67 has, so it skips initStripe by hand.
+ * at homegroups/mobile/App.tsx. StripeProvider (in the pinned 0.44.0) skips
+ * init on a falsy key, but initStripe has no such guard, so homegroups, which
+ * calls initStripe directly, skips that call by hand.
  */
 export const stripePublishableKey = (): string => {
   const key = process.env.STRIPE_PUBLISHABLE_KEY;

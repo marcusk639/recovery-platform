@@ -26,6 +26,13 @@
 | **P-7** | Tier gating           | **Re-gate on capabilities** (value ladder) — only flags that map to existing features or Phase-5 stubs.                                                                                                        |
 | **P-8** | Oxford Network ($299) | **Hold** — keep tier defined, `availableForSale: false`, until a regional chapter validates it.                                                                                                                |
 
+> **Status (2026-11-14), checked against the code at `c1931c04`.** The decisions above are kept as the 2026-06-22 record. What happened to the rent-fee gates since:
+>
+> - **P-1 shipped, then extended.** `computeApplicationFee` (`functions/src/util/rentFee.ts`, rates in `RENT_FEE` in `functions/src/config.ts`) charges the method-aware margin ($2.00 ACH, 0.75% card) **plus** the estimated Stripe processing cost (ACH 0.8% capped at $5; card 2.9% + 30¢), and the house bears all of it: $6.00 on a $500 ACH payment, $18.55 on a $500 card payment. It runs in both `createPaymentIntent` and `scheduledRentCollection`.
+> - **P-2 reversed.** The resident-borne card convenience fee was never built (no code adds it, no screen discloses it), so card processing was being paid out of the 0.75% margin. The house now bears processing through the fee above instead (rationale in the `RENT_FEE` docblock).
+> - **P-3 never implemented.** There is no legacy 2% branch: `computeApplicationFee` treats every house the same, `RENT_FEE_LEGACY_RATE` and `LEGACY_RENT_FEE_HOUSE_IDS` are read nowhere, and `house.legacyRentFee` is never read. The launch design (`docs/superpowers/specs/2026-11-06-regroup-launch-reboot-design.md` §4.1 item 4) confirms no house keeps a legacy rent fee. The Phase 1 and Phase 6 items below that mention a legacy branch or `legacyRate` describe code that does not exist now.
+> - Phase 5's stubs are no longer stubs: `complianceExport` returns a real CSV or PDF export (RG-SPEC-09), and `rentRoiMetrics` enforces the `analytics` capability.
+
 > Phases 1–6 below execute against these locked values. The original recommended-default table is retained below for rationale.
 
 ### 0.1a Original decision-gate rationale (superseded by the LOCKED table above)
@@ -65,6 +72,8 @@ Confirm these exist and capture exact locations (they were accurate as of the 20
 ## Phase 1 — Method-Aware Rent Fee (P0 — fixes the #1 justification gap)
 
 **Goal:** Replace the flat 2% on all rent with a method-aware fee that matches the property-management norm (ACH ≈ free/flat; card ≈ pass-through + thin platform fee), per P-1/P-2. Grandfather the 5 legacy houses per P-3.
+
+> **Status (2026-11-14):** the method-aware fee shipped and now also recovers the estimated Stripe cost from the house; P-2 was reversed and the P-3 legacy branch does not exist. See the status note under §0.1.
 
 **What to implement (copy/extend the existing fee site — do NOT rebuild the payment intent flow):**
 
@@ -199,7 +208,7 @@ Confirm these exist and capture exact locations (they were accurate as of the 20
 
 **Final verification checklist:**
 
-- [x] `grep -rn "amount \* 0.02" functions/src` → only the legacy branch (now `legacyRate` in `util/rentFee.ts`; no literal `* 0.02` remains).
+- [x] `grep -rn "amount \* 0.02" functions/src` → only the legacy branch (now `legacyRate` in `util/rentFee.ts`; no literal `* 0.02` remains). _(Status 2026-11-14: `util/rentFee.ts` has no `legacyRate` and no legacy branch; see §0.1.)_
 - [x] All tiers resolve monthly + annual prices; `tierAllows()`/trial/bundle logic unit-tested. _(Emulator end-to-end with live Stripe price secrets remains a deploy-time check — secrets not set locally.)_
 - [x] `tierAllows()` enforced + tested; Oxford Network not sellable (`isTierAvailableForSale()`).
 - [x] `functions/.env.example` lists every required var; `tsc --noEmit` clean; full functions test suite green (622).

@@ -11,21 +11,21 @@ React Native mobile application for managing sober living houses. Supports two o
 - Firebase / Firestore for data and auth
 - Redux Toolkit (client state) + React Query (server state)
 - Stripe Connect Express for rent payments
-- React Navigation 6
+- React Navigation 7
 
 ## Quick Start
 
 ### Prerequisites
 
 - Node 18+
-- Xcode 15+ (iOS) or Android Studio (Android)
+- Xcode (iOS; deployment target 15.0) or Android Studio (Android)
 - CocoaPods (`gem install cocoapods`)
 - Firebase CLI (`npm install -g firebase-tools`)
 
 ### Setup
 
 ```bash
-# Install dependencies (node_modules is a symlink — see note below)
+# Install dependencies
 npm install
 
 # iOS: install pods
@@ -38,13 +38,13 @@ npm run ios
 npm run android
 ```
 
-### Xcode 26+ Build Fix
+### Podfile build fixes
 
-React Native 0.72 requires a Podfile post_install hook for Xcode 26+. This is already applied in `ios/Podfile`. If you encounter VFS overlay errors, run `cd ios && pod install`.
+`ios/Podfile`'s `post_install` hook sets every pod's deployment target to 15.0 and adds `-Wno-deprecated-literal-operator` to Yoga, whose `-Werror` build fails on newer clang (seen with Xcode 27.1). After changing the Podfile, run `cd ios && pod install`.
 
-### node_modules Symlink
+### node_modules
 
-`node_modules` in this repo is a symlink to `../rats/node_modules`. If you clone fresh, run `npm install` from this directory — it will create the symlink target.
+`node_modules` is an ordinary directory created by `npm install` here; it is not a symlink.
 
 ## Project Structure
 
@@ -78,9 +78,10 @@ npm run test:watch
 # Coverage report
 npm run test:coverage
 
-# Integration tests (requires Firebase emulator)
-firebase emulators:start --only firestore,auth
-npm run test:integration
+# Integration tests (Firestore + Auth emulators, started by emulators:exec;
+# see "Emulator-backed suites" in CLAUDE.md)
+cd firebase && firebase emulators:exec --only firestore,auth --project demo-test \
+  "cd .. && npx jest --config jest.config.integration.js --no-coverage --forceExit"
 
 # E2E tests (Maestro; needs E2E_TEST_PASSWORD, see e2e/SECURITY-test-credentials.md)
 npm run maestro:smoke:ios

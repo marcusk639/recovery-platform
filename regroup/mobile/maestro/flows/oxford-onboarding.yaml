@@ -3,7 +3,7 @@
 #
 # PRECONDITION (re-seed required): this flow only renders the onboarding wizard
 # when the Oxford house has oxfordOnboardingComplete===false. The default seed
-# (e2e/setup/seedTestData.js) sets test-house-oxford.oxfordOnboardingComplete=true
+# (maestro/scripts/seed/index.js) sets test-house-oxford.oxfordOnboardingComplete=true
 # (so the dashboard flow 31 works). To run this flow, EITHER:
 #   - re-seed test-house-oxford with oxfordOnboardingComplete:false, OR
 #   - seed a SECOND oxford house with onboarding incomplete and point this

@@ -61,7 +61,8 @@ export E2E_TEST_PASSWORD="$(cat ~/.config/regroup-e2e/e2e-test-password)"
    **reset their passwords** to the new value.
 2. Store the new value at the paths above and in the `E2E_TEST_PASSWORD` CI
    secret.
-3. Keep prod-writer scripts (`create-e2e-auth-users.js`, untracked) reading the
-   password from the environment, never a literal.
+3. Keep any prod-writer script reading the password from the environment, never
+   a literal. `create-e2e-auth-users.js` is not in the repo; if you have a local
+   copy, the same applies to it.
 4. Confirm `service-key.json` stays gitignored
    (`git check-ignore regroup/mobile/scripts/service-key.json`).

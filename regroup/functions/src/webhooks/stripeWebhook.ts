@@ -1502,7 +1502,7 @@ type ClaimOutcome = "done" | "in_flight" | "claimed";
  * So the marker now carries a status instead of merely existing:
  *   - `done`       — finished, or deliberately refused. Later deliveries skip it.
  *   - `processing` — a delivery is working on it. A concurrent delivery backs off
- *                    (500, so Stripe retries later) rather than reporting success.
+ *                    (409, so Stripe retries later) rather than reporting success.
  *                    Reclaimable once older than CLAIM_STALE_MS.
  *   - `failed`     — the handler threw. Immediately reclaimable.
  *

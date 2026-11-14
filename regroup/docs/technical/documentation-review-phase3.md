@@ -121,6 +121,8 @@ ACTIVE_PLAN Part 1 provides a partial inventory table showing which functions ex
 
 **The security implications are significant.** ACTIVE_PLAN explicitly calls out that `listPayments` and `savePaymentMethod` have no authorization checks. Without function-level documentation, auditing authorization gaps requires reading the implementation code of each function. This was identified as a P0 security issue — and there is no documented contract to fix it against.
 
+> **Status (2026-11-14):** `savePaymentMethod` is no longer exported; payment methods go through `getPaymentMethod` and `updatePaymentInfo`, which resolve the Stripe customer from the caller's own record. `listPayments` now allows only the resident named by `guestId` or an admin of their house. Their contracts are in `regroup/functions/CLAUDE.md` ("Callable contracts").
+
 **Recommendation:** Create `/docs/CLOUD_FUNCTIONS_API.md` with a table per function containing: name, trigger type, input schema, output schema, authorization required, and side effects. Even a minimally-filled version for the 15 callable functions would be dramatically better than the current state.
 
 ---
@@ -381,6 +383,8 @@ The actual screen files exist at `/Users/marcusklein/dev/rats-v2/src/screens/Oxf
 ACTIVE_PLAN Part 1 documents the "Embedded functions/" as an active component:
 
 > "7 Stripe-specific Cloud Functions (createPaymentIntent, listPayments, savePaymentMethod, connectStripeAccount, disconnectStripeAccount, getStripeAccountStatus, stripeWebhook) — Comprehensive tests (90% line/function coverage target)"
+
+> **Status (2026-11-14):** the functions now live in `regroup/functions/`; of these seven, `savePaymentMethod` no longer exists, and `stripeWebhook` is deployed as `stripeEvents`. The current inventory is `regroup/FUNCTION_AUDIT.md`.
 
 The git working tree shows this entire directory has been deleted (unstaged changes). The directory is gone locally but the deletion is not committed, not documented, and not referenced in any planning document. ACTIVE_PLAN's dual-repo confusion section (Part 1, "Key risk") acknowledges the ambiguity but does not record a resolution decision.
 
