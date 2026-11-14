@@ -6,10 +6,10 @@ import RatsButton from '../rats-button/rats-button';
 import { color, fontSize, normalize } from '../../styles/theme';
 
 interface Props {
-  icon: string;
+  icon?: string;
   message: string;
-  buttonTitle: string;
-  onPress: () => void;
+  buttonTitle?: string;
+  onPress?: () => void;
   containerStyle?: ViewStyle;
 }
 const EmptyScreen = ({
@@ -30,11 +30,13 @@ const EmptyScreen = ({
         },
         containerStyle,
       ]}>
-      <RatsIcon
-        name={icon}
-        size={normalize(90)}
-        style={{ color: color.dark_grey, marginBottom: normalize(20) }}
-      />
+      {icon && (
+        <RatsIcon
+          name={icon}
+          size={normalize(90)}
+          style={{ color: color.dark_grey, marginBottom: normalize(20) }}
+        />
+      )}
       <RatsText
         text={message}
         style={{
@@ -43,20 +45,22 @@ const EmptyScreen = ({
           textAlign: 'center' as const,
         }}
       />
-      <RatsButton
-        title={buttonTitle}
-        containerStyle={{
-          backgroundColor: undefined,
-          borderColor: color.baby_blue,
-          borderWidth: 1.5,
-          marginTop: normalize(15),
-          height: normalize(35),
-          width: normalize(150),
-          alignSelf: 'center',
-        }}
-        style={{ color: color.baby_blue, fontSize: fontSize.regular }}
-        onPress={onPress}
-      />
+      {buttonTitle && onPress && (
+        <RatsButton
+          title={buttonTitle}
+          containerStyle={{
+            backgroundColor: undefined,
+            borderColor: color.baby_blue,
+            borderWidth: 1.5,
+            marginTop: normalize(15),
+            height: normalize(35),
+            width: normalize(150),
+            alignSelf: 'center',
+          }}
+          style={{ color: color.baby_blue, fontSize: fontSize.regular }}
+          onPress={onPress}
+        />
+      )}
     </View>
   );
 };

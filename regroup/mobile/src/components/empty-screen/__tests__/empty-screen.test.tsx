@@ -102,6 +102,18 @@ describe('EmptyScreen', () => {
     expect(getByText('REFRESH')).toBeTruthy();
   });
 
+  // #257: Staff notes passed only a message and got a blank button that did nothing.
+  it('shows no button without a title and an action', () => {
+    const { queryByRole, queryByTestId } = render(<EmptyScreen message="No notes yet." />);
+    expect(queryByRole('button')).toBeNull();
+    expect(queryByTestId(/^icon-/)).toBeNull();
+  });
+
+  it('shows no button with a title but no action', () => {
+    const { queryByText } = render(<EmptyScreen message="No notes yet." buttonTitle="Add" />);
+    expect(queryByText('ADD')).toBeNull();
+  });
+
   it('calls onPress only once per single press', () => {
     const onPress = jest.fn();
     const { getByText } = render(
