@@ -99,22 +99,25 @@ const MeetingSearch: React.FC<Props> = ({ navigation }) => {
         icon={<HelpIcon setRef={setPopoverRef} helpFn={renderHelp} />}
         header="Find Meetings"
       />
-      <MeetingSearchBar
-        filters={filters}
-        onChangeText={setSearchTerm}
-        setLocation={meetingSearch.setLocation}
-        onFilter={openFilters}
-      />
+      {/* Raised so the address dropdown opens over the results below it. A negative
+          zIndex on the results instead hides them behind this screen on RN 0.88. */}
+      <View testID="meeting-search-bar" style={{ zIndex: 1 }}>
+        <MeetingSearchBar
+          filters={filters}
+          onChangeText={setSearchTerm}
+          setLocation={meetingSearch.setLocation}
+          onFilter={openFilters}
+        />
+      </View>
       <View
         style={{
           flex: 1,
           alignItems: 'center',
           justifyContent: 'center',
-          zIndex: -50,
         }}>
         {!searchingForMeetings && searchFailed && (
           <EmptyScreen
-            icon="error-outline"
+            icon="exclamation-triangle"
             buttonTitle="TRY AGAIN"
             onPress={executeSearch}
             message="Couldn't load meetings. Please try again."

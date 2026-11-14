@@ -23,6 +23,7 @@ import {
   fontSize,
   fontFamily,
 } from "../../styles/theme";
+import { httpsCallable } from "@react-native-firebase/functions";
 import { functions } from "../../../firebase-setup";
 import { StripeAccountStatus } from "../../entities/House";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
@@ -159,6 +160,13 @@ const BENEFITS = [
   { icon: "bolt", text: "Residents pay in minutes — no cash or checks needed" },
 ];
 
+type StripeAccountStatusResponse = {
+  status?: StripeAccountStatus;
+  chargesEnabled?: boolean;
+  payoutsEnabled?: boolean;
+  requirements?: { currentlyDue: string[]; pastDue: string[] };
+};
+
 const StripeSettingsScreen: React.FC<Props> = (_props) => {
   const { house } = useSelectedHouse();
 
@@ -186,7 +194,10 @@ const StripeSettingsScreen: React.FC<Props> = (_props) => {
     }
 
     try {
-      const response = await functions.httpsCallable("getStripeAccountStatus")({
+      const response = await httpsCallable<{ houseId: string }, StripeAccountStatusResponse>(
+        functions,
+        "getStripeAccountStatus",
+      )({
         houseId: house.id,
       });
       const data = response.data;
@@ -218,7 +229,10 @@ const StripeSettingsScreen: React.FC<Props> = (_props) => {
     setConnecting(true);
     setError(null);
     try {
-      const response = await functions.httpsCallable("connectStripeAccount")({
+      const response = await httpsCallable<{ houseId: string }, { url: string }>(
+        functions,
+        "connectStripeAccount",
+      )({
         houseId: house.id,
       });
       await Linking.openURL(response.data.url);
@@ -234,7 +248,7 @@ const StripeSettingsScreen: React.FC<Props> = (_props) => {
     setConnecting(true);
     setError(null);
     try {
-      await functions.httpsCallable("disconnectStripeAccount")({
+      await httpsCallable(functions, "disconnectStripeAccount")({
         houseId: house.id,
       });
       setStatus(StripeAccountStatus.DISCONNECTED);

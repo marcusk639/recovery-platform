@@ -6,6 +6,16 @@
  * Advancement requires admin approval — this service only determines
  * eligibility, it does not auto-promote.
  */
+import {
+  collection,
+  doc,
+  getDocs,
+  limit as limitTo,
+  orderBy,
+  query,
+  updateDoc,
+  where,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { Guest } from '../entities/Guest';
 import { House } from '../entities/House';
@@ -48,18 +58,24 @@ export function getNextPhase(
 
 /**
  * Fetch the last N week summaries for a guest, ordered by startDate descending.
+ * The rules let a client list summaries only in a house it belongs to, so a
+ * query with no houseId filter is denied.
  */
 async function getRecentWeekSummaries(
   guestId: string,
+  houseId: string,
   limit: number,
 ): Promise<WeekSummary[]> {
-  const snapshot = await firestore
-    .collection('week-summaries')
-    .where('guestId', '==', guestId)
-    .orderBy('startDate', 'desc')
-    .limit(limit)
-    .get();
-  return snapshot.docs.map(doc => doc.data() as WeekSummary);
+  const snapshot = await getDocs(
+    query(
+      collection(firestore, 'week-summaries'),
+      where('guestId', '==', guestId),
+      where('houseId', '==', houseId),
+      orderBy('startDate', 'desc'),
+      limitTo(limit),
+    ),
+  );
+  return snapshot.docs.map(summaryDoc => summaryDoc.data() as WeekSummary);
 }
 
 /**
@@ -114,7 +130,7 @@ export async function checkAdvancementEligibility(
   if (isMaxPhase) return base;
 
   try {
-    const summaries = await getRecentWeekSummaries(guest.id, requiredWeeks);
+    const summaries = await getRecentWeekSummaries(guest.id, house.id, requiredWeeks);
     const compliantWeeks = countConsecutiveCompliantWeeks(
       summaries,
       house.phases,
@@ -139,7 +155,7 @@ export async function advanceGuestPhase(
   guestId: string,
   nextPhaseName: string,
 ): Promise<void> {
-  await firestore.collection('guests').doc(guestId).update({
+  await updateDoc(doc(collection(firestore, 'guests'), guestId), {
     phase: nextPhaseName,
     updatedAt: new Date().toISOString(),
   });

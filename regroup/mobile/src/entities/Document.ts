@@ -25,7 +25,8 @@ export interface HouseDocument {
   /** Present for resident docs; absent for house-level docs. */
   guestId?: string;
   fileName: string;
-  storageUrl: string;
+  // No download link is stored: documents open through the getDocumentLink
+  // callable's short-lived link.
   storagePath: string;
   fileType: DocumentFileType;
   category: DocumentCategory;

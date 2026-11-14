@@ -46,7 +46,7 @@ interface Props {
   reassign: (bed1: SelectedBed, bed2: SelectedBed) => Promise<void>;
   type: "Reassign" | "Assign";
   currentlyAssignedGuest: Guest;
-  bedItem?: JSX.Element;
+  bedItem?: React.JSX.Element;
   selectedBed?: SelectedBed;
   error?: Error;
   notify?: (
@@ -56,7 +56,7 @@ interface Props {
     status?: "fail" | "succeed",
     timedDismiss?: number
   ) => void;
-  // renderBedItem: (bed: Bed, room: Room, content?: JSX.Element) => void
+  // renderBedItem: (bed: Bed, room: Room, content?: React.JSX.Element) => void
 }
 
 const AssignGuest = (props: Props) => {

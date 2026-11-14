@@ -14,6 +14,7 @@ import Admin from '../entities/Admin';
 import { User } from '../entities/User';
 import { selectHouseById } from '../state/slices/housesSlice';
 import { selectGuestById, setUserAsGuest } from '../state/slices/guestsSlice';
+import { resetAdminState, setUserAsAdmin } from '../state/slices/adminSlice';
 import { houseKeys } from '../state/queries/houseQueries';
 import { guestKeys } from '../state/queries/guestQueries';
 import { adminKeys } from '../state/queries/adminQueries';
@@ -91,6 +92,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   useEffect(() => {
     const fetchInitialData = async () => {
       if (!currentUser || !loggedIn) {
+        // Logout resets nothing else here, and the next account on this phone
+        // must not read as the admin who just left.
+        dispatch(resetAdminState());
+        lastFetchedKey.current = null;
         return;
       }
       const fetchKey = [
@@ -107,10 +112,14 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
 
       lastFetchedKey.current = fetchKey;
 
+      if (!currentUser.isAdmin) {
+        dispatch(resetAdminState());
+      }
+
       try {
         if (currentUser.isAdmin && currentUser.adminId) {
           // Parallel fetch: houses + admin data are independent
-          const [houses] = await Promise.all([
+          const [houses, admin] = await Promise.all([
             queryClient.fetchQuery({
               queryKey: houseKeys.list({
                 attribute: 'adminIds',
@@ -124,6 +133,10 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
               queryFn: () => adminService.getAdmin(currentUser.adminId!),
             }),
           ]);
+
+          if (admin) {
+            dispatch(setUserAsAdmin(admin));
+          }
 
           // Sequential: select house → fetch guests (depends on house).
           // Gate on the Redux-persisted selection, not on the RQ-derived

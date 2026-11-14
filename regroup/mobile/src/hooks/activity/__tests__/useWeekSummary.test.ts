@@ -21,7 +21,7 @@ let onQuerySnapshotErrorCallback: ((err: Error) => void) | null = null;
 const mockQueryUnsubscribe = jest.fn();
 
 // Mock .get() resolver — replaced per test for getWeekSummaryOnce
-let mockGetImpl: () => Promise<any> = () => Promise.resolve({ exists: false, data: () => undefined });
+let mockGetImpl: () => Promise<any> = () => Promise.resolve({ exists: () => false, data: () => undefined });
 
 const mockDocRef = {
   onSnapshot: jest.fn((success: any, error?: any) => {
@@ -87,7 +87,7 @@ function makeSummary(overrides: Partial<WeekSummary> = {}): WeekSummary {
 
 function emitExistingDoc(summary: WeekSummary) {
   onSnapshotCallback?.({
-    exists: true,
+    exists: () => true,
     data: () => ({
       ...summary,
       lastUpdated: { toDate: () => summary.lastUpdated },
@@ -96,7 +96,7 @@ function emitExistingDoc(summary: WeekSummary) {
 }
 
 function emitMissingDoc() {
-  onSnapshotCallback?.({ exists: false, data: () => undefined });
+  onSnapshotCallback?.({ exists: () => false, data: () => undefined });
 }
 
 function emitError(err: Error) {
@@ -112,7 +112,7 @@ describe('useWeekSummary', () => {
     onSnapshotErrorCallback = null;
     onQuerySnapshotCallback = null;
     onQuerySnapshotErrorCallback = null;
-    mockGetImpl = () => Promise.resolve({ exists: false, data: () => undefined });
+    mockGetImpl = () => Promise.resolve({ exists: () => false, data: () => undefined });
 
     mockDocRef.onSnapshot.mockImplementation((success: any, error?: any) => {
       onSnapshotCallback = success;
@@ -346,7 +346,7 @@ describe('useWeekSummary', () => {
 
       act(() => {
         onSnapshotCallback?.({
-          exists: true,
+          exists: () => true,
           data: () => ({
             ...makeSummary(),
             lastUpdated: { toDate: () => null },
@@ -365,7 +365,7 @@ describe('useWeekSummary', () => {
 
       act(() => {
         onSnapshotCallback?.({
-          exists: true,
+          exists: () => true,
           data: () => ({
             ...makeSummary(),
             lastUpdated: '2024-01-21T00:00:00.000Z',
@@ -384,7 +384,7 @@ describe('useWeekSummary', () => {
 describe('getWeekSummaryOnce', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetImpl = () => Promise.resolve({ exists: false, data: () => undefined });
+    mockGetImpl = () => Promise.resolve({ exists: () => false, data: () => undefined });
     mockDocRef.get.mockImplementation(() => mockGetImpl());
     mockDocRef.onSnapshot.mockImplementation((success: any, error?: any) => {
       onSnapshotCallback = success;
@@ -407,7 +407,7 @@ describe('getWeekSummaryOnce', () => {
       const expectedDate = new Date('2024-01-21T00:00:00Z');
       mockGetImpl = () =>
         Promise.resolve({
-          exists: true,
+          exists: () => true,
           data: () => ({
             ...makeSummary({ lastUpdated: expectedDate }),
             lastUpdated: { toDate: () => expectedDate },
@@ -425,7 +425,7 @@ describe('getWeekSummaryOnce', () => {
     it('sets lastUpdated to null when toDate() returns null', async () => {
       mockGetImpl = () =>
         Promise.resolve({
-          exists: true,
+          exists: () => true,
           data: () => ({
             ...makeSummary(),
             lastUpdated: { toDate: () => null },
@@ -442,7 +442,7 @@ describe('getWeekSummaryOnce', () => {
     it('sets lastUpdated to null when toDate() returns an invalid Date', async () => {
       mockGetImpl = () =>
         Promise.resolve({
-          exists: true,
+          exists: () => true,
           data: () => ({
             ...makeSummary(),
             lastUpdated: { toDate: () => new Date('not-a-date') },
@@ -460,7 +460,7 @@ describe('getWeekSummaryOnce', () => {
       const dateString = '2024-01-21T00:00:00.000Z';
       mockGetImpl = () =>
         Promise.resolve({
-          exists: true,
+          exists: () => true,
           data: () => ({
             ...makeSummary(),
             lastUpdated: dateString,
@@ -476,7 +476,7 @@ describe('getWeekSummaryOnce', () => {
 
     it('returns null when the document does not exist', async () => {
       mockGetImpl = () =>
-        Promise.resolve({ exists: false, data: () => undefined });
+        Promise.resolve({ exists: () => false, data: () => undefined });
       mockDocRef.get.mockImplementation(() => mockGetImpl());
 
       const result = await getWeekSummaryOnce('guest123', 'house456', '2024-01-15');
@@ -495,7 +495,7 @@ describe('useWeekSummaryHistory', () => {
     onSnapshotErrorCallback = null;
     onQuerySnapshotCallback = null;
     onQuerySnapshotErrorCallback = null;
-    mockGetImpl = () => Promise.resolve({ exists: false, data: () => undefined });
+    mockGetImpl = () => Promise.resolve({ exists: () => false, data: () => undefined });
 
     mockDocRef.onSnapshot.mockImplementation((success: any, error?: any) => {
       onSnapshotCallback = success;

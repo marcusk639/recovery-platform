@@ -68,8 +68,8 @@ const RatsStatCardFooterItem = (
 
 interface RatsStatCardProps {
   containerStyle?: ViewStyle;
-  headerItems?: JSX.Element[];
-  footerItems?: JSX.Element[];
+  headerItems?: React.JSX.Element[];
+  footerItems?: React.JSX.Element[];
   percentage?: string;
   ratio?: string;
   contentTextStyle?: TextStyle;

@@ -36,7 +36,7 @@ interface NotificationButton {
 interface Props {
   dismissFormModal: () => void;
   room?: Room;
-  renderBedItem: (bed: Bed, room: Room, content?: JSX.Element) => JSX.Element;
+  renderBedItem: (bed: Bed, room: Room, content?: React.JSX.Element) => React.JSX.Element;
   action: 'add' | 'edit';
   notify?: (
     header: string,
@@ -122,6 +122,7 @@ const RoomForm: React.FC<Props> = props => {
         }
       } catch (error) {
         setStateError('Something went wrong');
+        notify?.('Room Update Failed', 'Failed to update this room', [], 'fail');
       }
     },
     [action, dismissFormModal, house, room, error, notify, dispatch],

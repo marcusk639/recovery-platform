@@ -3,9 +3,14 @@
  *
  * Tests every rule path in storage.rules for both allowed and denied access.
  * Requires the Firebase Storage emulator running on port 9199.
+ * The suite tests the ruleset the emulator loaded from firebase.json at start
+ * (storage.rules) and does not upload its own. The Storage emulator holds one
+ * ruleset for every suite, so a suite that re-uploads it leaves the others a
+ * moment with none ("no Storage ruleset is currently loaded"), and their
+ * requests are denied when the rules suites run in parallel.
  *
  * Setup:
- *   firebase emulators:start --only storage
+ *   firebase emulators:start --only storage   # from regroup/mobile/firebase
  *   npx jest firebase/__tests__/storage.rules.test.ts
  *
  * Or install deps first:
@@ -25,18 +30,17 @@ import {
   getDownloadURL,
   deleteObject,
 } from 'firebase/storage';
-import * as fs from 'fs';
-import * as path from 'path';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 const PROJECT_ID = 'rats-storage-rules-test';
-const STORAGE_HOST = '127.0.0.1';
-const STORAGE_PORT = 9199;
-
-const RULES_PATH = path.resolve(__dirname, '../storage.rules');
+// emulators:exec sets the address; 9199 is the default when run by hand.
+const [STORAGE_HOST, STORAGE_PORT_TEXT] = (
+  process.env.FIREBASE_STORAGE_EMULATOR_HOST ?? '127.0.0.1:9199'
+).split(':');
+const STORAGE_PORT = Number(STORAGE_PORT_TEXT);
 
 const USER_A_UID = 'userA';
 const USER_B_UID = 'userB';
@@ -87,10 +91,9 @@ function authHouseMember(uid: string, houseId: string) {
 let testEnv: RulesTestEnvironment;
 
 beforeAll(async () => {
-  const rules = fs.readFileSync(RULES_PATH, 'utf8');
   testEnv = await initializeTestEnvironment({
     projectId: PROJECT_ID,
-    storage: { rules, host: STORAGE_HOST, port: STORAGE_PORT },
+    storage: { host: STORAGE_HOST, port: STORAGE_PORT },
   });
 });
 

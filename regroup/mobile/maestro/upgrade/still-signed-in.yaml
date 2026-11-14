@@ -1,0 +1,12 @@
+# Upgrade-in-place, step 2 (run on the NEW build, installed over the old one):
+# relaunch WITHOUT clearing state; the user must still be signed in (no forced
+# sign-out across the React Native upgrade). Launch design §4.3, decision record §7.3.
+appId: ${APP_ID}
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: false
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 45000

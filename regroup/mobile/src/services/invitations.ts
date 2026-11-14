@@ -1,3 +1,4 @@
+import { httpsCallable } from '@react-native-firebase/functions';
 import { functions } from '../../firebase-setup';
 
 export type InvitationRole = 'admin' | 'guest' | 'senior-peer';
@@ -34,7 +35,7 @@ export interface RedeemInvitationResult {
 export async function createInvitation(
   input: CreateInvitationInput,
 ): Promise<CreateInvitationResult> {
-  const result = await functions.httpsCallable('createInvitation')(
+  const result = await httpsCallable(functions, 'createInvitation')(
     input as any,
   );
   return result.data as CreateInvitationResult;
@@ -48,7 +49,7 @@ export async function createInvitation(
 export async function peekInvitation(
   token: string,
 ): Promise<PeekInvitationResult> {
-  const result = await functions.httpsCallable('peekInvitation')({
+  const result = await httpsCallable(functions, 'peekInvitation')({
     token,
   } as any);
   return result.data as PeekInvitationResult;
@@ -62,7 +63,7 @@ export async function peekInvitation(
 export async function redeemInvitation(
   token: string,
 ): Promise<RedeemInvitationResult> {
-  const result = await functions.httpsCallable('redeemInvitation')({
+  const result = await httpsCallable(functions, 'redeemInvitation')({
     token,
   } as any);
   return result.data as RedeemInvitationResult;

@@ -28,9 +28,7 @@ tags:
 # Seeded pending disputes for this house render as dispute items.
 - assertVisible:
     id: "dispute-item-test-dispute-123"
-    optional: true
 - assertVisible:
     id: "activity-item-test-activity-123"
-    optional: true
 - runFlow:
     file: ../subflows/logout.yaml

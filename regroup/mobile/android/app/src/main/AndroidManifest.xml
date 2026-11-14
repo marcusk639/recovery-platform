@@ -1,15 +1,31 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Android 13+ shows no notification (rent reminders, pushes) without this runtime permission. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!--
+      react-native-notify-kit merges these from its library manifest; the app uses none of the
+      features behind them. Each decision and its Play Console impact is recorded in
+      docs/build/react-native-0.88-upgrade.md (Task 11). Kept from the library: WAKE_LOCK,
+      RECEIVE_BOOT_COMPLETED (reminders survive a reboot), VIBRATE, ACCESS_NETWORK_STATE.
+    -->
+    <!-- Rent reminders fall back to an inexact allow-while-idle alarm on Android 12+. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" tools:node="remove" />
+    <!-- No foreground-service notifications. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" tools:node="remove" />
+    <!-- Do Not Disturb access, only for a Xiaomi heads-up workaround. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" tools:node="remove" />
     <application
       android:name="com.rats.dev.MainApplication"
       android:label="@string/app_name"
       android:icon="@mipmap/regroup"
       android:roundIcon="@mipmap/regroup"
       android:allowBackup="false"
-      android:theme="@style/AppTheme">
+      android:theme="@style/AppTheme"
+      android:supportsRtl="true">
       <activity
         android:name=".MainActivity"
         android:label="@string/app_name"
@@ -43,5 +59,11 @@
             <data android:scheme="com.rats.dev" />
         </intent-filter>
       </activity>
+
+      <!-- notify-kit components behind the removed permissions (see above). -->
+      <activity android:name="app.notifee.core.FullScreenNotificationActivity" tools:node="remove" />
+      <service android:name="app.notifee.core.ForegroundService" tools:node="remove" />
+      <receiver android:name="app.notifee.core.ForegroundServiceRunLimitReceiver" tools:node="remove" />
+      <receiver android:name="app.notifee.core.AlarmPermissionBroadcastReceiver" tools:node="remove" />
     </application>
 </manifest>

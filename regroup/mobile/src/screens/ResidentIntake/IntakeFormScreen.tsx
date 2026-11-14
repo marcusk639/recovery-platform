@@ -3,11 +3,13 @@ import {
   View,
   TextInput,
   TouchableOpacity,
-  ScrollView,
   StyleSheet,
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import RatsScrollView, {
+  IQ_SCROLL_VIEW_PROPS,
+} from '../../components/rats-scroll-view';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ScreenHeader from '../../components/screen-header/screen-header';
@@ -330,7 +332,7 @@ const IntakeFormScreen = () => {
           labels={STEP_LABELS}
         />
       </View>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <RatsScrollView {...IQ_SCROLL_VIEW_PROPS} contentContainerStyle={styles.scrollContent}>
         {renderCurrentStep()}
         <View style={styles.buttonRow}>
           {step > 0 && (
@@ -361,7 +363,7 @@ const IntakeFormScreen = () => {
             </TouchableOpacity>
           )}
         </View>
-      </ScrollView>
+      </RatsScrollView>
     </SafeAreaView>
   );
 };

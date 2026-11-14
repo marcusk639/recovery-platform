@@ -1,7 +1,8 @@
 /**
  * Unit tests for DocumentListScreen.
  *
- * Mocks: documentQueries, react-native-document-picker, logging, navigation.
+ * Mocks: documentQueries, logging, navigation. @react-native-documents/picker is the global mock
+ * (jest.setup.js), with the library's real errorCodes / isErrorWithCode.
  */
 
 import React from 'react';
@@ -25,10 +26,9 @@ jest.mock('../../../state/queries/documentQueries', () => ({
   })),
 }));
 
-jest.mock('react-native-document-picker', () => ({
-  pickSingle: jest.fn(),
-  types: { pdf: 'application/pdf', images: 'image/*' },
-  isCancel: jest.fn((err: any) => err?.code === 'DOCUMENT_PICKER_CANCELED'),
+const mockGetDocumentLink = jest.fn();
+jest.mock('../../../services/documents', () => ({
+  getDocumentLink: (...args: any[]) => mockGetDocumentLink(...args),
 }));
 
 jest.mock('../../../util/logging', () => ({
@@ -54,7 +54,8 @@ jest.mock('@react-navigation/native', () => {
 
 import DocumentListScreen from '../DocumentListScreen';
 import * as documentQueries from '../../../state/queries/documentQueries';
-import * as DocumentPicker from 'react-native-document-picker';
+import * as DocumentPicker from '@react-native-documents/picker';
+import { logException } from '../../../util/logging';
 import { HouseDocument } from '../../../entities/Document';
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
@@ -64,7 +65,6 @@ const mockDoc: HouseDocument = {
   houseId: 'house-1',
   guestId: 'guest-1',
   fileName: 'lease.pdf',
-  storageUrl: 'https://storage.example.com/lease.pdf',
   storagePath: 'houses/house-1/guests/guest-1/documents/doc-1',
   fileType: 'pdf',
   category: 'lease',
@@ -164,11 +164,13 @@ describe('DocumentListScreen', () => {
 
     it('shows category alert after picking a file', async () => {
       const alertSpy = jest.spyOn(Alert, 'alert');
-      (DocumentPicker.pickSingle as jest.Mock).mockResolvedValueOnce({
-        uri: '/tmp/lease.pdf',
-        name: 'lease.pdf',
-        type: 'application/pdf',
-      });
+      (DocumentPicker.pick as jest.Mock).mockResolvedValueOnce([
+        {
+          uri: '/tmp/lease.pdf',
+          name: 'lease.pdf',
+          type: 'application/pdf',
+        },
+      ]);
 
       const { getByTestId } = render(<DocumentListScreen />);
       fireEvent.press(getByTestId('upload-document-button'));
@@ -184,11 +186,10 @@ describe('DocumentListScreen', () => {
 
     it('does not show alert when picker is cancelled', async () => {
       const alertSpy = jest.spyOn(Alert, 'alert');
-      const cancelError = { code: 'DOCUMENT_PICKER_CANCELED' };
-      (DocumentPicker.pickSingle as jest.Mock).mockRejectedValueOnce(
-        cancelError,
-      );
-      (DocumentPicker.isCancel as jest.Mock).mockReturnValueOnce(true);
+      const cancelError = Object.assign(new Error('cancelled'), {
+        code: DocumentPicker.errorCodes.OPERATION_CANCELED,
+      });
+      (DocumentPicker.pick as jest.Mock).mockRejectedValueOnce(cancelError);
 
       const { getByTestId } = render(<DocumentListScreen />);
       fireEvent.press(getByTestId('upload-document-button'));
@@ -196,6 +197,61 @@ describe('DocumentListScreen', () => {
       await waitFor(() => {
         expect(alertSpy).not.toHaveBeenCalled();
       });
+      expect(logException).not.toHaveBeenCalled();
+    });
+
+    /** Picks `file`, then presses the first category in the "Choose Category" alert. */
+    async function pickAndChooseCategory(file: Record<string, unknown>) {
+      const alertSpy = jest.spyOn(Alert, 'alert');
+      (DocumentPicker.pick as jest.Mock).mockResolvedValueOnce([file]);
+      const screen = render(<DocumentListScreen />);
+      fireEvent.press(screen.getByTestId('upload-document-button'));
+      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Choose Category', expect.any(String), expect.any(Array)));
+      const buttons = alertSpy.mock.calls.find(([title]) => title === 'Choose Category')![2] as any[];
+      await buttons[0].onPress();
+      return alertSpy;
+    }
+
+    it('rejects a file with no name before copying it', async () => {
+      const alertSpy = await pickAndChooseCategory({ uri: 'content://doc/1', name: null, type: 'application/pdf' });
+
+      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Error', 'Invalid file selected.'));
+      expect(DocumentPicker.keepLocalCopy).not.toHaveBeenCalled();
+      expect(mockMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('logs a failed local copy, tells the user, and uploads nothing', async () => {
+      (DocumentPicker.keepLocalCopy as jest.Mock).mockResolvedValueOnce([
+        { status: 'error', sourceUri: 'content://doc/1', copyError: 'no space' },
+      ]);
+
+      const alertSpy = await pickAndChooseCategory({ uri: 'content://doc/1', name: 'lease.pdf', type: 'application/pdf' });
+
+      await waitFor(() => expect(alertSpy).toHaveBeenCalledWith('Upload Failed', expect.any(String)));
+      expect(logException).toHaveBeenCalledWith(expect.any(Error), 'DocumentListScreen: keepLocalCopy');
+      expect(mockMutateAsync).not.toHaveBeenCalled();
+    });
+
+    it('uploads the local copy under the picked name, type and category', async () => {
+      mockMutateAsync.mockResolvedValueOnce(undefined);
+
+      await pickAndChooseCategory({ uri: 'content://doc/1', name: 'lease.pdf', type: 'application/pdf' });
+
+      await waitFor(() => expect(mockMutateAsync).toHaveBeenCalledTimes(1));
+      expect(DocumentPicker.keepLocalCopy).toHaveBeenCalledWith({
+        files: [{ uri: 'content://doc/1', fileName: 'lease.pdf' }],
+        destination: 'cachesDirectory',
+      });
+      expect(mockMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          houseId: 'house-1',
+          guestId: 'guest-1',
+          localPath: 'file:///mock/caches/lease.pdf',
+          fileName: 'lease.pdf',
+          mimeType: 'application/pdf',
+          category: 'lease',
+        }),
+      );
     });
   });
 
@@ -220,6 +276,41 @@ describe('DocumentListScreen', () => {
           expect.any(Array),
         );
       });
+    });
+  });
+
+  // ─── Opening a document: a short-lived link, not a stored one ───────────────
+  describe('opening a document', () => {
+    const { Linking } = require('react-native');
+    const showList = () => {
+      (documentQueries.useDocuments as jest.Mock).mockReturnValue({
+        data: [mockDoc],
+        isLoading: false,
+      });
+      return render(<DocumentListScreen />);
+    };
+
+    beforeEach(() => {
+      jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+      jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    });
+
+    it('opens the link the server signs for it', async () => {
+      mockGetDocumentLink.mockResolvedValue('https://signed.example/doc-1');
+      fireEvent.press(showList().getByTestId(`document-open-${mockDoc.id}`));
+      await waitFor(() =>
+        expect(Linking.openURL).toHaveBeenCalledWith('https://signed.example/doc-1'),
+      );
+      expect(mockGetDocumentLink).toHaveBeenCalledWith('doc-1');
+    });
+
+    it("says so, and opens nothing, when the link can't be fetched", async () => {
+      mockGetDocumentLink.mockRejectedValue(new Error('not-found'));
+      fireEvent.press(showList().getByTestId(`document-open-${mockDoc.id}`));
+      await waitFor(() =>
+        expect(Alert.alert).toHaveBeenCalledWith('Error', "Couldn't open the document. Try again."),
+      );
+      expect(Linking.openURL).not.toHaveBeenCalled();
     });
   });
 });

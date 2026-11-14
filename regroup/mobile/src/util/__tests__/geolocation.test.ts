@@ -3,30 +3,58 @@
 // Unit tests for geolocation.ts.
 // Exports tested:
 //   - getCurrentPosition(onSuccess, onError) — delegates to Geolocation.getCurrentPosition
+//     with explicit LOCATION_OPTIONS (RN 0.88 upgrade, Task 6: @react-native-community/
+//     geolocation replaces react-native-geolocation-service; the options and the one-time
+//     configuration keep the old library's behaviour)
 //   - geohash(lat, lng) — encodes lat/lng to a geohash string via ngeohash
 //   - getGeohashRange(latitude, longitude, distance) — returns { lower, upper } geohash bounds
 //
-// react-native-geolocation-service is already mocked globally in jest.setup.js.
+// @react-native-community/geolocation is mocked globally in jest.setup.js.
 // ngeohash is a pure JS library; no mock needed.
 
-import Geolocation from 'react-native-geolocation-service';
-import { getCurrentPosition, geohash, getGeohashRange } from '../geolocation';
+import Geolocation from '@react-native-community/geolocation';
+import { LOCATION_OPTIONS, getCurrentPosition, geohash, getGeohashRange } from '../geolocation';
 
 const mockGetCurrentPosition = Geolocation.getCurrentPosition as jest.Mock;
+
+// ─── configuration ────────────────────────────────────────────────────────────
+
+describe('geolocation configuration', () => {
+  it('configures the library once, at load: fused provider, app-owned permission prompts', () => {
+    jest.isolateModules(() => {
+      const isolated = require('@react-native-community/geolocation').default;
+      isolated.setRNConfiguration.mockClear();
+      require('../geolocation');
+      expect(isolated.setRNConfiguration).toHaveBeenCalledTimes(1);
+      expect(isolated.setRNConfiguration).toHaveBeenCalledWith({
+        skipPermissionRequests: true,
+        locationProvider: 'playServices',
+      });
+    });
+  });
+
+  it("pins react-native-geolocation-service's defaults (timeout: the new library's 10 minutes)", () => {
+    expect(LOCATION_OPTIONS).toEqual({
+      enableHighAccuracy: false,
+      maximumAge: Infinity,
+      timeout: 10 * 60 * 1000,
+    });
+  });
+});
 
 // ─── getCurrentPosition ───────────────────────────────────────────────────────
 
 describe('getCurrentPosition', () => {
   beforeEach(() => jest.clearAllMocks());
 
-  it('delegates to Geolocation.getCurrentPosition with the supplied callbacks', () => {
+  it('delegates to Geolocation.getCurrentPosition with the supplied callbacks and the pinned options', () => {
     const onSuccess = jest.fn();
     const onError = jest.fn();
 
     getCurrentPosition(onSuccess, onError);
 
     expect(mockGetCurrentPosition).toHaveBeenCalledTimes(1);
-    expect(mockGetCurrentPosition).toHaveBeenCalledWith(onSuccess, onError);
+    expect(mockGetCurrentPosition).toHaveBeenCalledWith(onSuccess, onError, LOCATION_OPTIONS);
   });
 
   it('returns whatever Geolocation.getCurrentPosition returns', () => {

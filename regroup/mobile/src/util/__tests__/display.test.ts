@@ -1,3 +1,4 @@
+import { STAT_MAP } from '../display';
 // src/util/__tests__/display.test.ts
 //
 // Unit tests for pure date/time and string helper functions in src/util/display.tsx.
@@ -374,5 +375,15 @@ describe('daysLeft', () => {
 
   it('returns 1 for Saturday (day 6: 7 - 6 = 1)', () => {
     expect(daysLeft('2024-01-13')).toBe(1);
+  });
+});
+
+describe('STAT_MAP activity labels', () => {
+  it('labels a completed chore as completed, since that is what type "chore" logs', () => {
+    expect(STAT_MAP.chore.activityLabel).toBe('Chore completed');
+  });
+
+  it('keeps the changed label for a chore change', () => {
+    expect(STAT_MAP.chore_changed.activityLabel).toBe('Chore changed');
   });
 });

@@ -1,5 +1,8 @@
 // src/screens/DrugTesting/__tests__/DrugTestingScreen.test.tsx
 import React from 'react';
+import { StyleSheet as InsetStyleSheet } from 'react-native';
+// The module object itself: an `import * as` namespace is a copy, which a spy would miss.
+const SafeArea = require('react-native-safe-area-context');
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import DrugTestingScreen from '../DrugTestingScreen';
@@ -87,5 +90,23 @@ describe('DrugTestingScreen', () => {
     const { getByTestId } = render(<DrugTestingScreen />, { wrapper });
     fireEvent.press(getByTestId('fab-log-test'));
     expect(mockNavigate).toHaveBeenCalledWith('drugTestForm', {});
+  });
+});
+
+describe('DrugTestingScreen bottom inset (Android edge-to-edge)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('lifts the FAB by the bottom safe-area inset', () => {
+    jest
+      .spyOn(SafeArea, 'useSafeAreaInsets')
+      .mockReturnValue({ top: 0, right: 0, bottom: 48, left: 0 });
+    (useHouseDrugTests as jest.Mock).mockReturnValue({ data: [], isLoading: false });
+    const { getByTestId } = render(<DrugTestingScreen />, { wrapper });
+
+    expect(InsetStyleSheet.flatten(getByTestId('fab-log-test').props.style)).toEqual(
+      expect.objectContaining({ position: 'absolute', bottom: 30, marginBottom: 48 }),
+    );
   });
 });

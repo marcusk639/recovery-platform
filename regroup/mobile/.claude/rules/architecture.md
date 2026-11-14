@@ -64,48 +64,50 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 
 `src/services/` wraps all Firestore reads/writes and Cloud Function calls.
 
-| Service                         | Key Operations                                             |
-| ------------------------------- | ---------------------------------------------------------- |
-| `activity.ts`                   | Log, update, paginate, subscribe                           |
-| `admin.tsx`                     | Admin record management                                    |
-| `applications.ts`               | Guest/resident application CRUD, status updates            |
-| `choreRotation.ts`              | Chore rotation schedule management                         |
-| `complaints.ts`                 | Complaint CRUD                                             |
-| `crud.tsx`                      | Reusable generic CRUD operations                           |
-| `dispute.tsx`                   | Activity dispute workflow                                  |
-| `documents.ts`                  | House document upload, list, delete (admin-only)           |
-| `drugTests.ts`                  | Drug test record creation and history                      |
-| `EnhancedAuthService.ts`        | Sign in/up with rate limiting + validation                 |
-| `feedback.ts`                   | User feedback submissions                                  |
-| `guest.tsx`                     | CRUD with optimistic locking, transactions, stat merging   |
-| `guestImport.ts`                | Bulk guest import from CSV/data                            |
-| `house.tsx`                     | CRUD, nearby search, admin management, batch create        |
+| Service                         | Key Operations                                            |
+| ------------------------------- | --------------------------------------------------------- |
+| `activity.ts`                   | Log, update, paginate, subscribe                          |
+| `admin.tsx`                     | Admin record management                                   |
+| `applications.ts`               | Guest/resident application CRUD, status updates           |
+| `choreRotation.ts`              | Chore rotation schedule management                        |
+| `complaints.ts`                 | Complaint CRUD                                            |
+| `crud.tsx`                      | Reusable generic CRUD operations                          |
+| `dispute.tsx`                   | Activity dispute workflow                                 |
+| `documents.ts`                  | House document upload, list, delete (admin-only)          |
+| `drugTests.ts`                  | Drug test record creation and history                     |
+| `EnhancedAuthService.ts`        | Sign in/up with rate limiting + validation                |
+| `feedback.ts`                   | User feedback submissions                                 |
+| `guest.tsx`                     | CRUD with optimistic locking, transactions, stat merging  |
+| `guestImport.ts`                | Bulk guest import from CSV/data                           |
+| `house.tsx`                     | CRUD, nearby search, admin management, batch create       |
 | `invitations.ts`                | Invitation callables: create, peek, redeem                 |
-| `issues.ts`                     | House maintenance issue CRUD                               |
-| `meeting.ts`                    | Search, check-in (calls Cloud Functions)                   |
-| `message.tsx`                   | DM conversations, house chat messages                      |
-| `notifications.tsx`             | Fetch, mark read, FCM token registration                   |
-| `notifications/rentReminder.ts` | Scheduled rent reminder logic                              |
-| `organization.ts`               | Multi-house organization management                        |
-| `payments.ts`                   | Payment intent creation, history (calls Cloud Functions)   |
+| `issues.ts`                     | House maintenance issue CRUD                              |
+| `meeting.ts`                    | Search, check-in (calls Cloud Functions)                  |
+| `message.tsx`                   | DM conversations, house chat messages                     |
+| `notifications.tsx`             | Fetch, mark read, FCM token registration                  |
+| `notifications/rentReminder.ts` | Rent reminder as a react-native-notify-kit trigger        |
+| `notifications/channels.ts`     | Android channels (`default`, `default-channel-id`)        |
+| `notifications/remoteMessage.ts`| FCM message handling                                      |
+| `organization.ts`               | Multi-house organization management                       |
+| `payments.ts`                   | Payment intent creation, history (calls Cloud Functions)  |
 | `paywall.ts`                    | `paywallConfigRef` only (the `paywall/config` kill switch) |
-| `phaseAdvancement.ts`           | Phase advancement eligibility + automation                 |
-| `receiptService.ts`             | Payment receipt generation                                 |
-| `reportExport.ts`               | PDF/CSV export for activity and compliance reports         |
-| `reportingService.ts`           | Admin analytics and reporting aggregation                  |
-| `setup-wizard.ts`               | House onboarding wizard steps                              |
-| `SimpleValidationService.ts`    | Form field validation helpers                              |
-| `staffNotes.ts`                 | Resident notes and shift log entries                       |
-| `storage.tsx`                   | Cloud Storage upload for house photos, avatars, reports    |
-| `subscription.ts`               | Subscription status helpers and upgrade flows              |
-| `treasury.ts`                   | Oxford financial record CRUD                               |
-| `treasuryReport.ts`             | Oxford treasury report generation                          |
-| `users.tsx`                     | User profile CRUD                                          |
-| `oxford/index.ts`               | Oxford officer management                                  |
-| `oxford/businessMeetings.ts`    | Business meeting CRUD                                      |
-| `oxford/charterCompliance.ts`   | Charter compliance scoring and monitoring                  |
-| `oxford/ees.ts`                 | Equal Expense Share calculations                           |
-| `oxford/votes.ts`               | Vote creation, casting (with Firestore transactions)       |
+| `phaseAdvancement.ts`           | Phase advancement eligibility + automation                |
+| `receiptService.ts`             | Payment receipt generation                                |
+| `reportExport.ts`               | PDF/CSV export for activity and compliance reports        |
+| `reportingService.ts`           | Admin analytics and reporting aggregation                 |
+| `setup-wizard.ts`               | House onboarding wizard steps                             |
+| `SimpleValidationService.ts`    | Form field validation helpers                             |
+| `staffNotes.ts`                 | Resident notes and shift log entries                      |
+| `storage.tsx`                   | Cloud Storage upload for house photos, avatars, reports   |
+| `subscription.ts`               | Subscription status helpers and upgrade flows             |
+| `treasury.ts`                   | Oxford financial record CRUD                              |
+| `treasuryReport.ts`             | Oxford treasury report generation                         |
+| `users.tsx`                     | User profile CRUD                                         |
+| `oxford/index.ts`               | Oxford officer management                                 |
+| `oxford/businessMeetings.ts`    | Business meeting CRUD                                     |
+| `oxford/charterCompliance.ts`   | Charter compliance scoring and monitoring                 |
+| `oxford/ees.ts`                 | Equal Expense Share calculations                          |
+| `oxford/votes.ts`               | Vote creation, casting (with Firestore transactions)      |
 
 There is no offline write queue: no `offlineQueue` service exists, and a failed write surfaces to its caller.
 
@@ -124,7 +126,7 @@ Firebase custom claims: `guest`, `admin`, `superAdmin`, `potentialSuperAdmin`.
 
 `isAdmin()` in Firestore rules returns true for both `admin` and `superAdmin` — always use it instead of checking individual roles.
 
-**`auth` is a singleton** — use `auth.currentUser` (not `auth().currentUser`).
+**`auth` is a singleton** — the modular `Auth` instance from `firebase-setup.ts`: use `auth.currentUser` and pass `auth` to modular functions (`signOut(auth)`), never `auth()`.
 
 ## Subscription & Paywall
 

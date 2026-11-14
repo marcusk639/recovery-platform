@@ -59,6 +59,7 @@ export const mem = {
 
 export const fieldValue = {
   increment: (n: number) => ({ __op: 'increment', n }),
+  arrayRemove: (...values: unknown[]) => ({ __op: 'arrayRemove', values }),
   delete: () => ({ __op: 'delete' }),
   serverTimestamp: () => new Date(clock).toISOString(),
 };
@@ -73,8 +74,10 @@ function applyUpdate(data: Data, update: Data): Data {
       target = target[p] as Data;
     }
     const last = parts[parts.length - 1];
-    const op = value as { __op?: string; n?: number } | null;
+    const op = value as { __op?: string; n?: number; values?: unknown[] } | null;
     if (op && op.__op === 'increment') target[last] = ((target[last] as number) ?? 0) + (op.n ?? 0);
+    else if (op && op.__op === 'arrayRemove')
+      target[last] = ((target[last] as unknown[]) ?? []).filter((v) => !op.values?.includes(v));
     else if (op && op.__op === 'delete') delete target[last];
     else target[last] = clone(value);
   }
@@ -114,7 +117,8 @@ const ops = {
   },
   update(path: string, data: Data, pre?: Precondition) {
     const cur = store.get(path);
-    if (!cur) throw new Error(`NOT_FOUND: no document to update: ${path}`);
+    // code 5 is NOT_FOUND, as the Admin SDK sets it.
+    if (!cur) throw Object.assign(new Error(`NOT_FOUND: no document to update: ${path}`), { code: 5 });
     if (pre?.lastUpdateTime && pre.lastUpdateTime.toMillis() !== cur.updateTimeMs) {
       throw new Error(`FAILED_PRECONDITION: ${path} changed since it was read`);
     }

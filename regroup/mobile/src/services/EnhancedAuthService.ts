@@ -1,13 +1,22 @@
 // Enhanced authentication service with security improvements
 import { auth } from "../../firebase-setup";
 import { logException } from "../util/logging";
-import { FirebaseAuthTypes } from "@react-native-firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  reload,
+  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
+  signInAnonymously as firebaseSignInAnonymously,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  updateProfile,
+  type User,
+} from "@react-native-firebase/auth";
 import { SimpleValidationService } from "./SimpleValidationService";
 import { getCurrentTime } from "../util/display";
 
 export interface AuthResult {
   success: boolean;
-  user?: FirebaseAuthTypes.User;
+  user?: User;
   error?: string;
   requiresEmailVerification?: boolean;
 }
@@ -59,7 +68,8 @@ export class EnhancedAuthService {
       const sanitizedEmail = SimpleValidationService.sanitizeString(email);
 
       // Attempt sign in
-      const userCredential = await auth.signInWithEmailAndPassword(
+      const userCredential = await signInWithEmailAndPassword(
+        auth,
         sanitizedEmail,
         password
       );
@@ -161,7 +171,8 @@ export class EnhancedAuthService {
       }
 
       // Create user account
-      const userCredential = await auth.createUserWithEmailAndPassword(
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
         validation.sanitized.email,
         validation.sanitized.password
       );
@@ -174,7 +185,7 @@ export class EnhancedAuthService {
       }
 
       // Update user profile
-      await userCredential.user.updateProfile({
+      await updateProfile(userCredential.user, {
         displayName: `${validation.sanitized.firstName} ${validation.sanitized.lastName}`,
       });
 
@@ -234,7 +245,7 @@ export class EnhancedAuthService {
         };
       }
 
-      const userCredential = await auth.signInAnonymously();
+      const userCredential = await firebaseSignInAnonymously(auth);
 
       if (!userCredential.user) {
         return {
@@ -283,7 +294,7 @@ export class EnhancedAuthService {
       // Sanitize email
       const sanitizedEmail = SimpleValidationService.sanitizeString(email);
 
-      await auth.sendPasswordResetEmail(sanitizedEmail);
+      await firebaseSendPasswordResetEmail(auth, sanitizedEmail);
 
       return {
         success: true,
@@ -326,7 +337,7 @@ export class EnhancedAuthService {
    */
   static async signOut(): Promise<AuthResult> {
     try {
-      await auth.signOut();
+      await firebaseSignOut(auth);
       return {
         success: true,
       };
@@ -342,7 +353,7 @@ export class EnhancedAuthService {
   /**
    * Get current user with validation
    */
-  static getCurrentUser(): FirebaseAuthTypes.User | null {
+  static getCurrentUser(): User | null {
     try {
       return auth.currentUser;
     } catch (error) {
@@ -388,7 +399,7 @@ export class EnhancedAuthService {
         };
       }
 
-      await user.reload();
+      await reload(user);
       return {
         success: true,
         user: auth.currentUser || undefined,

@@ -259,7 +259,9 @@ const OfficerManagement: React.FC<Props> = ({ navigation }) => {
       refreshControl={
         <RefreshControl
           refreshing={isFetching && !loading}
-          onRefresh={refetch}
+          onRefresh={() => {
+            refetch();
+          }}
         />
       }
     >

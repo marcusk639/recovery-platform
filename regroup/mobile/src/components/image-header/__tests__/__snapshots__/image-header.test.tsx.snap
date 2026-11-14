@@ -79,9 +79,9 @@ exports[`ImageHeader snapshot matches for vacancy=false 1`] = `
       }
     >
       <FontAwesome5Icon
+        iconStyle="solid"
         name="arrow-left"
         size={31.428571428571427}
-        solid={true}
         style={
           [
             {
@@ -214,9 +214,9 @@ exports[`ImageHeader snapshot matches for vacancy=true 1`] = `
       }
     >
       <FontAwesome5Icon
+        iconStyle="solid"
         name="arrow-left"
         size={31.428571428571427}
-        solid={true}
         style={
           [
             {

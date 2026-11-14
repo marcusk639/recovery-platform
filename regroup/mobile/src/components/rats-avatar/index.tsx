@@ -94,7 +94,10 @@ const RatsAvatar = (props: RatsAvatarProps) => {
           style={[
             placeholderTextStyle || imagePlaceholderTextStyle,
             {
-              fontSize: viewLayout.height / 2,
+              // Measured size only once laid out: the first render has height 0,
+              // and Android's New Architecture text layer throws on fontSize 0.
+              // Until then the text style's own size applies.
+              ...(viewLayout.height > 0 ? { fontSize: viewLayout.height / 2 } : null),
               paddingBottom: IOS ? 0 : normalize(3),
             },
           ]}

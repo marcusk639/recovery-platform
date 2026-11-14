@@ -1,3 +1,14 @@
+import {
+  collection,
+  collectionGroup,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from '@react-native-firebase/firestore';
 import { firestore, auth } from '../../firebase-setup';
 import {
   HouseApplication,
@@ -17,7 +28,7 @@ export type ApplicationInput = {
 };
 
 const applicationsCollection = (houseId: string) =>
-  firestore.collection('houses').doc(houseId).collection('applications');
+  collection(doc(collection(firestore, 'houses'), houseId), 'applications');
 
 export async function submitApplication(
   houseId: string,
@@ -26,7 +37,7 @@ export async function submitApplication(
   const currentUser = auth.currentUser;
   if (!currentUser) throw new Error('Must be signed in to apply');
 
-  const appRef = applicationsCollection(houseId).doc();
+  const appRef = doc(applicationsCollection(houseId));
   const appId = appRef.id;
 
   const application = {
@@ -40,7 +51,7 @@ export async function submitApplication(
   };
 
   try {
-    await appRef.set(application);
+    await setDoc(appRef, application);
   } catch (error) {
     logException(error);
     throw new Error('Failed to submit application. Please try again.');
@@ -53,10 +64,8 @@ export async function listHouseApplications(
   houseId: string,
 ): Promise<HouseApplication[]> {
   try {
-    const snap = await applicationsCollection(houseId)
-      .orderBy('createdAt', 'desc')
-      .get();
-    return snap.docs.map(doc => doc.data() as HouseApplication);
+    const snap = await getDocs(query(applicationsCollection(houseId), orderBy('createdAt', 'desc')));
+    return snap.docs.map(application => application.data() as HouseApplication);
   } catch (error) {
     logException(error);
     throw new Error('Failed to load applications.');
@@ -68,11 +77,10 @@ export async function getMyApplications(): Promise<HouseApplication[]> {
   if (!currentUser) return [];
 
   try {
-    const snap = await firestore
-      .collectionGroup('applications')
-      .where('applicantUid', '==', currentUser.uid)
-      .get();
-    return snap.docs.map(doc => doc.data() as HouseApplication);
+    const snap = await getDocs(
+      query(collectionGroup(firestore, 'applications'), where('applicantUid', '==', currentUser.uid)),
+    );
+    return snap.docs.map(application => application.data() as HouseApplication);
   } catch (error) {
     logException(error);
     throw new Error('Failed to load your applications.');
@@ -90,14 +98,12 @@ export async function updateApplicationStatus(
     throw new Error('Must be signed in to update application status');
 
   try {
-    await applicationsCollection(houseId)
-      .doc(appId)
-      .update({
-        status,
-        operatorNote: note ?? '',
-        reviewedAt: new Date().toISOString(),
-        reviewedBy: currentUser.uid,
-      });
+    await updateDoc(doc(applicationsCollection(houseId), appId), {
+      status,
+      operatorNote: note ?? '',
+      reviewedAt: new Date().toISOString(),
+      reviewedBy: currentUser.uid,
+    });
   } catch (error) {
     logException(error);
     throw new Error('Failed to update application status.');

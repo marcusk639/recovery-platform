@@ -115,7 +115,7 @@ const ManagerSetupFormView: React.FC<ManagerSetupFormViewProps> = (props) => {
   const renderEmailFields = () => {
     if (managerIsRequired()) {
       const seniorPeer = values.managerSetupType === "senior-peer";
-      const managerEmailFields: JSX.Element[] = [];
+      const managerEmailFields: React.JSX.Element[] = [];
       each(values.managerEmails, (email, key) => {
         const result = key.substring(key.indexOf("_") + 1, key.length);
         const index = parseInt(result);

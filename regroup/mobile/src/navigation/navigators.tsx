@@ -6,7 +6,7 @@ import {
   NativeStackScreenProps,
 } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import FontAwesome5 from '../components/rats-icon/font-awesome-5';
 import { useAppSelector } from '../state/hooks';
 // Phase 6.3: Removed migration-utils (migration complete)
 import ErrorBoundary from '../components/ErrorBoundary';
@@ -92,6 +92,8 @@ import DocumentListScreen from '../screens/Documents/DocumentListScreen';
 import StaffNotesFeed from '../screens/StaffNotes/StaffNotesFeed';
 import { useSelectedGuest } from '../hooks/useSelectedGuest';
 import { useSelectedHouse } from '../hooks/useSelectedHouse';
+import { RatsKeyboardScreenLayout } from '../components/rats-keyboard';
+import { ScreenModalHost } from '../context/ModalContext';
 
 // Wrapper to inject Redux guest+house into RentPaymentScreen
 const RentPaymentConnector = ({ navigation }: any) => {
@@ -112,6 +114,13 @@ const RentPaymentConnector = ({ navigation }: any) => {
 };
 
 // Phase 6.1: Simplified navigators - removed nested stacks
+const ModalScreenLayout = ({ children }: { children: React.ReactNode }) => (
+  <RatsKeyboardScreenLayout>
+    {children}
+    <ScreenModalHost />
+  </RatsKeyboardScreenLayout>
+);
+
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const SetupStack = createNativeStackNavigator<SetupStackParamList>();
@@ -325,7 +334,11 @@ export const RootNavigator = ({
 
     {/* Phase 6.1: All modal screens (consolidated from nested stacks) */}
     <RootStack.Group
-      screenOptions={{ presentation: 'modal', headerShown: false }}>
+      screenOptions={{ presentation: 'modal', headerShown: false }}
+      // iOS presents these above the app root, which hides its keyboard
+      // toolbar and can't present the app's modals over them; each modal screen
+      // gets its own.
+      screenLayout={ModalScreenLayout}>
       {/* Existing modal screens */}
       <RootStack.Screen name={Routes.HouseList} component={HousesOverview} />
       <RootStack.Screen

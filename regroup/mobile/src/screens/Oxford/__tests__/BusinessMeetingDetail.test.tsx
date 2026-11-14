@@ -11,6 +11,7 @@ jest.mock('../../../hooks/useOxfordGate', () => ({
 }));
 
 import React from 'react';
+import { keyboardAncestor } from '../../../components/rats-keyboard/__tests__/keyboardAncestor';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
@@ -183,5 +184,14 @@ describe('BusinessMeetingDetail', () => {
       // After failure, attendee should not remain in list (reverted)
       expect(mockUpdateMeeting).toHaveBeenCalled();
     });
+  });
+});
+
+// ─── Keyboard (plan Task 15) ──────────────────────────────────────────────────
+describe('BusinessMeetingDetail keyboard', () => {
+  it('keeps the minutes field in a RatsScrollView (IQKeyboardManager-only before)', () => {
+    setup();
+    const { getByTestId } = renderScreen(<BusinessMeetingDetail navigation={nav} route={route} />);
+    expect(keyboardAncestor(getByTestId('minutes-input'))).toBe('RatsScrollView');
   });
 });

@@ -1,0 +1,31 @@
+# Fills Stripe's PaymentSheet with a test card and submits it.
+#
+#   runFlow:
+#     file: ../subflows/payment-sheet-card.yaml
+#     env:
+#       CARD_NUMBER: "4242424242424242"
+appId: ${APP_ID}
+---
+- runFlow: guard-e2e-app.yaml
+# Matched by text, since the labels differ a little by platform ("ZIP", "ZIP Code").
+# Each card field moves to the next when it is full.
+- extendedWaitUntil:
+    visible:
+      text: "Card number.*"
+    timeout: 60000
+- tapOn:
+    text: "Card number.*"
+- inputText: ${CARD_NUMBER}
+- waitForAnimationToEnd
+- inputText: "1234"
+- waitForAnimationToEnd
+- inputText: "123"
+- waitForAnimationToEnd
+- tapOn:
+    text: "ZIP.*"
+- inputText: "78701"
+- waitForAnimationToEnd
+- hideKeyboard:
+    optional: true
+- tapOn:
+    text: "Pay \\$.*"

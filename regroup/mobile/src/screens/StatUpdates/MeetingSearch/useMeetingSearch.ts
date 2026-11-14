@@ -80,6 +80,7 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
     houseId: checkInGuestId ? house?.id : undefined,
     startDate: todaysDate,
     endDate: todaysDate,
+    timeZone: house?.timezone,
     type: ActivityType.MEETING,
   });
 
@@ -97,17 +98,13 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
 
   const hasPermissionRef = useRef<boolean>(false);
 
-  // Check if meetings already exist
-  const alreadyHasMeetings = useCallback(() => {
-    return meetings && meetings.length;
-  }, [meetings]);
-
-  // Initialize location on mount
+  // Initialize location on mount, once. Every new location starts a search, so
+  // re-running this on a render loops: search, re-render, new location, search.
   useEffect(() => {
     const initializeLocation = async () => {
       hasPermissionRef.current =
         (await checkAndRequestLocationPermissions()) as boolean;
-      if (hasPermissionRef.current && !alreadyHasMeetings()) {
+      if (hasPermissionRef.current) {
         getCurrentPosition(
           (position: any) => {
             const location = {
@@ -126,7 +123,7 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
     };
 
     initializeLocation();
-  }, [alreadyHasMeetings]);
+  }, []);
 
   // Execute search when filters change (with location)
   useEffect(() => {

@@ -36,9 +36,9 @@ exports[`HelpIcon snapshot matches 1`] = `
   }
 >
   <FontAwesome5Icon
+    iconStyle="solid"
     name="question-circle"
     size={30}
-    solid={true}
     style={
       [
         {

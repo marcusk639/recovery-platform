@@ -1,13 +1,14 @@
 import { User } from '../entities/User';
 import { Role } from '../entities/Roles';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import type { UserCredential } from '@react-native-firebase/auth';
 
-export const userIsAnonymous = (user: User | FirebaseAuthTypes.User) =>
+/** Any user with an email field: the app's User or either RNFirebase API's. */
+export const userIsAnonymous = (user: Pick<User, 'email'> | { email?: string | null }) =>
   user.email === null || user.email === undefined;
 
 export const getFirebaseUserFromUserCredential = (
-  firebaseUser: FirebaseAuthTypes.UserCredential,
-): FirebaseAuthTypes.UserCredential => {
+  firebaseUser: UserCredential,
+): UserCredential => {
   // Access internal _user property if available, otherwise return the credential
   const internalUser = (firebaseUser.user as any)?._user;
   return internalUser || firebaseUser;

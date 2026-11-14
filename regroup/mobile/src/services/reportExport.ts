@@ -1,16 +1,20 @@
 import { Platform } from 'react-native';
+import { csvCell, recordAmountCsv } from '../util/paymentDisplay';
 import { format, parseISO } from 'date-fns';
+import { toDateSafe } from '../util/firestore';
+import { generatePDF } from 'react-native-html-to-pdf';
 
 import { RentPayment } from './payments';
+import { paymentDisplayStatus } from '../util/paymentStatus';
 
 import { Guest } from '../entities/Guest';
 import { WeekStats } from '../entities/WeekSummary';
 import { PhaseRule } from '../entities/Phase';
 
-// react-native-html-to-pdf is excluded from the iOS autolinked pod set
-// (see react-native.config.js) to unblock E2E builds. Load the JS module
-// lazily so opening this service on iOS doesn't throw on import.
-// Callers should also check isPDFExportAvailable() before invoking.
+// PDF export is offered on Android only, as before the React Native 0.88
+// upgrade. react-native-html-to-pdf 1.3.0 is a TurboModule linked on both
+// platforms; enabling iOS is a product decision, not yet verified on a device
+// (decision record, Task 6). Callers check isPDFExportAvailable() first.
 export function isPDFExportAvailable(): boolean {
   return Platform.OS !== 'ios';
 }
@@ -104,26 +108,28 @@ export async function exportWeeklyReportPDF(
     );
   }
 
-  // Lazy require so the JS module isn't loaded (and its native bridge
-  // isn't resolved) on platforms where the pod is excluded.
-  //
-  // `.convert` on the default export, not the named `generatePDF` of the 1.x
-  // line: 1.x is a Kotlin rewrite against BaseReactPackage, an API that does
-  // not exist in React Native 0.72, so it cannot compile here. 0.12.x is the
-  // last all-Java release and takes the same { html, fileName, directory }.
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const RNHTMLtoPDF = require('react-native-html-to-pdf').default;
-  const file = await RNHTMLtoPDF.convert(options);
+  // 1.x's named generatePDF takes the same { html, fileName, directory } as
+  // 0.12's default `.convert`.
+  const file = await generatePDF(options);
   return file.filePath;
 }
 
 // ─── CSV Export ───────────────────────────────────────────────────────────────
 
-function escapeCsvField(value: string): string {
-  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
-    return `"${value.replace(/"/g, '""')}"`;
+// Quotes and formula-guards every text cell (see csvCell).
+const escapeCsvField = csvCell;
+
+/**
+ * A payment's `createdAt` as yyyy-MM-dd, or '' when it can't be read. Firestore
+ * records carry a Timestamp (#168); the callables return ISO strings, parsed as
+ * before so a date-only value stays on its local day.
+ */
+function paymentDate(createdAt: unknown): string {
+  if (!createdAt) {
+    return '';
   }
-  return value;
+  const date = typeof createdAt === 'string' ? parseISO(createdAt) : toDateSafe(createdAt);
+  return date && !Number.isNaN(date.getTime()) ? format(date, 'yyyy-MM-dd') : '';
 }
 
 /**
@@ -136,10 +142,10 @@ export function exportPaymentHistoryCSV(
 ): string {
   const header = ['Date', 'Guest', 'Amount ($)', 'Status', 'Description'].join(',');
   const rows = payments.map((p) => {
-    const date = p.createdAt ? format(parseISO(p.createdAt as string), 'yyyy-MM-dd') : '';
+    const date = paymentDate(p.createdAt);
     const guest = escapeCsvField(guestNames[p.guestId] ?? p.guestId);
-    const amount = String(p.amount ?? '');
-    const status = escapeCsvField(p.status);
+    const amount = recordAmountCsv(p);
+    const status = escapeCsvField(paymentDisplayStatus(p).label);
     const description = escapeCsvField(p.description ?? '');
     return [date, guest, amount, status, description].join(',');
   });

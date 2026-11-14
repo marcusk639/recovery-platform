@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { Alert, View, FlatList, StyleSheet } from 'react-native';
-import * as DocumentPicker from 'react-native-document-picker';
-import * as RNFS from 'react-native-fs';
+import {
+  errorCodes,
+  isErrorWithCode,
+  keepLocalCopy,
+  pick,
+  types,
+} from '@react-native-documents/picker';
+import { readFile } from '@dr.pogodin/react-native-fs';
 import { useNavigation } from '@react-navigation/native';
 import {
   parseGuestCsv,
@@ -25,16 +31,26 @@ const GuestImportScreen: React.FC = () => {
 
   const handlePickFile = async () => {
     try {
-      const [file] = await DocumentPicker.pick({
-        type: [DocumentPicker.types.plainText],
+      // CSV as well as plain text: Android reports a .csv file as text/csv (or
+      // text/comma-separated-values), which a plain-text-only filter greyed out.
+      const [file] = await pick({ type: [types.csv, types.plainText].flat() });
+      const [copy] = await keepLocalCopy({
+        files: [{ uri: file.uri, fileName: file.name ?? 'import.csv' }],
+        destination: 'cachesDirectory',
       });
-      const content = await RNFS.readFile(file.uri, 'utf8');
+      if (copy.status === 'error') {
+        logException(new Error(copy.copyError), 'GuestImportScreen: keepLocalCopy');
+        setParseError('Could not read file. Make sure it is a valid CSV.');
+        return;
+      }
+      // Never log `content`: it holds residents' names and contact details.
+      const content = await readFile(copy.localUri, 'utf8');
       const parsed = parseGuestCsv(content);
       setRows(parsed);
       setParseError(null);
       setImportedCount(null);
     } catch (error) {
-      if (!DocumentPicker.isCancel(error)) {
+      if (!(isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED)) {
         setParseError('Could not read file. Make sure it is a valid CSV.');
         logException(error);
       }

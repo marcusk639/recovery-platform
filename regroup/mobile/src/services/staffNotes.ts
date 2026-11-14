@@ -8,6 +8,16 @@
  * Client code still defends in depth by reading `auth.currentUser` and
  * failing fast if no user is present.
  */
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  query,
+  updateDoc,
+  where,
+} from '@react-native-firebase/firestore';
 import { firestore, auth } from '../../firebase-setup';
 import {
   StaffNote,
@@ -18,7 +28,7 @@ import { logException } from '../util/logging';
 
 // ─── Firestore collection ─────────────────────────────────────────────────────
 
-export const staffNotesCollection = firestore.collection('staffNotes');
+export const staffNotesCollection = collection(firestore, 'staffNotes');
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -98,7 +108,7 @@ export async function addStaffNote(input: AddStaffNoteInput): Promise<string> {
   };
 
   try {
-    const ref = await staffNotesCollection.add(payload);
+    const ref = await addDoc(staffNotesCollection, payload);
     return ref.id;
   } catch (err) {
     logException(err);
@@ -117,11 +127,14 @@ export async function listResidentNotes(
 ): Promise<StaffNote[]> {
   if (!houseId || !guestId) return [];
   try {
-    const snap = await staffNotesCollection
-      .where('houseId', '==', houseId)
-      .where('type', '==', 'resident_note')
-      .where('guestId', '==', guestId)
-      .get();
+    const snap = await getDocs(
+      query(
+        staffNotesCollection,
+        where('houseId', '==', houseId),
+        where('type', '==', 'resident_note'),
+        where('guestId', '==', guestId),
+      ),
+    );
     const notes = snap.docs
       .map(d => docToStaffNote(d.id, d.data()))
       .filter((n): n is StaffNote => n !== null);
@@ -139,10 +152,13 @@ export async function listResidentNotes(
 export async function listShiftLogs(houseId: string): Promise<StaffNote[]> {
   if (!houseId) return [];
   try {
-    const snap = await staffNotesCollection
-      .where('houseId', '==', houseId)
-      .where('type', '==', 'shift_log')
-      .get();
+    const snap = await getDocs(
+      query(
+        staffNotesCollection,
+        where('houseId', '==', houseId),
+        where('type', '==', 'shift_log'),
+      ),
+    );
     const notes = snap.docs
       .map(d => docToStaffNote(d.id, d.data()))
       .filter((n): n is StaffNote => n !== null);
@@ -157,7 +173,7 @@ export async function listShiftLogs(houseId: string): Promise<StaffNote[]> {
 export async function deleteStaffNote(noteId: string): Promise<void> {
   if (!noteId) throw new Error('deleteStaffNote: noteId is required.');
   try {
-    await staffNotesCollection.doc(noteId).delete();
+    await deleteDoc(doc(staffNotesCollection, noteId));
   } catch (err) {
     logException(err);
     throw err;
@@ -171,7 +187,7 @@ export async function pinStaffNote(
 ): Promise<void> {
   if (!noteId) throw new Error('pinStaffNote: noteId is required.');
   try {
-    await staffNotesCollection.doc(noteId).update({ pinned });
+    await updateDoc(doc(staffNotesCollection, noteId), { pinned });
   } catch (err) {
     logException(err);
     throw err;

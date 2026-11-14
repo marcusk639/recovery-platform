@@ -23,6 +23,7 @@ jest.mock('@react-native-community/geolocation', () => ({
   clearWatch: jest.fn(),
   stopObserving: jest.fn(),
   requestAuthorization: jest.fn(),
+  setRNConfiguration: jest.fn(),
 }));
 
 jest.mock('react-native-permissions', () => ({

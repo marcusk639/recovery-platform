@@ -68,13 +68,15 @@ const RatsRadioButtonGroup = (props: Props & FieldProps) => {
   const {
     field: { name, value },
     form: { setFieldValue, errors, touched },
-    disabled,
+    // Former defaultProps (React 19 ignores them on function components);
+    // flexDirection was defaulted but never read.
+    disabled = false,
     labelHorizontal = true,
     formHorizontal = true,
     buttonColor = color.black,
     selectedButtonColor = color.black,
     radioButtons,
-    labelDisabled,
+    labelDisabled = false,
     label,
     containerStyle,
     labelContainerStyle,
@@ -163,12 +165,6 @@ const RatsRadioButtonGroup = (props: Props & FieldProps) => {
       </RadioForm>
     </View>
   );
-};
-
-RatsRadioButtonGroup.defaultProps = {
-  flexDirection: 'row',
-  disabled: false,
-  labelDisabled: false,
 };
 
 export default withRats(RatsRadioButtonGroup);

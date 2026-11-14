@@ -24,7 +24,7 @@ import { Routes } from '../../navigation/types';
 
 interface Props {
   header: string;
-  icon?: JSX.Element;
+  icon?: React.JSX.Element;
   container?: ViewStyle;
   renderBackButton?: boolean;
   renderHouseButton?: boolean;

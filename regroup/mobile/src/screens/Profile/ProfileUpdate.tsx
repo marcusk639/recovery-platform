@@ -28,7 +28,7 @@ import {
 } from '../../entities/ActivityModel';
 
 interface ProfileUpdateFormProps {
-  field: JSX.Element;
+  field: React.JSX.Element;
   guest: Guest;
   guests: Guests;
   house: House;

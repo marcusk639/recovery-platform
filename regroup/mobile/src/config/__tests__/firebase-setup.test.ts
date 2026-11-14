@@ -11,10 +11,28 @@
 jest.unmock('../firebase-emulator');
 
 let mockProjectId = '';
+const mockApp = { options: { projectId: '' } };
 jest.mock('@react-native-firebase/app', () => ({
   __esModule: true,
-  default: { app: () => ({ options: { projectId: mockProjectId } }) },
+  getApp: () => {
+    mockApp.options.projectId = mockProjectId;
+    return mockApp;
+  },
 }));
+jest.mock('@react-native-firebase/auth', () => require('../../../__mocks__/firebase-modular/auth'));
+jest.mock('@react-native-firebase/firestore', () =>
+  require('../../../__mocks__/firebase-modular/firestore'),
+);
+jest.mock('@react-native-firebase/storage', () =>
+  require('../../../__mocks__/firebase-modular/storage'),
+);
+jest.mock('@react-native-firebase/functions', () =>
+  require('../../../__mocks__/firebase-modular/functions'),
+);
+jest.mock('@react-native-firebase/messaging', () =>
+  require('../../../__mocks__/firebase-modular/messaging'),
+);
+jest.mock('../../util/logging', () => ({ logException: jest.fn() }));
 
 const originalVariant = process.env.E2E_VARIANT;
 const originalStripeKey = process.env.STRIPE_PUBLISHABLE_KEY;
@@ -163,6 +181,69 @@ describe('react-native-launch-arguments loading', () => {
     setVariant('emulator');
     mockProjectId = 'demo-regroup-e2e';
     expect(loadWithFactorySpy()).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('SDK instances', () => {
+  it('builds Firestore with ignoreUndefinedProperties on the default app', () => {
+    setVariant(undefined);
+    mockProjectId = 'phoenix-cleanhouse';
+
+    const setup = loadFirebaseSetup();
+    const firestoreSdk = require('@react-native-firebase/firestore');
+
+    expect(firestoreSdk.initializeFirestore).toHaveBeenCalledTimes(1);
+    expect(firestoreSdk.initializeFirestore).toHaveBeenCalledWith(mockApp, {
+      ignoreUndefinedProperties: true,
+    });
+    expect(setup.firestore).toBe(firestoreSdk.instance);
+  });
+
+  it('connects the emulator to the same Firestore instance initializeFirestore built, after it', async () => {
+    setVariant('emulator');
+    mockProjectId = 'demo-regroup-e2e';
+
+    const setup = loadFirebaseSetup();
+    await setup.emulatorConnection;
+    const firestoreSdk = require('@react-native-firebase/firestore');
+    const built = await firestoreSdk.initializeFirestore.mock.results[0].value;
+
+    expect(firestoreSdk.connectFirestoreEmulator).toHaveBeenCalledTimes(1);
+    expect(firestoreSdk.connectFirestoreEmulator.mock.calls[0][0]).toBe(built);
+    expect(setup.firestore).toBe(built);
+    expect(firestoreSdk.initializeFirestore.mock.invocationCallOrder[0]).toBeLessThan(
+      firestoreSdk.connectFirestoreEmulator.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('logs a failed Firestore initialization instead of throwing at import', async () => {
+    setVariant(undefined);
+    mockProjectId = 'phoenix-cleanhouse';
+    const failure = new Error('settings rejected');
+    require('@react-native-firebase/firestore').initializeFirestore.mockImplementationOnce(() => {
+      throw failure;
+    });
+
+    expect(() => loadFirebaseSetup()).not.toThrow();
+    await new Promise(process.nextTick);
+
+    const { logException } = require('../../util/logging');
+    expect(logException).toHaveBeenCalledWith(failure, 'firebase-setup: initializeFirestore');
+  });
+
+  it('callHttpsFunction calls httpsCallable(functions, name) with the payload', async () => {
+    setVariant(undefined);
+    mockProjectId = 'phoenix-cleanhouse';
+    const functionsSdk = require('@react-native-firebase/functions');
+    const callable = jest.fn(() => Promise.resolve({ data: { ok: true } }));
+    const httpsCallable = jest.spyOn(functionsSdk, 'httpsCallable').mockReturnValue(callable);
+
+    const setup = loadFirebaseSetup();
+    const result = await setup.callHttpsFunction('findMeetings', { lat: 1 });
+
+    expect(httpsCallable).toHaveBeenCalledWith(functionsSdk.instance, 'findMeetings');
+    expect(callable).toHaveBeenCalledWith({ lat: 1 });
+    expect(result).toEqual({ data: { ok: true } });
   });
 });
 

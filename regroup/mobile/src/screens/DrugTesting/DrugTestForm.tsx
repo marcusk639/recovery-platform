@@ -9,6 +9,9 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import RatsScrollView, {
+  IQ_SCROLL_VIEW_PROPS,
+} from '../../components/rats-scroll-view';
 import { useNavigation } from '@react-navigation/native';
 import { useData } from '../../context/DataContext';
 import { useGuests } from '../../state/queries/guestQueries';
@@ -111,7 +114,7 @@ export default function DrugTestForm() {
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <RatsScrollView {...IQ_SCROLL_VIEW_PROPS} style={styles.container} contentContainerStyle={styles.content}>
       <RatsText translate={false} text="Log Drug Test" style={styles.title} />
 
       {/* Guest Picker */}
@@ -250,7 +253,7 @@ export default function DrugTestForm() {
           style={styles.submitText}
         />
       </TouchableOpacity>
-    </ScrollView>
+    </RatsScrollView>
   );
 }
 

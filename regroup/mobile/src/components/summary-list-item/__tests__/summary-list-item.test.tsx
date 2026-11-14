@@ -22,7 +22,7 @@ jest.mock("../../../context", () => ({
   useTranslation: () => ({ t: (k: string) => k, i18n: { language: "en" } }),
 }));
 
-jest.mock("react-native-vector-icons/FontAwesome5", () => {
+jest.mock("@react-native-vector-icons/fontawesome5/static", () => {
   const React = require("react");
   const { View } = require("react-native");
   const FontAwesome5 = (props: any) => (

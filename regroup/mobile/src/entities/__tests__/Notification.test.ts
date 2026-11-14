@@ -1,11 +1,4 @@
-// Mock moment-timezone used inside util/display
-jest.mock('moment-timezone', () => {
-  const m = jest.requireActual('moment');
-  (m as any).tz = { guess: () => 'UTC' };
-  return m;
-});
-
-// Mock display utilities that depend on moment
+// Mock display utilities
 jest.mock('../../util/display', () => ({
   getTodaysDate: () => '2026-02-22',
   getCurrentTime: () => '2026-02-22T00:00:00Z',

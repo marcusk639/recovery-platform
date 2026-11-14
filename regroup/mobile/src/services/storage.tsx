@@ -1,13 +1,19 @@
 import { handleError } from './errors/storage';
 import { House } from '../entities/House';
-import storage, { FirebaseStorageTypes } from '@react-native-firebase/storage';
+import {
+  getDownloadURL,
+  getStorage,
+  putFile,
+  ref,
+  type SettableMetadata,
+} from '@react-native-firebase/storage';
 
 // Example house reference: rats-dev.appspot.com/houses/{houseId}
 // Example guest reference: rats-dev.appspot.com/houses/{houseId}/guests/{guestId}
 // Example chore reference: rats-dev.appspot.com/houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName}
 
-const bucket = storage().ref();
-const housesRef = storage().ref('houses');
+const bucket = ref(getStorage());
+const housesRef = ref(getStorage(), 'houses');
 // const guestsRef = storage.ref('guests');
 
 const guestAvatarRefUrl = (houseId: string, guestId: string) =>
@@ -28,11 +34,12 @@ export const getGuestAvatarDownloadURL = async (
   fileName?: string,
 ) => {
   fileName = fileName || `${guestId}_avatar`;
-  const avatarRef = storage().ref(
+  const avatarRef = ref(
+    getStorage(),
     getGuestAvatarUrl(houseId, guestId, fileName),
   );
   try {
-    return await avatarRef.getDownloadURL();
+    return await getDownloadURL(avatarRef);
     // console.log('AVATAR URL', avatarUrl);
   } catch (error) {
     handleError(error);
@@ -42,20 +49,18 @@ export const getGuestAvatarDownloadURL = async (
 export const uploadPhoto = async (
   url: string,
   pathOnDevice: string,
-  metadata?: FirebaseStorageTypes.SettableMetadata,
+  metadata?: SettableMetadata,
 ) => {
-  return storage()
-    .ref(url)
-    .putFile(pathOnDevice, {
-      cacheControl: 'public, max-age=31536000',
-      ...(metadata || {}),
-    });
+  return putFile(ref(getStorage(), url), pathOnDevice, {
+    cacheControl: 'public, max-age=31536000',
+    ...(metadata || {}),
+  });
 };
 
 export const uploadUserAvatar = async (
   pathOnDevice: string,
   userId: string,
-  metadata?: FirebaseStorageTypes.SettableMetadata,
+  metadata?: SettableMetadata,
 ) => {
   return uploadPhoto(getUserAvatarUrl(userId), pathOnDevice, metadata);
 };
@@ -64,7 +69,7 @@ export const uploadGuestAvatar = async (
   pathOnDevice: string,
   houseId: string,
   guestId: string,
-  metadata?: FirebaseStorageTypes.SettableMetadata,
+  metadata?: SettableMetadata,
 ) => {
   return uploadPhoto(
     guestAvatarRefUrl(houseId, guestId),
@@ -80,23 +85,23 @@ export const uploadChoreEvidencePhoto = async (
   pathOnDevice: string,
   houseId: string,
   activityId: string,
-  metadata?: FirebaseStorageTypes.SettableMetadata,
+  metadata?: SettableMetadata,
 ): Promise<string> => {
   const storagePath = getChoreEvidenceUrl(houseId, activityId);
   await uploadPhoto(storagePath, pathOnDevice, metadata);
-  return storage().ref(storagePath).getDownloadURL();
+  return getDownloadURL(ref(getStorage(), storagePath));
 };
 
 export const uploadHousePhoto = async (
   pathOnDevice: string,
   house: Partial<House>,
-  metadata?: FirebaseStorageTypes.SettableMetadata,
+  metadata?: SettableMetadata,
 ) => {
   const item = await uploadPhoto(
     getHousePhotoUrl(house.id!),
     pathOnDevice,
     metadata,
   );
-  const url = await storage().ref(item.metadata.fullPath).getDownloadURL();
+  const url = await getDownloadURL(ref(getStorage(), item.metadata.fullPath));
   return { houseId: house.id!, url };
 };

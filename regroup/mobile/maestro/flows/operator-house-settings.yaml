@@ -29,9 +29,9 @@ tags:
 # Managers section is the testID'd anchor on this screen.
 - assertVisible:
     id: "managers-section"
-    optional: true
-- assertVisible:
-    id: "manage-guests-button"
-    optional: true
+- scrollUntilVisible:
+    element:
+      id: "manage-guests-button"
+    direction: DOWN
 - runFlow:
     file: ../subflows/logout.yaml

@@ -27,6 +27,7 @@ exports[`NavBar snapshot matches 1`] = `
     }
     accessible={true}
     focusable={true}
+    iconStyle="solid"
     name="bars"
     onClick={[Function]}
     onResponderGrant={[Function]}

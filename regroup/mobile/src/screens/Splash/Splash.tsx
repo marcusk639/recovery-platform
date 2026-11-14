@@ -1,7 +1,15 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { View, StyleSheet } from "react-native";
-import messaging from "@react-native-firebase/messaging";
-import auth from "@react-native-firebase/auth";
+import {
+  AuthorizationStatus,
+  getMessaging,
+  getToken,
+  onMessage as onFirebaseMessage,
+  onTokenRefresh,
+  requestPermission,
+  setBackgroundMessageHandler,
+} from "@react-native-firebase/messaging";
+import { getAuth, onAuthStateChanged } from "@react-native-firebase/auth";
 import { normalize } from "../../styles/theme";
 import { RatsLogo } from "../../components/rats-logo";
 import {
@@ -21,7 +29,8 @@ import { logException } from "../../util/logging";
 import { subscriptionStatus } from "../../util/subscription";
 import { User } from "../../entities/User";
 import { NativeDeepLink } from "../../services/native-deep-links";
-import notifee from "@notifee/react-native";
+import isNil from "lodash/isNil";
+import { displayRemoteMessage } from "../../services/notifications/remoteMessage";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
 import { DeepLinkTester } from "../../components/DeepLinkTester";
@@ -74,17 +83,17 @@ export const withSplash = <P extends object>(
     const authSubscriptionRef = useRef<(() => void) | null>(null);
     const onTokenRefreshListenerRef = useRef<(() => any) | null>(null);
     const linkSubscriptionRef = useRef<(() => void) | null>(null);
-
-    const onMessage = messaging().onMessage(async (message) => {
-      if (message?.data?.notifee) {
-        const res = await notifee.displayNotification(
-          JSON.parse(message.data.notifee as string),
-        );
-      }
-    });
+    // The token handlers outlive the render that created them (the refresh
+    // listener is registered once at mount, before autoLogin sets the user),
+    // so they read the user and dispatch from here, never from a render's
+    // closure. That also keeps them stable, so the token is read once per user.
+    const latest = useRef({ userState, dispatch });
+    useEffect(() => {
+      latest.current = { userState, dispatch };
+    }, [userState, dispatch]);
 
     const initBackgroundMessageHandler = useCallback(() => {
-      messaging().setBackgroundMessageHandler(async (_message) => {
+      setBackgroundMessageHandler(getMessaging(), async (_message) => {
         // Background handler runs in headless JS context — keep it a
         // no-op here. If app-level handling is needed, dispatch a
         // structured action rather than logging the full payload
@@ -92,41 +101,47 @@ export const withSplash = <P extends object>(
       });
     }, []);
 
-    // The token callbacks outlive the render that created them (the refresh
-    // listener is registered once on mount), so they read the user from here.
-    const userStateRef = useRef(userState);
-    userStateRef.current = userState;
-
     const updateTokenIfNecessary = useCallback(
       async (fcmToken: string) => {
-        const { user, updating } = userStateRef.current;
-        if (!user || updating) {
-          return;
-        }
-        const tokens = user.messagingToken ?? [];
-        if (tokens.includes(fcmToken)) {
+        const { user, updating } = latest.current.userState;
+        const token = user?.messagingToken;
+        if (!user) {
           return;
         }
         try {
-          await dispatch(
-            updateUser({
-              user: user as User,
-              updates: { messagingToken: [...tokens, fcmToken] },
-            }),
-          ).unwrap();
+          // Hardened 2026-07-05: both branches were commented out with a
+          // stale "should be imported if available" note — updateUser was
+          // already a real, working thunk (used elsewhere in this file and
+          // across the app). No other write site for messagingToken exists
+          // anywhere, so push notifications could never reach any user.
+          if (!updating && (isNil(token) || !token.length)) {
+            await latest.current.dispatch(
+              updateUser({
+                user: user as User,
+                updates: { messagingToken: [fcmToken] },
+              }),
+            ).unwrap();
+          } else if (!updating && !token!.includes(fcmToken)) {
+            await latest.current.dispatch(
+              updateUser({
+                user: user as User,
+                updates: { messagingToken: [...token!, fcmToken] },
+              }),
+            ).unwrap();
+          }
         } catch (error) {
           logException(error, "Failed to persist messaging token");
         }
       },
-      [dispatch],
+      [],
     );
 
     const handleMessagingToken = useCallback(async () => {
       try {
-        const authStatus = await messaging().requestPermission();
+        const authStatus = await requestPermission(getMessaging());
         const granted =
-          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+          authStatus === AuthorizationStatus.AUTHORIZED ||
+          authStatus === AuthorizationStatus.PROVISIONAL;
         if (!granted) {
           logException(
             new Error("FCM permission denied"),
@@ -134,8 +149,8 @@ export const withSplash = <P extends object>(
           );
           return;
         }
-        const messagingToken = await messaging().getToken();
-        await updateTokenIfNecessary(messagingToken);
+        const messagingToken = await getToken(getMessaging());
+        updateTokenIfNecessary(messagingToken);
       } catch (error) {
         logException(error, "Splash - failed to request FCM permission");
       }
@@ -156,7 +171,8 @@ export const withSplash = <P extends object>(
 
     const authUser = useCallback((): Promise<any> => {
       return new Promise((resolve, reject) => {
-        authSubscriptionRef.current = auth().onAuthStateChanged(
+        authSubscriptionRef.current = onAuthStateChanged(
+          getAuth(),
           async (_user) => {
             if (_user) {
               resolve(_user);
@@ -169,10 +185,31 @@ export const withSplash = <P extends object>(
     }, []);
 
     const registerMessageTokenListener = useCallback(() => {
-      onTokenRefreshListenerRef.current = messaging().onTokenRefresh(
-        updateTokenIfNecessary,
+      onTokenRefreshListenerRef.current = onTokenRefresh(
+        getMessaging(),
+        async (fcmToken) => {
+          const { user, updating } = latest.current.userState;
+          // iOS reports the current token at every launch, not only on rotation;
+          // the server pushes to every stored copy.
+          if (!user || updating || user.messagingToken?.includes(fcmToken)) {
+            return;
+          }
+          const _nextTokens = user.messagingToken
+            ? [...user.messagingToken, fcmToken]
+            : [fcmToken];
+          try {
+            await latest.current.dispatch(
+              updateUser({
+                user: user as User,
+                updates: { messagingToken: _nextTokens },
+              }),
+            ).unwrap();
+          } catch (error) {
+            logException(error, "Failed to persist refreshed messaging token");
+          }
+        },
       );
-    }, [updateTokenIfNecessary]);
+    }, []);
 
     const anonymouslyLoginHandler = useCallback(async () => {
       try {
@@ -280,6 +317,17 @@ export const withSplash = <P extends object>(
         }
       };
     }, []); // Empty dependency array - only run once on mount
+
+    // Foreground pushes: one listener for the component's lifetime, removed on
+    // unmount. (Before RN 0.88 this ran in the render body, adding a listener
+    // on every render, so one push could show several banners.)
+    useEffect(
+      () =>
+        onFirebaseMessage(getMessaging(), (message) =>
+          displayRemoteMessage(message),
+        ),
+      [],
+    );
 
     // componentDidUpdate equivalent
     useEffect(() => {

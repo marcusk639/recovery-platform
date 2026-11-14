@@ -1,17 +1,17 @@
+import { collection, getDocs, query, where } from '@react-native-firebase/firestore';
 import { firestore, auth } from '../../firebase-setup';
 import { logException } from '../util/logging';
 import { Guest } from '../entities/Guest';
 import { WeekSummary } from '../entities/WeekSummary';
 import {
-  startOfWeek,
   subWeeks,
-  format,
   subDays,
   isAfter,
   parseISO,
 } from 'date-fns';
+import { getWeekDatesForDate } from '../hooks/activity/useCurrentWeek';
 
-export const weekSummaryCollection = firestore.collection('week-summaries');
+export const weekSummaryCollection = collection(firestore, 'week-summaries');
 
 export interface OccupancyReport {
   activeCount: number;
@@ -44,8 +44,13 @@ export interface DischargeReport {
   count: number;
 }
 
-export function getSundayAnchoredWeekStart(date: Date): string {
-  return format(startOfWeek(date, { weekStartsOn: 0 }), 'yyyy-MM-dd');
+/**
+ * The week-summaries key for the week containing `date`: its Monday in the
+ * house's zone (default America/New_York), the same rule as the server's
+ * weekStartFor in functions/src/activities/weekSummaryMath.ts, which writes them.
+ */
+export function getComplianceWeekStart(date: Date, timeZone?: string | null): string {
+  return getWeekDatesForDate(date, timeZone).startDate;
 }
 
 function resolveDisplayName(guest: Partial<Guest>): string {
@@ -79,6 +84,7 @@ export async function getComplianceTrend(
   houseId: string,
   guestIds: string[],
   weeksBack: number = 4,
+  timeZone?: string | null,
 ): Promise<ComplianceTrend> {
   if (!auth.currentUser) {
     throw new Error('getComplianceTrend: user not authenticated');
@@ -91,7 +97,7 @@ export async function getComplianceTrend(
   const now = new Date();
   const weekStarts: string[] = [];
   for (let i = 0; i < weeksBack; i++) {
-    weekStarts.push(getSundayAnchoredWeekStart(subWeeks(now, i)));
+    weekStarts.push(getComplianceWeekStart(subWeeks(now, i), timeZone));
   }
   weekStarts.reverse();
 
@@ -104,10 +110,13 @@ export async function getComplianceTrend(
     for (let i = 0; i < guestIds.length; i += CHUNK) {
       const chunk = guestIds.slice(i, i + CHUNK);
       // Only one 'in' operator per Firestore query — filter startDate client-side
-      const snap = await weekSummaryCollection
-        .where('houseId', '==', houseId)
-        .where('guestId', 'in', chunk)
-        .get();
+      const snap = await getDocs(
+        query(
+          weekSummaryCollection,
+          where('houseId', '==', houseId),
+          where('guestId', 'in', chunk),
+        ),
+      );
       snap.docs
         .map(d => d.data() as WeekSummary)
         .filter(doc => weekStartSet.has(doc.startDate))

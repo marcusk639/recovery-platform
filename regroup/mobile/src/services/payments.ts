@@ -7,9 +7,23 @@
  * CF-backed listing for the payments dashboard.
  */
 import { firestore, functions } from "../../firebase-setup";
-import FirebaseFirestore from "@react-native-firebase/firestore";
-import type { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import {
+  collection,
+  doc,
+  getDocs,
+  increment,
+  limit as limitTo,
+  orderBy,
+  query,
+  runTransaction,
+  Timestamp,
+  updateDoc,
+  where,
+  writeBatch,
+} from "@react-native-firebase/firestore";
+import { httpsCallable } from "@react-native-firebase/functions";
 import { asDollars, dollarsToCents } from "../util/money";
+import { toDateSafe } from '../util/firestore';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,7 +40,7 @@ export interface RentPayment {
    * (see newPaymentCreatedAt). ISO strings remain on records written before;
    * functions' migratePaymentCreatedAtToTimestamp converts them.
    */
-  createdAt: FirebaseFirestoreTypes.Timestamp | string;
+  createdAt: Timestamp | string;
   stripePaymentIntentId?: string;
   description?: string; // e.g. 'Monthly Rent', 'Chore Fee'
   /**
@@ -36,6 +50,12 @@ export interface RentPayment {
    * functions' backfillPaymentGuestUserId runs.
    */
   guestUserId?: string;
+  /** Cumulative cents refunded, from the webhook. `status` stays "succeeded". */
+  refundedAmountCents?: number;
+  /** Set when a dispute opens. `status` stays "succeeded". */
+  disputed?: boolean;
+  /** Lower-case ISO code; usd unless the webhook quarantined the record. */
+  currency?: string;
 }
 
 /** Result returned by the 'createPaymentIntent' Cloud Function. */
@@ -80,7 +100,12 @@ export interface HousePaymentRecord extends PaymentRecord {
 
 // ─── Firestore collection ─────────────────────────────────────────────────────
 
-export const paymentsCollection = firestore.collection("payments");
+export const paymentsCollection = collection(firestore, "payments");
+
+/** A new payment doc id, made before the write so a retry can reuse it. */
+export function createPaymentId(): string {
+  return doc(paymentsCollection).id;
+}
 
 // ─── Legacy Firestore-backed service functions ────────────────────────────────
 
@@ -153,7 +178,7 @@ export async function createRentPaymentIntent({
       `Payment amount ${amountInCents} exceeds maximum (${MAX_PAYMENT_CENTS} cents / $100,000).`
     );
   }
-  const response = await functions.httpsCallable("createPaymentIntent")({
+  const response = await httpsCallable(functions, "createPaymentIntent")({
     amount: amountInCents,
     guestId,
     houseId,
@@ -171,8 +196,7 @@ export async function createRentPaymentIntent({
  * descending orderBy("createdAt") (getPaymentHistory) put every string-dated
  * payment above every card payment regardless of date.
  */
-export const newPaymentCreatedAt = (date: Date): FirebaseFirestoreTypes.Timestamp =>
-  FirebaseFirestore.Timestamp.fromDate(date);
+export const newPaymentCreatedAt = (date: Date): Timestamp => Timestamp.fromDate(date);
 
 /**
  * Write an optimistic payment record to Firestore immediately after the
@@ -207,12 +231,12 @@ export async function recordRentPayment(
   guestUserId?: string,
 ): Promise<RentPayment> {
   const docRef = stripePaymentIntentId
-    ? paymentsCollection.doc(stripePaymentIntentId)
-    : paymentsCollection.doc();
+    ? doc(paymentsCollection, stripePaymentIntentId)
+    : doc(paymentsCollection);
 
-  return firestore.runTransaction(async (transaction) => {
+  return runTransaction(firestore, async (transaction) => {
     const snap = await transaction.get(docRef);
-    const existing = snap.exists ? (snap.data() as RentPayment) : undefined;
+    const existing = snap.exists() ? (snap.data() as RentPayment) : undefined;
 
     if (existing && existing.status !== "pending") {
       // The webhook already made this record authoritative — don't
@@ -246,6 +270,13 @@ export function paymentIntentIdFromClientSecret(clientSecret: string): string {
   return clientSecret.split("_secret_")[0];
 }
 
+// The Stripe webhook writes card payments without an `id` field, so the document
+// id stands in; app-written records keep the `id` they carry.
+const toRentPayment = (payment: { id: string; data: () => unknown }): RentPayment => {
+  const data = payment.data() as RentPayment;
+  return { ...data, id: data.id ?? payment.id };
+};
+
 export interface PaymentHistoryScope {
   houseId: string;
   /** The resident's Firebase uid (guests/{guestId}.userId). */
@@ -270,17 +301,69 @@ export async function getPaymentHistory(
   if (!houseId || !guestUserId) {
     throw new Error('getPaymentHistory: houseId and guestUserId are required');
   }
-  const snapshot = await paymentsCollection
-    .where('houseId', '==', houseId)
-    .where('guestUserId', '==', guestUserId)
-    .orderBy("createdAt", "desc")
-    .limit(limit)
-    .get();
+  const snapshot = await getDocs(
+    query(
+      paymentsCollection,
+      where('houseId', '==', houseId),
+      where('guestUserId', '==', guestUserId),
+      orderBy("createdAt", "desc"),
+      limitTo(limit)
+    )
+  );
 
   if (!snapshot.docs.length) {
     return [];
   }
-  return snapshot.docs.map((doc) => doc.data() as RentPayment);
+  return snapshot.docs.map(toRentPayment);
+}
+
+/**
+ * Every payment on a guest record, for house staff. It finds records a resident's
+ * uid query can't: those for a guest with no account, and those from before the
+ * account linked. The payments rule denies this to residents.
+ *
+ * Sorted here because sorting on the server needs a composite index that doesn't
+ * exist, and unlimited because a limit without that sort could drop the newest.
+ */
+export async function getGuestPayments({
+  houseId,
+  guestId,
+}: {
+  houseId: string;
+  guestId: string;
+}): Promise<RentPayment[]> {
+  if (!houseId || !guestId) {
+    throw new Error('getGuestPayments: houseId and guestId are required');
+  }
+  const snapshot = await getDocs(
+    query(
+      paymentsCollection,
+      where('houseId', '==', houseId),
+      where('guestId', '==', guestId)
+    )
+  );
+  const createdMs = (payment: RentPayment) => toDateSafe(payment.createdAt)?.getTime() ?? 0;
+  return snapshot.docs.map(toRentPayment).sort((a, b) => createdMs(b) - createdMs(a));
+}
+
+/**
+ * Every payment record for a house, newest first, for the Payment Dashboard and
+ * the balance views. These include manual payments, which the Stripe-backed
+ * listHousePayments callable never sees (#191). Admins only, by the rules.
+ *
+ * Sorted here because sorting on the server needs a (houseId, createdAt) index.
+ */
+export async function getHousePaymentRecords(
+  houseId: string,
+): Promise<RentPayment[]> {
+  if (!houseId) {
+    throw new Error('getHousePaymentRecords: houseId is required');
+  }
+  const snapshot = await getDocs(
+    query(paymentsCollection, where('houseId', '==', houseId)),
+  );
+  const createdMs = (payment: RentPayment) => toDateSafe(payment.createdAt)?.getTime() ?? 0;
+  return snapshot.docs.map(toRentPayment).sort((a, b) => createdMs(b) - createdMs(a));
 }
 
 // ─── CF-backed service functions ──────────────────────────────────────────────
@@ -308,7 +391,7 @@ export async function listPayments(
   houseId: string,
   limit = 20
 ): Promise<PaymentRecord[]> {
-  const result = await functions.httpsCallable("listPayments")({
+  const result = await httpsCallable(functions, "listPayments")({
     guestId,
     houseId,
     limit,
@@ -320,7 +403,7 @@ export async function listHousePayments(
   houseId: string,
   limit = 100
 ): Promise<HousePaymentRecord[]> {
-  const result = await functions.httpsCallable("listHousePayments")({
+  const result = await httpsCallable(functions, "listHousePayments")({
     houseId,
     limit,
   });
@@ -344,6 +427,9 @@ export async function listHousePayments(
  *   Callers must convert from dollars before calling this function.
  * @param guestUserId - The resident's Firebase uid (guests/{guestId}.userId).
  *   Without it the resident cannot read this record (see RentPayment.guestUserId).
+ * @param paymentId - The doc id to write, from createPaymentId. A retry with the
+ *   same id can't record the payment twice: the rules refuse updating a
+ *   payment doc, so a second write to an id that already exists fails.
  */
 export async function recordManualPayment(
   guestId: string,
@@ -352,13 +438,21 @@ export async function recordManualPayment(
   method: "Cash" | "Check" | "Venmo" | "Zelle",
   notes: string = '',
   guestUserId?: string,
+  paymentId?: string,
 ): Promise<HousePaymentRecord> {
   if (!Number.isInteger(amountInCents) || amountInCents <= 0) {
     throw new Error(
       `Invalid payment amount: ${amountInCents}. Must be a positive integer (cents).`
     );
   }
-  const docRef = paymentsCollection.doc();
+  if (amountInCents > MAX_PAYMENT_CENTS) {
+    throw new Error(
+      `Payment amount ${amountInCents} exceeds maximum (${MAX_PAYMENT_CENTS} cents / $100,000).`
+    );
+  }
+  const docRef = paymentId
+    ? doc(paymentsCollection, paymentId)
+    : doc(paymentsCollection);
   const now = new Date();
   const record: HousePaymentRecord = {
     id: docRef.id,
@@ -377,10 +471,10 @@ export async function recordManualPayment(
   // exactly the "stays listed as overdue forever" bug this function exists
   // to fix, just relocated to the failure path. A batch makes both writes
   // succeed or fail together.
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   batch.set(docRef, { ...record, createdAt: newPaymentCreatedAt(now) });
-  batch.update(firestore.collection("guests").doc(guestId), {
-    rentOwed: FirebaseFirestore.FieldValue.increment(-amountInCents),
+  batch.update(doc(collection(firestore, "guests"), guestId), {
+    rentOwed: increment(-amountInCents),
   });
   await batch.commit();
   return record;
@@ -393,7 +487,7 @@ export async function recordManualPayment(
 export async function markPaymentResolvedOffline(
   paymentId: string
 ): Promise<void> {
-  await paymentsCollection.doc(paymentId).update({
+  await updateDoc(doc(paymentsCollection, paymentId), {
     status: "resolved_offline",
     resolvedAt: new Date().toISOString(),
   });

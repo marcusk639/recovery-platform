@@ -11,7 +11,6 @@ const PRODUCTION_ORIGINS = [
   'https://regroup-app.com',
   'https://phoenix-cleanhouse.web.app',
   'https://phoenix-cleanhouse.firebaseapp.com',
-  'http://localhost:4200',
 ];
 
 describe('allowedReturnOrigins', () => {
@@ -54,6 +53,13 @@ describe('allowedReturnOrigins', () => {
       delete process.env.ALLOWED_RETURN_ORIGINS;
       expect(safeReturnUrlSchema.safeParse('https://evil.example/x').success).toBe(false);
       expect(safeReturnUrlSchema.safeParse('https://regroup-app.com/x').success).toBe(true);
+    });
+
+    it('rejects a local dev origin unless it is configured', () => {
+      delete process.env.ALLOWED_RETURN_ORIGINS;
+      expect(safeReturnUrlSchema.safeParse('http://localhost:4200/x').success).toBe(false);
+      process.env.ALLOWED_RETURN_ORIGINS = 'http://localhost:4200';
+      expect(safeReturnUrlSchema.safeParse('http://localhost:4200/x').success).toBe(true);
     });
 
     it('honours the configured list at parse time and still rejects evil', () => {

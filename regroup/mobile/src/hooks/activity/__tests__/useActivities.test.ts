@@ -8,6 +8,7 @@
 import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { ActivityType, ActivityStatus } from '../../../entities/ActivityModel';
 import {
+  activityRangeBound,
   getActivitiesOnce,
   useActivities,
   useActivityCount,
@@ -430,6 +431,49 @@ describe('useActivities', () => {
       expect(consoleSpy).not.toHaveBeenCalled();
 
       consoleSpy.mockRestore();
+    });
+  });
+
+  describe('activityRangeBound', () => {
+    const CHICAGO = 'America/Chicago';
+
+    it('starts a bare date at midnight in the house timezone', () => {
+      expect(activityRangeBound('2026-11-02', 'start', CHICAGO).toISOString()).toBe('2026-11-02T06:00:00.000Z');
+    });
+
+    it('ends a bare date at the end of that day, so the last day of a week is included', () => {
+      expect(activityRangeBound('2026-11-08', 'end', CHICAGO).toISOString()).toBe('2026-11-09T05:59:59.999Z');
+    });
+
+    it('covers a whole day when one date is both start and end', () => {
+      const start = activityRangeBound('2026-11-08', 'start', CHICAGO);
+      const end = activityRangeBound('2026-11-08', 'end', CHICAGO);
+      const sundayEvening = new Date('2026-11-09T00:57:00Z');
+      expect(start.getTime()).toBeLessThan(sundayEvening.getTime());
+      expect(end.getTime()).toBeGreaterThan(sundayEvening.getTime());
+    });
+
+    it('leaves a Date as it is', () => {
+      const at = new Date('2026-11-08T12:34:56.000Z');
+      expect(activityRangeBound(at, 'end', CHICAGO)).toEqual(at);
+    });
+
+    it('leaves a full timestamp string as it is', () => {
+      expect(activityRangeBound('2026-11-08T12:34:56.000Z', 'end', CHICAGO).toISOString()).toBe('2026-11-08T12:34:56.000Z');
+    });
+
+    it("falls back to the server's default zone", () => {
+      expect(activityRangeBound('2026-11-02', 'start', undefined).toISOString()).toBe('2026-11-02T05:00:00.000Z');
+    });
+
+    it('applies the house timezone to the query', async () => {
+      renderHook(() =>
+        useActivities({ houseId: 'house456', startDate: '2026-11-02', endDate: '2026-11-08', timeZone: CHICAGO }),
+      );
+      emitSnapshot([]);
+      await waitFor(() =>
+        expect(mockQuery.where).toHaveBeenCalledWith('timestamp', '<=', new Date('2026-11-09T05:59:59.999Z')),
+      );
     });
   });
 });

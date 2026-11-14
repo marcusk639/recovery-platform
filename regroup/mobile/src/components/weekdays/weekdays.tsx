@@ -17,12 +17,12 @@ import { withRats, HOCProps } from '../rats-hoc';
 
 interface WeekdaysProps {
   onWeekdayPress?: (currentDay: number, event: GestureResponderEvent) => void;
-  customWeekdayContent?: (day: string) => JSX.Element;
+  customWeekdayContent?: (day: string) => React.JSX.Element;
   displayDaysToGo?: boolean;
   alwaysEnabled?: boolean;
   containerStyle?: ViewStyle;
   weekBackgroundColor?: string;
-  customWeekdayContainer?: (day: string) => JSX.Element;
+  customWeekdayContainer?: (day: string) => React.JSX.Element;
   getWeekdayContainerStyle?: (day: string) => ViewStyle;
   getTextStyle?: (day: string) => TextStyle;
 }
@@ -40,7 +40,7 @@ export const daysOfWeek = [
 const getWeekdays = (
   props: Partial<WeekdaysProps> & { onWeekdayPress: (currentDay: number, event: GestureResponderEvent) => void },
   weekdayActive: (weekday: string) => boolean,
-): JSX.Element[] => {
+): React.JSX.Element[] => {
   return daysOfWeek.map((weekday, index) => (
     <Weekday
       {...props}
@@ -108,7 +108,7 @@ type TouchableOpacityWithHOC = TouchableOpacityProps & HOCProps;
 interface WeekdayProps extends TouchableOpacityWithHOC {
   day: string;
   selected?: boolean;
-  customContent?: JSX.Element;
+  customContent?: React.JSX.Element;
   containerStyle?: ViewStyle;
   onWeekdayPress: (currentDay: number, event: GestureResponderEvent) => void;
   alwaysEnabled?: boolean;
@@ -143,8 +143,8 @@ const Weekday = (props: WeekdayProps) => {
     textColor = color.grey;
   }
   if (selected) {
-    containerStyle = weekdayStyles.activeDay;
-    containerStyle.backgroundColor = theme.primaryColor;
+    // A new object: assigning into the StyleSheet entry mutated it for every weekday.
+    containerStyle = { ...weekdayStyles.activeDay, backgroundColor: theme.primaryColor };
     textColor = color.white;
   }
   const onPress = (event: GestureResponderEvent) => {

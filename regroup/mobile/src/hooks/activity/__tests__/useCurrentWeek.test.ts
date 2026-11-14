@@ -4,8 +4,11 @@
  * Tests for week date calculation utilities
  */
 
+import { renderHook } from '@testing-library/react-native';
 import {
+  daysLeftInWeek,
   getWeekDatesForDate,
+  useCurrentWeek,
 } from '../useCurrentWeek';
 
 describe('useCurrentWeek', () => {
@@ -91,6 +94,68 @@ describe('useCurrentWeek', () => {
 
       expect(result1.startDate).toBe(result2.startDate);
       expect(result1.endDate).toBe(result2.endDate);
+    });
+  });
+
+  // The same answers as the server's weekStartFor (functions weekSummaryMath), which
+  // decides the week an activity counts toward.
+  describe('in the house timezone', () => {
+    const CHICAGO = 'America/Chicago';
+
+    it('stays in the ending week on a Sunday evening in the US, when UTC is already Monday', () => {
+      const sundayEvening = new Date('2026-11-09T00:57:00Z');
+      expect(getWeekDatesForDate(sundayEvening, CHICAGO)).toEqual({
+        startDate: '2026-11-02',
+        endDate: '2026-11-08',
+      });
+    });
+
+    it('stays in the ending week until the last minute of Sunday', () => {
+      expect(getWeekDatesForDate(new Date('2026-11-09T05:59:00Z'), CHICAGO).startDate).toBe('2026-11-02');
+    });
+
+    it('starts the new week at local midnight on Monday', () => {
+      expect(getWeekDatesForDate(new Date('2026-11-09T06:00:00Z'), CHICAGO).startDate).toBe('2026-11-09');
+    });
+
+    it('starts the week early east of UTC', () => {
+      const mondayInTokyo = new Date('2026-11-08T16:00:00Z');
+      expect(getWeekDatesForDate(mondayInTokyo, 'Asia/Tokyo').startDate).toBe('2026-11-09');
+    });
+
+    it('handles the Sunday daylight saving ends', () => {
+      expect(getWeekDatesForDate(new Date('2026-11-01T12:00:00Z'), CHICAGO).startDate).toBe('2026-10-26');
+    });
+
+    it.each(['', undefined, 'Not/AZone'])(
+      "falls back to the server's default zone for %p",
+      timeZone => {
+        const sundayInNewYork = new Date('2026-11-09T04:30:00Z');
+        expect(getWeekDatesForDate(sundayInNewYork, timeZone).startDate).toBe('2026-11-02');
+      },
+    );
+
+    it('useCurrentWeek uses the zone it is given', () => {
+      jest.useFakeTimers().setSystemTime(new Date('2026-11-09T00:57:00Z'));
+      try {
+        const { result } = renderHook(() => useCurrentWeek(CHICAGO));
+        expect(result.current.startDate).toBe('2026-11-02');
+        expect(result.current.endDate).toBe('2026-11-08');
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+  });
+
+  describe('daysLeftInWeek', () => {
+    const CHICAGO = 'America/Chicago';
+
+    it('is 0 on the last day of the week, not 7', () => {
+      expect(daysLeftInWeek('2026-11-08', new Date('2026-11-09T00:57:00Z'), CHICAGO)).toBe(0);
+    });
+
+    it('is 6 on Monday', () => {
+      expect(daysLeftInWeek('2026-11-08', new Date('2026-11-02T18:00:00Z'), CHICAGO)).toBe(6);
     });
   });
 });

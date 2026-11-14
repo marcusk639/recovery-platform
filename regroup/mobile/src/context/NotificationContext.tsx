@@ -16,6 +16,7 @@ import {
   TextStyle,
   Animated,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RatsText } from '../components/rats-text';
 import {
   normalize,
@@ -120,6 +121,8 @@ const BUTTON: TextStyle = {
  * - withPopover
  */
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
+  // Pinned to the window bottom: clears the Android navigation bar under edge-to-edge.
+  const insets = useSafeAreaInsets();
   // Notification State
   const [notification, setNotification] = useState<NotificationState>({
     visible: false,
@@ -253,7 +256,11 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
       {/* Toast Notification */}
       {notification.visible && (
         <Animated.View
-          style={[CONTAINER, { transform: [{ translateY: animatedValue }] }]}>
+          testID="notification-toast"
+          style={[
+            CONTAINER,
+            { marginBottom: insets.bottom, transform: [{ translateY: animatedValue }] },
+          ]}>
           <View style={[ROW]}>
             {(notification.status === 'succeed' || notification.status === 'fail') && (
               <View

@@ -50,6 +50,12 @@ jest.mock("../../util/user", () => ({
   _verifyUserEmail: mockVerifyUserEmail,
 }));
 
+const mockRemoveStaffFromHouses = jest.fn((..._args: any[]) => Promise.resolve());
+jest.mock("../../util/houseAuth", () => ({
+  ...jest.requireActual("../../util/houseAuth"),
+  removeStaffFromHouses: (...args: any[]) => mockRemoveStaffFromHouses(...args),
+}));
+
 jest.mock("firebase-admin", () => ({
   auth: jest.fn(() => ({
     setCustomUserClaims: mockSetCustomUserClaims,
@@ -396,6 +402,8 @@ describe("deleteAdminAuthorization", () => {
 
     expect(mockDeleteClaim).toHaveBeenCalledWith("u1", ["h1"], "admin");
     expect(mockDeleteClaim).toHaveBeenCalledTimes(1);
+    // ...and takes them out of the house's adminIds, which isHouseAdmin reads.
+    expect(mockRemoveStaffFromHouses).toHaveBeenCalledWith("u1", ["h1"], []);
   });
 
   it("deletes superAdmin claims for provided superAdminHouseIds", async () => {

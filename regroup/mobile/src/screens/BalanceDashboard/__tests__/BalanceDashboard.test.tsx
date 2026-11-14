@@ -27,6 +27,11 @@ jest.mock("../../../state/queries/paymentQueries", () => ({
   useGuestBalances: jest.fn(),
 }));
 
+let mockGuestsQuery: any = { data: {}, isPending: false, isError: false };
+jest.mock("../../../state/queries/guestQueries", () => ({
+  useGuests: () => mockGuestsQuery,
+}));
+
 jest.mock("../../../state/store", () => ({
   useAppSelector: () => [
     { id: "g1", displayName: "John Doe", rentOwed: 600, choreFees: 50 },
@@ -74,9 +79,10 @@ describe("BalanceDashboard", () => {
   });
 
   it("renders loading indicator while data is fetching", () => {
+    mockGuestsQuery = { data: { g1: { id: "g1", rentOwed: 100 } }, isPending: false, isError: false };
     (useGuestBalances as jest.Mock).mockReturnValue({
       data: undefined,
-      isLoading: true,
+      isPending: true,
     });
     const { getByTestId } = render(<BalanceDashboard />, { wrapper });
     expect(getByTestId("balance-dashboard-loading")).toBeTruthy();
@@ -152,5 +158,46 @@ describe("BalanceDashboard", () => {
     // Whole-dollar rounding ("$151" or "$150") must not appear anywhere.
     expect(queryByText("$151")).toBeNull();
     expect(queryByText("$150")).toBeNull();
+  });
+});
+
+// ─── Loading, errors and who counts (review) ───────────────────────────────────
+describe("BalanceDashboard states", () => {
+  const ready = (data: any[] = []) => ({ data, isPending: false, isError: false });
+
+  afterEach(() => {
+    mockGuestsQuery = { data: {}, isPending: false, isError: false };
+  });
+
+  it("shows loading, not $0.00, while the residents load", () => {
+    mockGuestsQuery = { data: undefined, isPending: true, isError: false };
+    (useGuestBalances as jest.Mock).mockReturnValue({ data: undefined, isPending: true, isError: false });
+    const { getByTestId, queryByText } = render(<BalanceDashboard />, { wrapper });
+    expect(getByTestId("balance-dashboard-loading")).toBeTruthy();
+    expect(queryByText("$0.00")).toBeNull();
+  });
+
+  it("says the balances couldn't load, instead of showing zeros", () => {
+    mockGuestsQuery = { data: { g1: { id: "g1", rentOwed: 100 } }, isPending: false, isError: false };
+    (useGuestBalances as jest.Mock).mockReturnValue({ data: undefined, isPending: false, isError: true });
+    const { getByTestId, queryByText } = render(<BalanceDashboard />, { wrapper });
+    expect(getByTestId("balance-dashboard-error")).toBeTruthy();
+    expect(queryByText("$0.00")).toBeNull();
+  });
+
+  it("counts current residents only, like the Payments tab's Outstanding", () => {
+    mockGuestsQuery = {
+      data: {
+        g1: { id: "g1", status: "active", rentOwed: 100 },
+        g2: { id: "g2", status: "discharged", rentOwed: 9000 },
+        g3: { id: "g3", status: "archived", rentOwed: 50 },
+      },
+      isPending: false,
+      isError: false,
+    };
+    (useGuestBalances as jest.Mock).mockReturnValue(ready());
+    render(<BalanceDashboard />, { wrapper });
+    const [, passed] = (useGuestBalances as jest.Mock).mock.calls.at(-1);
+    expect(passed.map((g: any) => g.id)).toEqual(["g1"]);
   });
 });

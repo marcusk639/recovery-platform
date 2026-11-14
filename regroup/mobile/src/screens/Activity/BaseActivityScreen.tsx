@@ -214,7 +214,7 @@ export const RenderActivity: React.FC<RenderActivityProps> = ({
   const renderDisputesAndChallenges = (token: RoleToken) => {
     const activityDisputes = getDisputesForActivity(activity.id, disputes);
     const challenges = getChallengesFromDisputes(activityDisputes);
-    const items: JSX.Element[] = [];
+    const items: React.JSX.Element[] = [];
 
     const renderHeader = (member: Admin | Guest, dispute: boolean = false) => {
       if (isAdmin(token, houseId) && member) {

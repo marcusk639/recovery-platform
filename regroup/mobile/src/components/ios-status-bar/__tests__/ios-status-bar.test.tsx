@@ -81,10 +81,19 @@ describe('IOSStatusBar', () => {
   });
 
   it('passes translucent prop to StatusBar', () => {
-    const { UNSAFE_getAllByType } = render(<IOSStatusBar translucent={true} />);
+    // StatusBar dropped `translucent` from its types in RN 0.87; unknown props
+    // are still spread through, which is what this case pins.
+    const { UNSAFE_getAllByType } = render(<IOSStatusBar {...({ translucent: true } as any)} />);
     const { StatusBar } = require('react-native');
     const bar = UNSAFE_getAllByType(StatusBar)[0];
     expect(bar.props.translucent).toBe(true);
+  });
+
+  it('keeps backgroundColor on the spacer and off StatusBar (removed there in RN 0.87)', () => {
+    const { UNSAFE_getAllByType } = render(<IOSStatusBar backgroundColor="red" />);
+    const { StatusBar } = require('react-native');
+    const bar = UNSAFE_getAllByType(StatusBar)[0];
+    expect(bar.props.backgroundColor).toBeUndefined();
   });
 
   it('renders consistently (snapshot)', () => {

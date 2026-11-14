@@ -65,6 +65,7 @@ const mockHouse = { id: "house-1", pendingGuestInvites: [] as string[] };
 const mockUser = { uid: "user-1", id: "user-1" };
 
 import React from "react";
+import { keyboardAncestor } from "../../../components/rats-keyboard/__tests__/keyboardAncestor";
 import { render } from "@testing-library/react-native";
 import GuestInvites from "../GuestInvites";
 
@@ -127,5 +128,16 @@ describe("GuestInvites", () => {
 
     expect(mockLogException).toHaveBeenCalled();
     expect(mockNavigation.goBack).not.toHaveBeenCalled();
+  });
+});
+
+// ─── Keyboard (plan Task 15) ──────────────────────────────────────────────────
+describe("GuestInvites keyboard", () => {
+  it("puts the invite form and its pinned Send Invites button in the Android resize view", () => {
+    const { GuestSetupForm } = require("../../SetupWizards/GuestSetup");
+    const { UNSAFE_getByType } = render(
+      <GuestInvites navigation={{ goBack: jest.fn(), navigate: jest.fn() } as any} />
+    );
+    expect(keyboardAncestor(UNSAFE_getByType(GuestSetupForm))).toBe("RatsKeyboardAvoidingView");
   });
 });

@@ -6,6 +6,9 @@ import {
   TextInput,
   Alert,
 } from 'react-native';
+import RatsScrollView, {
+  IQ_SCROLL_VIEW_PROPS,
+} from '../../components/rats-scroll-view';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format, parseISO } from 'date-fns';
 import { RootStackParamList } from '../../navigation/types';
@@ -104,7 +107,10 @@ const BusinessMeetingDetail: React.FC<Props> = ({ navigation, route }) => {
   }
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: color.light_grey }}>
+    <RatsScrollView
+      {...IQ_SCROLL_VIEW_PROPS}
+      style={{ flex: 1, backgroundColor: color.light_grey }}
+      contentContainerStyle={{}}>
       <ScreenHeader renderBackButton header="Business Meeting" />
       <View style={{ padding: normalize(16) }}>
         {/* Date */}
@@ -236,7 +242,7 @@ const BusinessMeetingDetail: React.FC<Props> = ({ navigation, route }) => {
           onPress={handleSaveMinutes}
         />
       </View>
-    </ScrollView>
+    </RatsScrollView>
   );
 };
 

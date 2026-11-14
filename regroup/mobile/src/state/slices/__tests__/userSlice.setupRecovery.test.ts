@@ -17,10 +17,25 @@ jest.mock('../../../../firebase-setup', () => ({
 }));
 
 const mockGetIdTokenResult = jest.fn();
-jest.mock('@react-native-firebase/auth', () => () => ({
-  currentUser: { getIdTokenResult: mockGetIdTokenResult },
-  signInWithEmailAndPassword: jest.fn(() => Promise.resolve({ uid: 'op-uid' })),
-}));
+// The users service calls the modular auth functions on getAuth(); they
+// delegate to this instance. Looked up at call time: imports are hoisted.
+jest.mock('@react-native-firebase/auth', () => {
+  const instance = {
+    currentUser: {
+      getIdTokenResult: (...args: unknown[]) => mockGetIdTokenResult(...args),
+    },
+    signInWithEmailAndPassword: jest.fn(() => Promise.resolve({ uid: 'op-uid' })),
+  };
+  return {
+    __esModule: true,
+    default: () => instance,
+    getAuth: () => instance,
+    signInWithEmailAndPassword: (_auth: unknown, ...args: unknown[]) =>
+      instance.signInWithEmailAndPassword(...(args as [])),
+    getIdTokenResult: (user: typeof instance.currentUser, ...args: unknown[]) =>
+      user.getIdTokenResult(...args),
+  };
+});
 
 jest.mock('../../../services/crud', () => ({ get: jest.fn(), update: jest.fn() }));
 jest.mock('../../../services/house', () => ({}));

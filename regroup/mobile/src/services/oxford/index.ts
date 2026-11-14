@@ -8,6 +8,20 @@
  * Firestore security rules only protect the subcollection paths.
  */
 
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  limit as limitTo,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+  writeBatch,
+  type QueryConstraint,
+} from "@react-native-firebase/firestore";
 import { firestore } from "../../../firebase-setup";
 import { logException } from "../../util/logging";
 import {
@@ -28,13 +42,11 @@ import {
 
 export async function getOfficers(houseId: string): Promise<Officer[]> {
   try {
-    const snapshot = await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("officers")
-      .get();
+    const snapshot = await getDocs(
+      collection(doc(collection(firestore, "houses"), houseId), "officers"),
+    );
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id }) as Officer,
+      (officer) => ({ ...officer.data(), id: officer.id }) as Officer,
     );
   } catch (error) {
     logException(error);
@@ -44,14 +56,14 @@ export async function getOfficers(houseId: string): Promise<Officer[]> {
 
 export async function getActiveOfficers(houseId: string): Promise<Officer[]> {
   try {
-    const snapshot = await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("officers")
-      .where("isActive", "==", true)
-      .get();
+    const snapshot = await getDocs(
+      query(
+        collection(doc(collection(firestore, "houses"), houseId), "officers"),
+        where("isActive", "==", true),
+      ),
+    );
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id }) as Officer,
+      (officer) => ({ ...officer.data(), id: officer.id }) as Officer,
     );
   } catch (error) {
     logException(error);
@@ -63,26 +75,29 @@ export async function createOfficer(
   officer: Omit<Officer, "id">,
 ): Promise<Officer> {
   try {
-    const officersRef = firestore
-      .collection("houses")
-      .doc(officer.houseId)
-      .collection("officers");
+    const officersRef = collection(
+      doc(collection(firestore, "houses"), officer.houseId),
+      "officers",
+    );
 
     // Deactivate any existing active officer holding this role first, so
     // creating a new officer never leaves two people simultaneously active
     // for the same office (e.g. two active Treasurers).
-    const existingActive = await officersRef
-      .where("role", "==", officer.role)
-      .where("isActive", "==", true)
-      .get();
+    const existingActive = await getDocs(
+      query(
+        officersRef,
+        where("role", "==", officer.role),
+        where("isActive", "==", true),
+      ),
+    );
 
-    const batch = firestore.batch();
+    const batch = writeBatch(firestore);
 
-    existingActive.docs.forEach((doc) => {
-      batch.update(doc.ref, { isActive: false });
+    existingActive.docs.forEach((activeOfficer) => {
+      batch.update(activeOfficer.ref, { isActive: false });
     });
 
-    const ref = officersRef.doc();
+    const ref = doc(officersRef);
     const newOfficer: Officer = { ...officer, id: ref.id };
     batch.set(ref, newOfficer);
 
@@ -103,12 +118,10 @@ export async function updateOfficer(
     throw new Error("houseId required to update officer in subcollection");
   }
   try {
-    await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("officers")
-      .doc(id)
-      .update(updates);
+    await updateDoc(
+      doc(collection(doc(collection(firestore, "houses"), houseId), "officers"), id),
+      updates,
+    );
   } catch (error) {
     logException(error);
     throw new Error("Failed to update officer");
@@ -123,12 +136,9 @@ export async function removeOfficer(
     throw new Error("houseId required to remove officer from subcollection");
   }
   try {
-    await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("officers")
-      .doc(id)
-      .delete();
+    await deleteDoc(
+      doc(collection(doc(collection(firestore, "houses"), houseId), "officers"), id),
+    );
   } catch (error) {
     logException(error);
     throw new Error("Failed to remove officer");
@@ -142,15 +152,20 @@ export async function getBusinessMeetings(
   limit?: number,
 ): Promise<BusinessMeeting[]> {
   try {
-    let query: any = firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("business-meetings")
-      .orderBy("scheduledDate", "desc");
-    if (limit) query = query.limit(limit);
-    const result = await query.get();
+    const constraints: QueryConstraint[] = [orderBy("scheduledDate", "desc")];
+    if (limit) constraints.push(limitTo(limit));
+    const result = await getDocs(
+      query(
+        collection(
+          doc(collection(firestore, "houses"), houseId),
+          "business-meetings",
+        ),
+        ...constraints,
+      ),
+    );
     return result.docs.map(
-      (doc: any) => ({ ...doc.data(), id: doc.id }) as BusinessMeeting,
+      (meeting: any) =>
+        ({ ...meeting.data(), id: meeting.id }) as BusinessMeeting,
     );
   } catch (error) {
     logException(error);
@@ -162,13 +177,14 @@ export async function createBusinessMeeting(
   meeting: Omit<BusinessMeeting, "id">,
 ): Promise<BusinessMeeting> {
   try {
-    const ref = firestore
-      .collection("houses")
-      .doc(meeting.houseId)
-      .collection("business-meetings")
-      .doc();
+    const ref = doc(
+      collection(
+        doc(collection(firestore, "houses"), meeting.houseId),
+        "business-meetings",
+      ),
+    );
     const newMeeting: BusinessMeeting = { ...meeting, id: ref.id };
-    await ref.set(newMeeting);
+    await setDoc(ref, newMeeting);
     return newMeeting;
   } catch (error) {
     logException(error);
@@ -187,12 +203,16 @@ export async function updateBusinessMeeting(
     );
   }
   try {
-    await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("business-meetings")
-      .doc(id)
-      .update(updates);
+    await updateDoc(
+      doc(
+        collection(
+          doc(collection(firestore, "houses"), houseId),
+          "business-meetings",
+        ),
+        id,
+      ),
+      updates,
+    );
   } catch (error) {
     logException(error);
     throw new Error("Failed to update business meeting");
@@ -209,12 +229,15 @@ export async function deleteBusinessMeeting(
     );
   }
   try {
-    await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("business-meetings")
-      .doc(id)
-      .delete();
+    await deleteDoc(
+      doc(
+        collection(
+          doc(collection(firestore, "houses"), houseId),
+          "business-meetings",
+        ),
+        id,
+      ),
+    );
   } catch (error) {
     logException(error);
     throw new Error("Failed to delete business meeting");
@@ -247,13 +270,15 @@ export async function getVotesForMeeting(
     throw new Error("houseId required to query votes in subcollection");
   }
   try {
-    const snapshot = await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("votes")
-      .where("meetingId", "==", meetingId)
-      .get();
-    return snapshot.docs.map((doc) => ({ ...doc.data(), id: doc.id }) as Vote);
+    const snapshot = await getDocs(
+      query(
+        collection(doc(collection(firestore, "houses"), houseId), "votes"),
+        where("meetingId", "==", meetingId),
+      ),
+    );
+    return snapshot.docs.map(
+      (vote) => ({ ...vote.data(), id: vote.id }) as Vote,
+    );
   } catch (error) {
     logException(error);
     throw new Error("Failed to load votes");
@@ -272,14 +297,14 @@ export async function getVotesForMeeting(
 
 export async function getElections(houseId: string): Promise<Election[]> {
   try {
-    const snapshot = await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("elections")
-      .orderBy("conductedAt", "desc")
-      .get();
+    const snapshot = await getDocs(
+      query(
+        collection(doc(collection(firestore, "houses"), houseId), "elections"),
+        orderBy("conductedAt", "desc"),
+      ),
+    );
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id }) as Election,
+      (election) => ({ ...election.data(), id: election.id }) as Election,
     );
   } catch (error) {
     logException(error);
@@ -291,13 +316,14 @@ export async function createElection(
   election: Omit<Election, "id">,
 ): Promise<Election> {
   try {
-    const ref = firestore
-      .collection("houses")
-      .doc(election.houseId)
-      .collection("elections")
-      .doc();
+    const ref = doc(
+      collection(
+        doc(collection(firestore, "houses"), election.houseId),
+        "elections",
+      ),
+    );
     const newElection: Election = { ...election, id: ref.id };
-    await ref.set(newElection);
+    await setDoc(ref, newElection);
     return newElection;
   } catch (error) {
     logException(error);
@@ -314,12 +340,10 @@ export async function updateElection(
     throw new Error("houseId required to update election in subcollection");
   }
   try {
-    await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("elections")
-      .doc(id)
-      .update(updates);
+    await updateDoc(
+      doc(collection(doc(collection(firestore, "houses"), houseId), "elections"), id),
+      updates,
+    );
   } catch (error) {
     logException(error);
     throw new Error("Failed to update election");
@@ -332,13 +356,15 @@ export async function getEESTransactions(
   houseId: string,
 ): Promise<EESTransaction[]> {
   try {
-    const snapshot = await firestore
-      .collection("ees-records")
-      .where("houseId", "==", houseId)
-      .orderBy("createdAt", "desc")
-      .get();
+    const snapshot = await getDocs(
+      query(
+        collection(firestore, "ees-records"),
+        where("houseId", "==", houseId),
+        orderBy("createdAt", "desc"),
+      ),
+    );
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id }) as EESTransaction,
+      (tx) => ({ ...tx.data(), id: tx.id }) as EESTransaction,
     );
   } catch (error) {
     logException(error);
@@ -350,9 +376,9 @@ export async function createEESTransaction(
   tx: Omit<EESTransaction, "id">,
 ): Promise<EESTransaction> {
   try {
-    const ref = firestore.collection("ees-records").doc();
+    const ref = doc(collection(firestore, "ees-records"));
     const newTx: EESTransaction = { ...tx, id: ref.id };
-    await ref.set(newTx);
+    await setDoc(ref, newTx);
     return newTx;
   } catch (error) {
     logException(error);
@@ -366,14 +392,17 @@ export async function getFinancialRecords(
   houseId: string,
 ): Promise<FinancialRecord[]> {
   try {
-    const snapshot = await firestore
-      .collection("houses")
-      .doc(houseId)
-      .collection("financial-records")
-      .orderBy("period", "desc")
-      .get();
+    const snapshot = await getDocs(
+      query(
+        collection(
+          doc(collection(firestore, "houses"), houseId),
+          "financial-records",
+        ),
+        orderBy("period", "desc"),
+      ),
+    );
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id }) as FinancialRecord,
+      (record) => ({ ...record.data(), id: record.id }) as FinancialRecord,
     );
   } catch (error) {
     logException(error);
@@ -385,13 +414,14 @@ export async function createFinancialRecord(
   record: Omit<FinancialRecord, "id">,
 ): Promise<FinancialRecord> {
   try {
-    const ref = firestore
-      .collection("houses")
-      .doc(record.houseId)
-      .collection("financial-records")
-      .doc();
+    const ref = doc(
+      collection(
+        doc(collection(firestore, "houses"), record.houseId),
+        "financial-records",
+      ),
+    );
     const newRecord: FinancialRecord = { ...record, id: ref.id };
-    await ref.set(newRecord);
+    await setDoc(ref, newRecord);
     return newRecord;
   } catch (error) {
     logException(error);

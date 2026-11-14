@@ -1,0 +1,30 @@
+# Deep link: an invitation link opened with the app warm reaches the app, and
+# the app routes to signup with the invitation shown (testID invitation-info)
+# and the invited email filled in. Uses the
+# custom scheme regroup-app:// with the legacy parameter format, so no seeded
+# invitation token is needed. Launch design §4.2 (deep links must keep working).
+# Run: maestro/scripts/run-flows.sh deep-link-invitation-warm
+appId: ${APP_ID}
+tags:
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+# Warm: send the app to the background, then open the link.
+- pressKey: Home
+- openLink: "regroup-app://?type=invitation&invitationType=guest&house=test-house-123&inviter=test-manager&email=e2e-invitee%40rats-e2e.com&owner=&initialPhase="
+# The app routes an invitation link straight to signup, with the invitation
+# shown and the invited email filled in.
+- extendedWaitUntil:
+    visible:
+      id: "invitation-info"
+    timeout: 30000
+- assertVisible:
+    text: "e2e-invitee@rats-e2e.com"

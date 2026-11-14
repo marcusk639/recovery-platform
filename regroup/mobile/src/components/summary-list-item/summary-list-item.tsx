@@ -1,6 +1,6 @@
 import { TouchableOpacity, View, Image } from 'react-native';
 import React, { Fragment, PropsWithChildren } from 'react';
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import FontAwesome5 from '../rats-icon/font-awesome-5';
 import { RatsText } from '../rats-text';
 import { normalize, color, fontSize } from '../../styles/theme';
 import HealthConstants from '../../constants/health';

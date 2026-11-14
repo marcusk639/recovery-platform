@@ -5,6 +5,7 @@ import {
   GooglePlacesAutocompleteRef,
 } from 'react-native-google-places-autocomplete';
 import autocompleteStyles from './styles';
+import { toLegacyPlaceDetail } from './placeDetail';
 import { RatsIcon } from '../rats-icon/rats-icon';
 import { fontSize, normalize } from '../../styles/theme';
 import { TouchableOpacity, Platform, TextInputProps } from 'react-native';
@@ -36,7 +37,8 @@ export interface RatsGooglePlacesAutocompleteProps {
   onPress: (data: GooglePlaceData, details: GooglePlaceDetail | null) => void;
   rightButtonPress?: () => void;
   renderDescription?: (row: DescriptionRow) => string;
-  listViewDisplayed: boolean;
+  /** Ignored: the library shows and hides the list itself (see render). */
+  listViewDisplayed?: boolean;
   placeholder?: string;
   textInputProps?: TextInputProps;
   setRef: (ref: GooglePlacesAutocompleteRef) => void;
@@ -46,8 +48,9 @@ export interface RatsGooglePlacesAutocompleteProps {
   [key: string]: any;
 }
 
-class State {
-  listViewDisplayed: boolean = false;
+interface State {
+  /** The field has been focused at least once. */
+  opened: boolean;
 }
 
 class RatsGooglePlacesAutocomplete extends Component<
@@ -55,14 +58,20 @@ class RatsGooglePlacesAutocomplete extends Component<
   State
 > {
   googlePlacesRef: any;
-  state = new State();
+  state: State = { opened: false };
+
+  onFocus: NonNullable<TextInputProps['onFocus']> = event => {
+    if (!this.state.opened) {
+      this.setState({ opened: true });
+    }
+    this.props.textInputProps?.onFocus?.(event);
+  };
 
   onRightButtonPress = () => {
     this.googlePlacesRef.setAddressText('');
     if (this.props.rightButtonPress) {
       this.props.rightButtonPress();
     }
-    this.setState({ listViewDisplayed: false });
   };
 
   renderRightButton = (): React.JSX.Element => {
@@ -88,9 +97,6 @@ class RatsGooglePlacesAutocomplete extends Component<
       </TouchableOpacity>
     );
   };
-
-  isListViewDisplayed = () =>
-    this.props.listViewDisplayed && this.state.listViewDisplayed;
 
   setGooglePlacesRef = (ref: GooglePlacesAutocompleteRef) => {
     this.googlePlacesRef = ref;
@@ -120,7 +126,6 @@ class RatsGooglePlacesAutocomplete extends Component<
         placeholder={placeholder || 'Search...'}
         keyboardShouldPersistTaps="handled"
         minLength={2} // minimum length of text to search
-        listViewDisplayed={this.isListViewDisplayed()} // true/false/undefined
         fetchDetails={true}
         currentLocation={true}
         suppressDefaultStyles={suppressDefaultStyles ? true : false}
@@ -131,6 +136,7 @@ class RatsGooglePlacesAutocomplete extends Component<
           returnKeyType: 'search',
           keyboardAppearance: 'light',
           ...(textInputProps || {}),
+          onFocus: this.onFocus,
         }}
         renderRightButton={this.renderRightButton}
         renderDescription={
@@ -145,21 +151,25 @@ class RatsGooglePlacesAutocomplete extends Component<
             );
           }
         } // custom description render
-        onPress={onPress}
+        onPress={(data, details) => onPress(data, toLegacyPlaceDetail(details))}
         // Places API (New). The legacy places-backend.googleapis.com service is
         // disabled on the phoenix-cleanhouse project, so the legacy
         // /maps/api/place/* endpoints this library calls by default cannot work.
         //
         // isNewPlacesAPI switches it to POST /v1/places:autocomplete and
-        // GET /v1/places/{id}, and the library maps the new response back to the
-        // legacy shape internally (placePrediction.text.text -> description,
-        // placeId -> place_id, structuredFormat -> structured_formatting), so
-        // onPress still receives GooglePlaceData/GooglePlaceDetail and callers
-        // like rats-search-bar and rats-text-input need no change.
+        // GET /v1/places/{id}. The library maps the new suggestions back to the
+        // legacy shape (placePrediction.text.text -> description, placeId ->
+        // place_id), but not Place Details: toLegacyPlaceDetail (onPress above)
+        // does that, so rats-search-bar and rats-text-input need no change.
         isNewPlacesAPI
         requestUrl={{
           useOnPlatform: 'all',
           url: 'https://places.googleapis.com',
+          // The search is a POST with a JSON body, and the library sets no
+          // Content-Type. React Native on Android refuses to send a body
+          // without one ("Payload is set but no content-type header
+          // specified"), so every search failed there with status 0.
+          headers: { 'Content-Type': 'application/json' },
         }}
         // Field mask for the Place Details call only — the library passes
         // `fields` to GET /v1/places/{id} and not to :autocomplete. Names are
@@ -182,6 +192,11 @@ class RatsGooglePlacesAutocomplete extends Component<
         }}
         ref={this.setGooglePlacesRef}
         {...restProps}
+        // Closed until the field is first focused, then 'auto': the library
+        // opens the list on focus and while there are suggestions, and closes
+        // it after a pick or on blur. Since 2.6.5 a boolean controls the list
+        // outright, and false (all this wrapper used to pass) hid it for good.
+        listViewDisplayed={this.state.opened ? 'auto' : false}
       />
       // </View>
     );

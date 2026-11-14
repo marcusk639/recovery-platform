@@ -9,7 +9,9 @@ const mockAddHouseRoles = jest.fn();
 // LIVE claims per account: tier checks read these (getUser), never the token.
 const mockUsers: Record<string, Record<string, unknown>> = {};
 jest.mock('firebase-admin', () => ({
-  firestore: () => require('../helpers/memFirestore').memDb,
+  firestore: Object.assign(() => require('../helpers/memFirestore').memDb, {
+    FieldValue: require('../helpers/memFirestore').fieldValue,
+  }),
   auth: () => ({
     getUser: async (uid: string) => ({ uid, customClaims: mockUsers[uid] ?? {} }),
     getUserByEmail: async () => {

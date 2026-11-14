@@ -7,11 +7,17 @@ const mockCredential = jest.fn();
 const mockReload = jest.fn();
 const mockLogException = jest.fn();
 
+// The modular functions delegate to the firebase-setup mock's auth and user below.
 jest.mock("@react-native-firebase/auth", () => ({
   __esModule: true,
   default: {
     EmailAuthProvider: { credential: (...a: any[]) => mockCredential(...a) },
   },
+  EmailAuthProvider: { credential: (...a: any[]) => mockCredential(...a) },
+  reauthenticateWithCredential: (user: any, ...a: any[]) => user.reauthenticateWithCredential(...a),
+  getIdToken: (user: any, ...a: any[]) => user.getIdToken(...a),
+  reload: (user: any) => user.reload(),
+  signOut: (a: any) => a.signOut(),
 }));
 jest.mock("../../../firebase-setup", () => ({
   auth: {

@@ -16,7 +16,6 @@ i18next.use(initReactI18next).init({
   resources: { ...en, ...sv },
   lng: "en",
   fallbackLng: "en",
-  compatibilityJSON: "v3",
   interpolation: {
     escapeValue: false,
   },

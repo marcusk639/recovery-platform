@@ -369,7 +369,7 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
   };
 
   const renderCollapsibles = () => {
-    const Collapsibles: JSX.Element[] = [];
+    const Collapsibles: React.JSX.Element[] = [];
     const HEADER: TextStyle = {
       fontSize: fontSize.regular,
       fontFamily: fontFamily.bold,

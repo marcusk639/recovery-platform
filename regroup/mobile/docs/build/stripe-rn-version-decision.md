@@ -2,6 +2,12 @@
 
 Date: 2026-10-21. Scope: `@stripe/stripe-react-native` in `regroup/mobile`, React Native 0.72.17.
 
+> **Superseded** by the React Native 0.88.1 upgrade (`react-native-0.88-upgrade.md`, Tasks 3 and 13).
+> The app now uses `@stripe/stripe-react-native` 0.83.0, which brings its own native SDKs (Android
+> 23.24.0), so the `stripeVersion` pin below no longer applies. 0.84 was not taken: its iOS SDK is
+> SPM-only and needs dynamic frameworks, which RNFirebase 26's static linkage rules out. This record
+> is kept for the RN 0.72 reasoning.
+
 ## Decision
 
 **Use `@stripe/stripe-react-native` exactly `0.44.0`** on both platforms. Fallback: `0.43.0`.

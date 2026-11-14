@@ -43,7 +43,7 @@ const SignUpWebView: React.FC<Props> = (props) => {
   const { navigation } = props;
 
   const dispatch = useAppDispatch();
-  const webViewRef = useRef<WebView | null>(null);
+  const webViewRef = useRef<WebView<any> | null>(null);
   const [hasError, setHasError] = useState(false);
 
   const handleEvent = useCallback(

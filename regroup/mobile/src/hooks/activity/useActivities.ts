@@ -9,8 +9,20 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Activity, ActivityType, ActivityStatus } from '../../entities/ActivityModel';
 import { firestore } from '../../../firebase-setup';
-import { FirebaseFirestoreTypes } from '@react-native-firebase/firestore';
+import {
+  collection,
+  getDocs,
+  limit as limitTo,
+  onSnapshot,
+  orderBy,
+  query,
+  where,
+  type QueryConstraint,
+  type QuerySnapshot,
+} from '@react-native-firebase/firestore';
 import { logException } from '../../util/logging';
+import { fromZonedTime } from 'date-fns-tz';
+import { resolveWeekTimeZone } from './useCurrentWeek';
 
 export interface UseActivitiesOptions {
   guestId?: string;
@@ -20,8 +32,11 @@ export interface UseActivitiesOptions {
    * result is idle: empty, loading false, `idle` true.
    */
   houseId: string | undefined;
+  /** A bare YYYY-MM-DD means that whole day in `timeZone`. */
   startDate?: Date | string;
   endDate?: Date | string;
+  /** The house's timezone (pass `house?.timezone`). */
+  timeZone?: string | null;
   type?: ActivityType;
   status?: ActivityStatus;
   limit?: number;
@@ -37,13 +52,49 @@ export interface UseActivitiesResult {
 }
 
 /**
+ * The filters every activities list here applies, in query order: guest (when
+ * given), house, type, status, then the timestamp range. houseId is always
+ * present: callers return before querying without one.
+ */
+export function activityRangeBound(
+  value: Date | string,
+  edge: 'start' | 'end',
+  timeZone?: string | null,
+): Date {
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const time = edge === 'start' ? '00:00:00.000' : '23:59:59.999';
+    return fromZonedTime(`${value}T${time}`, resolveWeekTimeZone(timeZone));
+  }
+  return new Date(value);
+}
+
+function activityFilters({
+  guestId,
+  houseId,
+  startDate,
+  endDate,
+  timeZone,
+  type,
+  status,
+}: Omit<UseActivitiesOptions, 'limit'>): QueryConstraint[] {
+  const filters: QueryConstraint[] = [];
+  if (guestId) filters.push(where('guestId', '==', guestId));
+  filters.push(where('houseId', '==', houseId));
+  if (type) filters.push(where('type', '==', type));
+  if (status) filters.push(where('status', '==', status));
+  if (startDate) filters.push(where('timestamp', '>=', activityRangeBound(startDate, 'start', timeZone)));
+  if (endDate) filters.push(where('timestamp', '<=', activityRangeBound(endDate, 'end', timeZone)));
+  return filters;
+}
+
+/**
  * Subscribe to activities with filtering
  *
  * @param options - Filter options
  * @returns Activities data with loading and error states
  */
 export function useActivities(options: UseActivitiesOptions): UseActivitiesResult {
-  const { guestId, houseId, startDate, endDate, type, status, limit = 100 } = options;
+  const { guestId, houseId, startDate, endDate, timeZone, type, status, limit = 100 } = options;
 
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -67,49 +118,21 @@ export function useActivities(options: UseActivitiesOptions): UseActivitiesResul
     setLoading(true);
     setError(null);
 
-    // Build Firestore query
-    let query: FirebaseFirestoreTypes.Query = firestore.collection('activities');
-
-    // Optional: narrows the house's list to one guest.
-    if (guestId) {
-      query = query.where('guestId', '==', guestId);
-    }
-
-    query = query.where('houseId', '==', houseId);
-
-    // Filter by type
-    if (type) {
-      query = query.where('type', '==', type);
-    }
-
-    // Filter by status
-    if (status) {
-      query = query.where('status', '==', status);
-    }
-
-    // Filter by date range (if provided)
-    if (startDate) {
-      const startTimestamp = new Date(startDate);
-      query = query.where('timestamp', '>=', startTimestamp);
-    }
-
-    if (endDate) {
-      const endTimestamp = new Date(endDate);
-      query = query.where('timestamp', '<=', endTimestamp);
-    }
-
-    // Order by timestamp descending (most recent first)
-    query = query.orderBy('timestamp', 'desc');
-
-    // Limit results
-    query = query.limit(limit);
+    // Most recent first, limited.
+    const activitiesQuery = query(
+      collection(firestore, 'activities'),
+      ...activityFilters({ guestId, houseId, startDate, endDate, timeZone, type, status }),
+      orderBy('timestamp', 'desc'),
+      limitTo(limit),
+    );
 
     // Subscribe to query
-    const unsubscribe = query.onSnapshot(
-      (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
-        const data = snapshot.docs.map((doc) => {
-          const activity = doc.data() as Activity;
-          activity.id = doc.id;
+    const unsubscribe = onSnapshot(
+      activitiesQuery,
+      (snapshot: QuerySnapshot) => {
+        const data = snapshot.docs.map((activityDoc) => {
+          const activity = activityDoc.data() as Activity;
+          activity.id = activityDoc.id;
 
           // Convert Firestore timestamps to Date objects
           if (activity.timestamp && typeof activity.timestamp !== 'string') {
@@ -135,7 +158,7 @@ export function useActivities(options: UseActivitiesOptions): UseActivitiesResul
     );
 
     return () => unsubscribe();
-  }, [guestId, houseId, startDate, endDate, type, status, limit, refetchTrigger]);
+  }, [guestId, houseId, startDate, endDate, timeZone, type, status, limit, refetchTrigger]);
 
   return { activities, loading: !!houseId && loading, idle: !houseId, error, refetch };
 }
@@ -147,7 +170,7 @@ export function useActivities(options: UseActivitiesOptions): UseActivitiesResul
  * @returns Promise of activities array
  */
 export async function getActivitiesOnce(options: UseActivitiesOptions): Promise<Activity[]> {
-  const { guestId, houseId, startDate, endDate, type, status, limit = 100 } = options;
+  const { guestId, houseId, startDate, endDate, timeZone, type, status, limit = 100 } = options;
 
   // A one-shot call has no "house still loading" state: a missing houseId is a
   // caller bug, and the query would be denied (see UseActivitiesOptions.houseId).
@@ -155,38 +178,19 @@ export async function getActivitiesOnce(options: UseActivitiesOptions): Promise<
     throw new Error('getActivitiesOnce: houseId is required');
   }
 
-  let query: FirebaseFirestoreTypes.Query = firestore.collection('activities');
-
-  if (guestId) {
-    query = query.where('guestId', '==', guestId);
-  }
-
-  query = query.where('houseId', '==', houseId);
-
-  if (type) {
-    query = query.where('type', '==', type);
-  }
-
-  if (status) {
-    query = query.where('status', '==', status);
-  }
-
-  if (startDate) {
-    query = query.where('timestamp', '>=', new Date(startDate));
-  }
-
-  if (endDate) {
-    query = query.where('timestamp', '<=', new Date(endDate));
-  }
-
-  query = query.orderBy('timestamp', 'desc').limit(limit);
+  const activitiesQuery = query(
+    collection(firestore, 'activities'),
+    ...activityFilters({ guestId, houseId, startDate, endDate, timeZone, type, status }),
+    orderBy('timestamp', 'desc'),
+    limitTo(limit),
+  );
 
   try {
-    const snapshot = await query.get();
+    const snapshot = await getDocs(activitiesQuery);
 
-    return snapshot.docs.map((doc) => {
-      const activity = doc.data() as Activity;
-      activity.id = doc.id;
+    return snapshot.docs.map((activityDoc) => {
+      const activity = activityDoc.data() as Activity;
+      activity.id = activityDoc.id;
 
       // Convert timestamps
       if (activity.timestamp && typeof activity.timestamp !== 'string') {
@@ -219,7 +223,7 @@ export function useActivityCount(options: UseActivitiesOptions): {
   idle: boolean;
   error: Error | null;
 } {
-  const { guestId, houseId, startDate, endDate, type, status } = options;
+  const { guestId, houseId, startDate, endDate, timeZone, type, status } = options;
 
   const [count, setCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -237,17 +241,12 @@ export function useActivityCount(options: UseActivitiesOptions): {
     setLoading(true);
     setError(null);
 
-    let query: FirebaseFirestoreTypes.Query = firestore.collection('activities');
-
-    if (guestId) query = query.where('guestId', '==', guestId);
-    query = query.where('houseId', '==', houseId);
-    if (type) query = query.where('type', '==', type);
-    if (status) query = query.where('status', '==', status);
-    if (startDate) query = query.where('timestamp', '>=', new Date(startDate));
-    if (endDate) query = query.where('timestamp', '<=', new Date(endDate));
-
-    const unsubscribe = query.onSnapshot(
-      (snapshot: FirebaseFirestoreTypes.QuerySnapshot) => {
+    const unsubscribe = onSnapshot(
+      query(
+        collection(firestore, 'activities'),
+        ...activityFilters({ guestId, houseId, startDate, endDate, timeZone, type, status }),
+      ),
+      (snapshot: QuerySnapshot) => {
         setCount(snapshot.size);
         setLoading(false);
         setError(null);
@@ -260,7 +259,7 @@ export function useActivityCount(options: UseActivitiesOptions): {
     );
 
     return () => unsubscribe();
-  }, [guestId, houseId, startDate, endDate, type, status]);
+  }, [guestId, houseId, startDate, endDate, timeZone, type, status]);
 
   // Masked as in useActivities: no house means nothing to load.
   return { count, loading: !!houseId && loading, idle: !houseId, error };

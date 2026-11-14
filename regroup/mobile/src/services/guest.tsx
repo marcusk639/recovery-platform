@@ -1,28 +1,36 @@
-import FirebaseFirestore from "@react-native-firebase/firestore";
-import { firestore } from "../../firebase-setup";
-import { Guest, GuestStatus } from "../entities/Guest";
-import { Guests } from "../types/index";
-import { logException } from "../util/logging";
-import * as crud from "./crud";
-import { find, keyBy } from "lodash";
-import { House } from "../entities/House";
-import { houseCollection, getHouse, removeGuestPrivileges } from "./house";
-import { findGuestBed } from "../util/house";
-import cloneDeep from "lodash/cloneDeep";
+import {
+  collection,
+  doc,
+  onSnapshot,
+  runTransaction,
+  serverTimestamp,
+  updateDoc,
+  writeBatch,
+  type DocumentData,
+} from '@react-native-firebase/firestore';
+import { firestore } from '../../firebase-setup';
+import { Guest, GuestStatus } from '../entities/Guest';
+import { Guests } from '../types/index';
+import { logException } from '../util/logging';
+import * as crud from './crud';
+import { find, keyBy } from 'lodash';
+import { House } from '../entities/House';
+import { houseCollection, getHouse, removeGuestPrivileges } from './house';
+import { findGuestBed } from '../util/house';
+import cloneDeep from 'lodash/cloneDeep';
+import { asCents } from '../util/money';
 
-export const guestCollection = firestore.collection("guests");
-export const archiveCollection = firestore.collection("guest-archive");
+export const guestCollection = collection(firestore, 'guests');
+export const archiveCollection = collection(firestore, 'guest-archive');
 
 /**
  * Custom error for optimistic locking conflicts
  * FIX #2: Race condition prevention
  */
 export class OptimisticLockError extends Error {
-  constructor(
-    message: string = "Guest was modified by another update. Please retry.",
-  ) {
+  constructor(message: string = 'Guest was modified by another update. Please retry.') {
     super(message);
-    this.name = "OptimisticLockError";
+    this.name = 'OptimisticLockError';
   }
 }
 
@@ -31,7 +39,7 @@ export async function getGuest(uuid: string): Promise<Guest> {
 }
 
 export function createGuestId() {
-  return guestCollection.doc().id;
+  return doc(guestCollection).id;
 }
 
 /**
@@ -44,52 +52,60 @@ export async function getGuests(
   attribute: string,
   value: string | number | boolean | null,
 ): Promise<Guests> {
-  const result = await crud.getByAttribute<Guest>(
-    guestCollection,
-    attribute,
-    "==",
-    value,
-  );
-  return keyBy(result, "id") as Guests;
+  const result = await crud.getByAttribute<Guest>(guestCollection, attribute, '==', value);
+  return keyBy(result, 'id') as Guests;
 }
 
 export async function getGuestsBlocking(
   attribute: string,
   value: string | number | boolean | null,
 ): Promise<Guests> {
-  const result = await crud.getByAttribute<Guest>(
-    guestCollection,
-    attribute,
-    "==",
-    value,
-  );
-  return keyBy(result, "id") as Guests;
+  const result = await crud.getByAttribute<Guest>(guestCollection, attribute, '==', value);
+  return keyBy(result, 'id') as Guests;
 }
+
+/**
+ * An edit to a resident's balance, in cents: from the figure the form showed
+ * to the figure typed. It is refused if the stored balance is no longer
+ * `from`, so a payment that landed while the form was open, or a colleague's
+ * edit, is never overwritten or applied twice (#198).
+ */
+export type MoneyEdits = Partial<
+  Record<'rentOwed' | 'choreFees', { from: number; to: number }>
+>;
 
 export async function updateGuest(
   guest: Partial<Guest>,
   updatedGuest: Partial<Guest>,
   retryCount: number = 3,
   /**
-   * Fields the caller owns absolutely, exempt from the accumulator max-merge.
-   * Pass the money fields for operator-driven edits; leave empty for background
-   * or concurrent writers that must not clobber a higher recorded value.
+   * Fields the caller owns absolutely, exempt from the max-merge (step) or the
+   * OR-merge (isAdmin, infoEntered, hasJob). Leave empty for background or
+   * concurrent writers that must not clobber what another writer recorded.
    */
   authoritativeFields: ReadonlyArray<keyof Guest> = [],
+  /**
+   * The only way this function changes rentOwed or choreFees. Values for those
+   * fields in updatedGuest are ignored, because an absolute value from a copy
+   * of the guest read earlier would erase a payment that landed since (#198).
+   * Throws an error with kind 'balance-changed' (and field, currentCents) if
+   * the stored balance isn't the edit's `from`.
+   */
+  moneyEdits: MoneyEdits = {},
 ): Promise<Partial<Guest>> {
   if (!updatedGuest.id) {
-    throw new Error("Guest must have an id for update");
+    throw new Error('Guest must have an id for update');
   }
 
-  const guestRef = guestCollection.doc(updatedGuest.id);
+  const guestRef = doc(guestCollection, updatedGuest.id);
 
   for (let attempt = 0; attempt < retryCount; attempt++) {
     try {
-      const result = await firestore.runTransaction(async (transaction) => {
+      const result = await runTransaction(firestore, async (transaction) => {
         // Read the current state from database
         const currentDoc = await transaction.get(guestRef);
 
-        if (!currentDoc.exists) {
+        if (!currentDoc.exists()) {
           throw new Error(`Guest ${updatedGuest.id} not found`);
         }
 
@@ -97,11 +113,21 @@ export async function updateGuest(
 
         // FIX #2: Merge stats instead of overwriting
         // This prevents one device's updates from overwriting another's
-        const mergedGuest = mergeGuestStats(
-          currentGuest,
-          updatedGuest,
-          authoritativeFields,
-        );
+        const mergedGuest = mergeGuestStats(currentGuest, updatedGuest, authoritativeFields);
+        for (const [field, edit] of Object.entries(moneyEdits) as Array<
+          [keyof MoneyEdits, { from: number; to: number } | undefined]
+        >) {
+          if (!edit) continue;
+          const stored = currentGuest[field] ?? 0;
+          if (stored !== edit.from) {
+            throw Object.assign(new Error(`${field} changed while it was being edited`), {
+              kind: 'balance-changed' as const,
+              field,
+              currentCents: stored,
+            });
+          }
+          mergedGuest[field] = asCents(edit.to);
+        }
 
         // Increment version for optimistic locking
         mergedGuest.version = (currentGuest.version || 0) + 1;
@@ -117,15 +143,13 @@ export async function updateGuest(
     } catch (error: any) {
       // If it's a Firestore contention error, retry
       if (
-        error.code === "aborted" ||
-        error.code === "failed-precondition" ||
-        error.message?.includes("contention")
+        error.code === 'aborted' ||
+        error.code === 'failed-precondition' ||
+        error.message?.includes('contention')
       ) {
         if (attempt < retryCount - 1) {
           // Exponential backoff
-          await new Promise((resolve) =>
-            setTimeout(resolve, Math.pow(2, attempt) * 100),
-          );
+          await new Promise((resolve) => setTimeout(resolve, Math.pow(2, attempt) * 100));
           continue;
         }
       }
@@ -142,10 +166,13 @@ export async function updateGuest(
  * FIX #2: Smart merging of stats
  *
  * Merge strategy:
- * - Numeric accumulator fields (rentOwed, choreFees, step): take the max of
- *   current and update so that neither concurrent write loses a higher value.
+ * - Balance fields (rentOwed, choreFees): always the stored value. updateGuest
+ *   changes them only through moneyDeltas.
+ * - step: take the max of current and update, unless the caller declares it
+ *   authoritative.
  * - Boolean flag fields (isAdmin, infoEntered, hasJob): OR the two values so
- *   a flag that was set by one writer is never silently cleared by another.
+ *   a flag that was set by one writer is never silently cleared by another,
+ *   unless the caller declares the flag authoritative (removing a manager).
  * - Array fields (supporters): union the two arrays to avoid losing entries.
  * - All other fields: the incoming update wins.
  * - Fields present in currentGuest but absent from updateGuest are preserved.
@@ -162,32 +189,35 @@ function mergeGuestStats(
     ...cloneDeep(updateGuest),
   };
 
-  // ── Numeric accumulator fields: take the maximum ────────────────────────────
-  // These represent quantities that only grow (debt owed, fees accrued, step
-  // progress). Taking the max ensures a concurrent write that already recorded
-  // a higher value is never overwritten with a stale lower value.
-  const numericMaxFields: Array<keyof Guest> = [
-    "rentOwed",
-    "choreFees",
-    "step",
-  ];
+  // ── Balance fields: the stored value, always ────────────────────────────────
+  // Callers pass whole cloned guests, so a value here is usually a stale copy:
+  // max-merging it put back debt a payment had cleared, and an operator's
+  // absolute edit overwrote a payment that landed while the form was open.
+  for (const field of ['rentOwed', 'choreFees'] as const) {
+    if (field in currentGuest) {
+      merged[field] = currentGuest[field];
+    } else {
+      delete merged[field];
+    }
+  }
+
+  // ── step: take the maximum ──────────────────────────────────────────────────
+  // Step progress only grows; the max keeps a concurrent write that recorded a
+  // higher step from being overwritten with a stale lower one.
+  const numericMaxFields: Array<keyof Guest> = ['step'];
   for (const field of numericMaxFields) {
     const current = currentGuest[field] as number | undefined;
     const update = (updateGuest as any)[field] as number | undefined;
     if (authoritativeFields.includes(field)) {
-      // The caller is the source of truth for this field, so the max-merge is
-      // skipped and the spread above stands. An operator editing a resident's
-      // balance must be able to LOWER it — to record a cash payment, a
-      // write-off, or a correction. Without this, Math.max silently discarded
-      // the edit while the form still reported success.
-      if (update === undefined && typeof current === "number") {
+      // The caller is the source of truth, so the spread above stands.
+      if (update === undefined && typeof current === 'number') {
         (merged as any)[field] = current;
       }
       continue;
     }
-    if (typeof current === "number" && typeof update === "number") {
+    if (typeof current === 'number' && typeof update === 'number') {
       (merged as any)[field] = Math.max(current, update);
-    } else if (typeof current === "number" && update === undefined) {
+    } else if (typeof current === 'number' && update === undefined) {
       // Field not in the update — keep the DB value (already set above via spread).
       (merged as any)[field] = current;
     }
@@ -197,32 +227,25 @@ function mergeGuestStats(
   // ── Boolean flag fields: OR the two values ──────────────────────────────────
   // Once a flag like isAdmin or infoEntered is set to true it should not be
   // cleared by a concurrent write that happened to still have the old false.
-  const booleanOrFields: Array<keyof Guest> = [
-    "isAdmin",
-    "infoEntered",
-    "hasJob",
-  ];
+  const booleanOrFields: Array<keyof Guest> = ['isAdmin', 'infoEntered', 'hasJob'];
   for (const field of booleanOrFields) {
+    if (authoritativeFields.includes(field) && field in updateGuest) {
+      // The spread above stands: ManagerSettings clears isAdmin this way (#228).
+      continue;
+    }
     const current = currentGuest[field] as boolean | undefined;
     const update = (updateGuest as any)[field] as boolean | undefined;
-    const currentBool = typeof current === "boolean" ? current : false;
-    const updateBool = typeof update === "boolean" ? update : false;
+    const currentBool = typeof current === 'boolean' ? current : false;
+    const updateBool = typeof update === 'boolean' ? update : false;
     (merged as any)[field] = currentBool || updateBool;
   }
 
   // ── Array fields: union to avoid losing entries ─────────────────────────────
   // The supporters list can be modified by concurrent operations (e.g. adding a
   // supporter on two different devices). Unioning ensures no entry is lost.
-  if (
-    Array.isArray(currentGuest.supporters) ||
-    Array.isArray(updateGuest.supporters)
-  ) {
-    const currentSupps = Array.isArray(currentGuest.supporters)
-      ? currentGuest.supporters
-      : [];
-    const updateSupps = Array.isArray(updateGuest.supporters)
-      ? updateGuest.supporters
-      : [];
+  if (Array.isArray(currentGuest.supporters) || Array.isArray(updateGuest.supporters)) {
+    const currentSupps = Array.isArray(currentGuest.supporters) ? currentGuest.supporters : [];
+    const updateSupps = Array.isArray(updateGuest.supporters) ? updateGuest.supporters : [];
     merged.supporters = Array.from(new Set([...currentSupps, ...updateSupps]));
   }
 
@@ -230,19 +253,19 @@ function mergeGuestStats(
 }
 
 export async function createGuest(newGuest: Guest): Promise<Guest> {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   const house = await getHouse(newGuest.houseId);
   const newHouse = { ...house, currentCapacity: house.currentCapacity + 1 };
-  batch.update(houseCollection.doc(house.id), newHouse);
-  batch.set(guestCollection.doc(newGuest.id), newGuest);
+  batch.update(doc(houseCollection, house.id), newHouse);
+  batch.set(doc(guestCollection, newGuest.id), newGuest);
   await batch.commit();
   return newGuest;
 }
 
 export async function deleteGuest(guest: Guest, house: House) {
-  const batch = firestore.batch();
-  batch.delete(guestCollection.doc(guest.id));
-  batch.set(archiveCollection.doc(guest.id), guest);
+  const batch = writeBatch(firestore);
+  batch.delete(doc(guestCollection, guest.id));
+  batch.set(doc(archiveCollection, guest.id), guest);
   const bed = findGuestBed(guest.id, house.rooms);
   let rooms = cloneDeep(house.rooms);
   if (bed) {
@@ -272,7 +295,7 @@ export async function deleteGuest(guest: Guest, house: House) {
     rooms,
   };
   // batch.update(userCollection.doc(guest.userId), removeUserFromHouse());
-  batch.update(houseCollection.doc(house.id), updatedHouse);
+  batch.update(doc(houseCollection, house.id), updatedHouse as DocumentData);
   await batch.commit();
   return { house: updatedHouse, guest };
 }
@@ -286,7 +309,8 @@ export function subscribeToGuest(
   guestChangeHandler: (guest: Guest) => any,
   errorHandler?: (error: Error) => void,
 ) {
-  return guestCollection.doc(guest.id).onSnapshot(
+  return onSnapshot(
+    doc(guestCollection, guest.id),
     (docSnapshot) => {
       const updatedGuest = docSnapshot.data() as Guest;
       if (updatedGuest) {
@@ -298,20 +322,20 @@ export function subscribeToGuest(
         errorHandler(error);
       }
       // Always log even if caller doesn't provide a handler
-      console.warn("[subscribeToGuest] Subscription error:", error.message);
+      console.warn('[subscribeToGuest] Subscription error:', error.message);
     },
   );
 }
 
 export async function customizePhase(guest: Guest, house: House) {
-  const batch = firestore.batch();
+  const batch = writeBatch(firestore);
   // Field-level update — writing the whole guest object here silently dropped
   // any Firestore field not present in the in-memory copy (P0-5 data loss).
-  batch.update(guestCollection.doc(guest.id), {
+  batch.update(doc(guestCollection, guest.id), {
     phase: guest.phase,
     updatedAt: new Date().toISOString(),
   });
-  batch.update(houseCollection.doc(house.id), house);
+  batch.update(doc(houseCollection, house.id), house as DocumentData);
   await batch.commit();
   return { guest, house };
 }
@@ -322,15 +346,15 @@ export async function dischargeGuest(
   notes?: string,
 ): Promise<void> {
   try {
-    await guestCollection.doc(guestId).update({
-      status: "discharged" as GuestStatus,
+    await updateDoc(doc(guestCollection, guestId), {
+      status: 'discharged' as GuestStatus,
       moveOutDate,
       ...(notes ? { dischargeNotes: notes } : {}),
-      updatedAt: FirebaseFirestore.FieldValue.serverTimestamp(),
+      updatedAt: serverTimestamp(),
     });
   } catch (error) {
     logException(error);
-    throw new Error("Failed to discharge resident. Please try again.");
+    throw new Error('Failed to discharge resident. Please try again.');
   }
 
   // The guest doc no longer reflects an active resident, but Firestore
@@ -345,7 +369,7 @@ export async function dischargeGuest(
   } catch (error) {
     logException(error);
     throw new Error(
-      "Resident was discharged, but house access could not be revoked. Please contact support.",
+      'Resident was discharged, but house access could not be revoked. Please contact support.',
     );
   }
 }

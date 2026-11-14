@@ -41,6 +41,7 @@ import * as guestService from '../../services/guest';
 import * as adminService from '../../services/admin';
 import { selectHouseById } from '../../state/slices/housesSlice';
 import { selectGuestById } from '../../state/slices/guestsSlice';
+import { resetAdminState, setUserAsAdmin } from '../../state/slices/adminSlice';
 
 const operator = {
   id: 'user-1',
@@ -96,6 +97,42 @@ describe("an operator's houses", () => {
     renderProvider();
 
     await waitFor(() => expect(mockDispatch).toHaveBeenCalledWith(selectGuestById('g1')));
+  });
+
+  it("record the signed-in admin, which the profile and setup screens read", async () => {
+    renderProvider();
+    await waitFor(() =>
+      expect(mockDispatch).toHaveBeenCalledWith(
+        setUserAsAdmin({ id: 'admin-1', houseIds: ['h1'] } as any),
+      ),
+    );
+  });
+
+  it('do not record an admin when the record is missing', async () => {
+    (adminService.getAdmin as jest.Mock).mockResolvedValue(null);
+    renderProvider();
+    await waitFor(() => expect(houseService.getHousesForAdmin).toHaveBeenCalled());
+    await act(async () => {});
+    expect(mockDispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: setUserAsAdmin.type }));
+  });
+
+  it('clear the recorded admin on logout, so the next account on this phone is not shown as them', async () => {
+    mockState = { ...mockState, user: { user: null, loading: false, loggedIn: false } };
+    renderProvider();
+    await waitFor(() => expect(mockDispatch).toHaveBeenCalledWith(resetAdminState()));
+  });
+
+  it('clear the recorded admin when a resident signs in', async () => {
+    mockState = {
+      ...mockState,
+      user: {
+        user: { id: 'resident-1', uid: 'resident-1', isAdmin: false, isGuest: false },
+        loading: false,
+        loggedIn: true,
+      },
+    };
+    renderProvider();
+    await waitFor(() => expect(mockDispatch).toHaveBeenCalledWith(resetAdminState()));
   });
 
   it('keep an existing selection', async () => {

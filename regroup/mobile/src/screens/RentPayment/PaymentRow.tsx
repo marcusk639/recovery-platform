@@ -8,6 +8,7 @@ import PaymentStatusBadge from './PaymentStatusBadge';
 import { formatCentsAsCurrency, formatDate } from './rentPaymentHelpers';
 import { shareReceipt, ReceiptData } from '../../services/receiptService';
 import { toDateSafe } from '../../util/firestore';
+import { PAYMENT_TONE_COLOR, paymentDisplayStatus } from '../../util/paymentStatus';
 
 export interface PaymentRowProps {
   payment: RentPayment;
@@ -20,6 +21,9 @@ const PaymentRow: React.FC<PaymentRowProps> = ({
   guestName = 'Resident',
   houseName = '',
 }) => {
+  const display = paymentDisplayStatus(payment);
+  const adjusted = payment.disputed || (payment.refundedAmountCents ?? 0) > 0;
+
   const handleShare = async () => {
     const receipt: ReceiptData = {
       paymentId: payment.id,
@@ -62,8 +66,18 @@ const PaymentRow: React.FC<PaymentRowProps> = ({
           style={styles.paymentAmount}
         />
         <View style={styles.statusRow}>
-          <PaymentStatusBadge status={payment.status} />
-          {payment.status === 'succeeded' && (
+          <PaymentStatusBadge
+            status={payment.status}
+            adjusted={
+              adjusted
+                ? {
+                    label: display.label[0].toUpperCase() + display.label.slice(1),
+                    color: PAYMENT_TONE_COLOR[display.tone],
+                  }
+                : undefined
+            }
+          />
+          {payment.status === 'succeeded' && !adjusted && (
             <TouchableOpacity
               testID="share-receipt-button"
               onPress={handleShare}

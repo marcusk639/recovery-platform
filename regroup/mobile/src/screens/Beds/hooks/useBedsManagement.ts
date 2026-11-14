@@ -154,6 +154,12 @@ export const useBedsManagement = () => {
         }
       } catch (error) {
         setError('Something went wrong');
+        notify(
+          deleteRoom ? 'Room Not Removed' : 'Room Not Saved',
+          'We could not save this change. Please try again.',
+          [],
+          'fail',
+        );
       }
     },
     [house, dismissFormModal, notify, updateHouseMutation],
@@ -186,9 +192,10 @@ export const useBedsManagement = () => {
         });
       } catch (error) {
         setError('Something went wrong');
+        notify('Bed Not Added', 'We could not add this bed. Please try again.', [], 'fail');
       }
     },
-    [house, dismissFormModal, updateHouseMutation],
+    [house, dismissFormModal, notify, updateHouseMutation],
   );
 
   // Move guest between beds (swap)
@@ -244,6 +251,7 @@ export const useBedsManagement = () => {
         clearBeds();
       } catch (error) {
         setError('Failed to remove guest');
+        notify('Guest Not Removed', 'We could not free this bed. Please try again.', [], 'fail');
       }
     },
     [house, guests, updateHouseMutation, notify, clearBeds],
@@ -292,6 +300,9 @@ export const useBedsManagement = () => {
         clearBeds();
       } catch (error) {
         setError('Failed to assign guest');
+        // AssignGuest reports the failure; swallowing it here made the form
+        // say "Bed Assigned" for an assignment that never saved.
+        throw error;
       }
     },
     [house, updateHouseMutation, dismissFormModal, notify, clearBeds],

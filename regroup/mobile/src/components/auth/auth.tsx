@@ -7,7 +7,7 @@ import { House } from '../../entities/House';
 import { Houses } from '../../types';
 import { Role } from '../../entities/Roles';
 import { getRolesFromClaims } from '../../util/roles';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
+import type { IdTokenResult } from '@react-native-firebase/auth';
 
 interface Props {
   user: User;
@@ -25,9 +25,10 @@ export interface Claims {
   potentialSuperAdmin: boolean;
 }
 
-interface TokenWithClaims extends FirebaseAuthTypes.IdTokenResult {
+// The token with the app's own claim shape in place of the SDK's ParsedToken.
+type TokenWithClaims = Omit<IdTokenResult, 'claims'> & {
   claims: Claims;
-}
+};
 
 export interface RoleToken {
   claims: Claims;

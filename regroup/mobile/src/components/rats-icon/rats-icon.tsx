@@ -1,4 +1,4 @@
-import FontAwesome5 from 'react-native-vector-icons/FontAwesome5';
+import FontAwesome5 from './font-awesome-5';
 import React from 'react';
 import {
   TextStyle,
@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import { fontSize, normalize } from '../../styles/theme';
 import { useNavigation } from '@react-navigation/native';
-import Icon from 'react-native-vector-icons/MaterialIcons';
+import Icon from '@react-native-vector-icons/material-icons/static';
 import { color } from '../../styles/theme';
 
 interface IconProps {

@@ -4,7 +4,8 @@
 
 import { getGuest, updateGuest } from '../services/guest';
 import { Guest } from '../entities/Guest';
-import { firestore } from '../../firebase-setup';
+import { adminDb } from './firebase-admin-setup';
+import { adminOf, signInAs } from './actors';
 import { asCents } from '../util/money';
 
 const GUEST_ID = 'crud-guest-1';
@@ -38,16 +39,21 @@ const seedData: Partial<Guest> & Record<string, unknown> = {
 };
 
 const seedGuest = async (data: Partial<Guest>) => {
-  await firestore.collection('guests').doc(GUEST_ID).set(data);
+  await adminDb.collection('guests').doc(GUEST_ID).set(data);
 };
 
 describe('guest CRUD (integration)', () => {
+  // A house admin of the guest's house (not the guest's own account).
+  beforeAll(async () => {
+    await signInAs('crud-admin-1', adminOf('h1'));
+  });
+
   beforeEach(async () => {
     await seedGuest(seedData);
   });
 
   afterEach(async () => {
-    await firestore.collection('guests').doc(GUEST_ID).delete();
+    await adminDb.collection('guests').doc(GUEST_ID).delete();
   });
 
   describe('getGuest', () => {

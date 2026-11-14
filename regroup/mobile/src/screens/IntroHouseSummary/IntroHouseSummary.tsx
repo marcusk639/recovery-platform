@@ -162,7 +162,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
   };
 
   const renderCollapsibles = () => {
-    const Collapsibles: JSX.Element[] = [];
+    const Collapsibles: React.JSX.Element[] = [];
     Collapsibles.push(
       ...map(admins, (admin) => {
         return renderUserCollapsible(admin);
@@ -251,7 +251,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  const renderApplyButton = (house: House): JSX.Element | null => {
+  const renderApplyButton = (house: House): React.JSX.Element | null => {
     return (
       <RatsButton
         testID="apply-button"

@@ -300,3 +300,17 @@ describe("userSlice", () => {
     });
   });
 });
+
+describe('logging back in after a logout', () => {
+  const afterLogout = { loggingOutSuccessful: true } as any;
+
+  it.each([
+    ['login', { type: 'user/login/fulfilled', payload: { user: { id: 'u1' }, token: 't' } }],
+    ['autoLogin', { type: 'user/autoLogin/fulfilled', payload: { user: { id: 'u1' }, token: 't' } }],
+    ['createUser', { type: 'user/createUser/fulfilled', payload: { id: 'u1' } }],
+  ])('%s clears the logged-out flag, or Personal spins forever', (_name, action) => {
+    const initial = userReducer(undefined, { type: '@@init' });
+    const state = userReducer({ ...initial, ...afterLogout }, action as any);
+    expect(state.loggingOutSuccessful).toBe(false);
+  });
+});

@@ -3,12 +3,14 @@ import { render } from '@testing-library/react-native';
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
-jest.mock('react-native-vector-icons/FontAwesome5', () => {
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => {
   const { View } = require('react-native');
   return ({ testID }: { testID?: string }) => <View testID={testID} />;
 });
 
 jest.mock('../../../services/payments', () => ({
+  getPaymentHistory: jest.fn().mockResolvedValue([]),
+  getGuestPayments: jest.fn().mockResolvedValue([]),
   listPayments: jest.fn().mockResolvedValue([]),
 }));
 
@@ -31,14 +33,18 @@ jest.mock('@react-navigation/native', () => ({
 // in the app dispatches any more. Seeding those fields made this suite pass
 // against a state the app can never reach, while the real screen rendered
 // "No payments found" for every resident.
+const mockResident = {
+  id: 'guest-1',
+  userId: 'user-1' as string | undefined,
+  displayName: 'Alice Smith',
+  firstName: 'Alice',
+  lastName: 'Smith',
+};
+let mockGuest = mockResident;
+let mockSignedInUid = 'user-1';
 jest.mock('../../../hooks/useSelectedGuest', () => ({
   useSelectedGuest: () => ({
-    guest: {
-      id: 'guest-1',
-      displayName: 'Alice Smith',
-      firstName: 'Alice',
-      lastName: 'Smith',
-    },
+    guest: mockGuest,
     guestId: 'guest-1',
     isLoading: false,
   }),
@@ -55,6 +61,7 @@ jest.mock('../../../hooks/useSelectedHouse', () => ({
 jest.mock('../../../state/store', () => ({
   useAppSelector: (selector: (s: any) => any) =>
     selector({
+      user: { user: { id: mockSignedInUid } },
       guests: {
         selectedGuest: {
           id: 'guest-1',
@@ -107,8 +114,95 @@ const _fakeNavigation: any = { goBack: jest.fn(), navigate: jest.fn() };
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('PaymentHistory', () => {
+  afterEach(() => {
+    mockGuest = mockResident;
+    mockSignedInUid = 'user-1';
+    (paymentsService.getPaymentHistory as jest.Mock).mockReset().mockResolvedValue([]);
+    (paymentsService.getGuestPayments as jest.Mock).mockReset().mockResolvedValue([]);
+  });
+
+  it("shows an operator the resident's payments by guest record, including any from before the account linked", async () => {
+    mockSignedInUid = 'operator-1';
+    (paymentsService.getGuestPayments as jest.Mock).mockResolvedValue([_succeeded]);
+    const { findByTestId } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByTestId('payment-row-pay-001');
+    expect(paymentsService.getGuestPayments).toHaveBeenCalledWith({
+      houseId: 'house-1',
+      guestId: 'guest-1',
+    });
+    expect(paymentsService.getPaymentHistory).not.toHaveBeenCalled();
+  });
+
+  it('shows cash an operator recorded for a resident with no account', async () => {
+    mockSignedInUid = 'operator-1';
+    mockGuest = { ...mockResident, userId: undefined };
+    (paymentsService.getGuestPayments as jest.Mock).mockResolvedValue([_succeeded]);
+    const { findByTestId } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByTestId('payment-row-pay-001');
+  });
+
+  it('never shows a refunded payment as succeeded', async () => {
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
+      { ..._succeeded, refundedAmountCents: 50000 },
+    ]);
+    const { findByText, queryByText } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByText('REFUNDED');
+    expect(queryByText('SUCCEEDED')).toBeNull();
+  });
+
+  it('shows how much of a partly refunded payment went back', async () => {
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
+      { ..._succeeded, refundedAmountCents: 10000 },
+    ]);
+    const { findByText } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByText('PARTIALLY REFUNDED');
+    await findByText('$100.00 refunded');
+  });
+
+  it('never shows a disputed payment as succeeded', async () => {
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
+      { ..._succeeded, disputed: true },
+    ]);
+    const { findByText, queryByText } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByText('DISPUTED');
+    expect(queryByText('SUCCEEDED')).toBeNull();
+  });
+
+  it('reads Firestore payments, the history of record, not Stripe charges', async () => {
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([_succeeded]);
+    (paymentsService.listPayments as jest.Mock).mockClear();
+    const { findByTestId } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByTestId('payment-row-pay-001');
+    expect(paymentsService.getPaymentHistory).toHaveBeenCalledWith({
+      houseId: 'house-1',
+      guestUserId: 'user-1',
+    });
+    expect(paymentsService.listPayments).not.toHaveBeenCalled();
+  });
+
+  it('shows a payment resolved offline as such, with no description needed', async () => {
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
+      { ..._succeeded, id: 'pay-off', status: 'resolved_offline', description: undefined },
+    ]);
+    const { findByText } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByText('RESOLVED OFFLINE');
+    await findByText('Payment');
+  });
+
+  it('renders a Firestore Timestamp createdAt', async () => {
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
+      {
+        ..._succeeded,
+        id: 'pay-ts',
+        createdAt: { toDate: () => new Date('2026-11-03T12:00:00Z') },
+      },
+    ]);
+    const { findByTestId } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByTestId('payment-row-pay-ts');
+  });
+
   it('renders a succeeded row without a stale-clock icon', async () => {
-    (paymentsService.listPayments as jest.Mock).mockResolvedValue([_succeeded]);
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([_succeeded]);
     const { findByTestId, queryByTestId } = render(
       <PaymentHistory navigation={_fakeNavigation} />,
     );
@@ -117,7 +211,7 @@ describe('PaymentHistory', () => {
   });
 
   it('renders a recent-pending row without a stale-clock icon', async () => {
-    (paymentsService.listPayments as jest.Mock).mockResolvedValue([
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
       _recentPending,
     ]);
     const { findByTestId, queryByTestId } = render(
@@ -128,7 +222,7 @@ describe('PaymentHistory', () => {
   });
 
   it('renders a stale-pending row WITH a stale-clock icon', async () => {
-    (paymentsService.listPayments as jest.Mock).mockResolvedValue([
+    (paymentsService.getPaymentHistory as jest.Mock).mockResolvedValue([
       _stalePending,
     ]);
     const { findByTestId } = render(

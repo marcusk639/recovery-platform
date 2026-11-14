@@ -36,7 +36,7 @@ interface Props {
 const SubscriptionGate: React.FC<Props> = ({ children }) => {
   const queryClient = useQueryClient();
   const currentUser = useAppSelector(s => s.user.user);
-  const appState = useRef<AppStateStatus>(AppState.currentState);
+  const appState = useRef<typeof AppState.currentState>(AppState.currentState);
   const result = useSubscriptionGate();
 
   useEffect(() => {

@@ -19,7 +19,7 @@ export interface FilterFieldConfig {
     labelFields?: string[];
   };
   // For custom fields
-  customRender?: (fieldConfig: FilterFieldConfig) => JSX.Element;
+  customRender?: (fieldConfig: FilterFieldConfig) => React.JSX.Element;
 }
 
 /**
@@ -62,7 +62,7 @@ interface FilterBuilderProps extends FilterFormProps {
 export const FilterBuilder: React.FC<FilterBuilderProps> = (props) => {
   const { config, ...restProps } = props;
 
-  const renderField = (field: JSX.Element) => {
+  const renderField = (field: React.JSX.Element) => {
     return <View style={{}}>{field}</View>;
   };
 

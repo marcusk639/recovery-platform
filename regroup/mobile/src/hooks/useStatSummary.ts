@@ -24,7 +24,7 @@ import {
   HEALTH_COLOR_MAP,
   getPhaseRule,
 } from '../util/guest';
-import { getTodaysDate, daysLeft } from '../util/display';
+import { daysLeftInWeek } from './activity/useCurrentWeek';
 import {
   useWeekSummary,
   useWeekSummaryHistory,
@@ -89,7 +89,7 @@ export const useStatSummary = (stat: Stat): StatSummaryData => {
   const user = useAppSelector((state: any) => state.user.user) as User | null;
 
   // Get current week dates
-  const { startDate, endDate } = useCurrentWeek();
+  const { startDate, endDate } = useCurrentWeek(house?.timezone);
 
   // Current week stats — sourced from 'week-summaries' Firestore collection
   const {
@@ -134,6 +134,7 @@ export const useStatSummary = (stat: Stat): StatSummaryData => {
       houseId: guest?.id ? house?.id : undefined,
       startDate,
       endDate,
+      timeZone: house?.timezone,
       type: STAT_TO_ACTIVITY_TYPE[stat],
       status: ActivityStatus.DISPUTED,
     });
@@ -141,7 +142,10 @@ export const useStatSummary = (stat: Stat): StatSummaryData => {
   const disputes = disputedActivitiesCount;
 
   // Days remaining in the week
-  const daysRemaining = useMemo(() => daysLeft(getTodaysDate()), []);
+  const daysRemaining = useMemo(
+    () => daysLeftInWeek(endDate, new Date(), house?.timezone),
+    [endDate, house?.timezone],
+  );
 
   // Build bar graph data from historical WeekSummary documents.
   // historicalSummaries is ordered newest-first (desc), so we reverse to plot

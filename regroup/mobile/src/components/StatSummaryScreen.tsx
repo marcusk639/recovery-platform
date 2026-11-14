@@ -56,7 +56,7 @@ interface StatSummaryScreenProps {
   setRef: (ref: any) => void;
 
   // Customization
-  renderStatDetails?: () => JSX.Element;
+  renderStatDetails?: () => React.JSX.Element;
   renderHelp?: () => void;
   testID?: string;
 }

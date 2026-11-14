@@ -7,8 +7,8 @@ import { House } from "../../entities/House";
 import { sendAllInvites } from "../../services/setup-wizard";
 import { User } from "../../entities/User";
 
-import { View } from "react-native";
 import ScreenHeader from "../../components/screen-header";
+import { RatsAndroidResizeView } from "../../components/rats-keyboard";
 import { color } from "../../styles/theme";
 import { useUpdateHouse } from "../../state/queries/houseQueries";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -61,7 +61,8 @@ const GuestInvites: React.FC<Props> = ({ navigation }) => {
   }, [sendingEmails, success, setLoadingModalState]);
 
   return (
-    <View style={{ flex: 1, backgroundColor: color.light_grey }}>
+    // Keeps the pinned Send Invites button above the Android keyboard.
+    <RatsAndroidResizeView style={{ backgroundColor: color.light_grey }}>
       <ScreenHeader renderBackButton header="Guest Invites" />
       <GuestSetupForm
         navigation={navigation}
@@ -111,7 +112,7 @@ const GuestInvites: React.FC<Props> = ({ navigation }) => {
         style={{ backgroundColor: color.white }}
         edges={["bottom"]}
       />
-    </View>
+    </RatsAndroidResizeView>
   );
 };
 

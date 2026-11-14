@@ -1,6 +1,17 @@
+import {
+  collection,
+  doc,
+  getDocs,
+  query,
+  updateDoc,
+  where,
+  writeBatch,
+} from "@react-native-firebase/firestore";
 import { firestore } from "../../../firebase-setup";
 import { logException } from "../../util/logging";
 import { EESTransactionType } from "../../entities/oxford/EESTransaction";
+
+const eesRecords = () => collection(firestore, "ees-records");
 
 export interface EESRecord {
   guestId: string;
@@ -28,14 +39,16 @@ export async function getEESRecords(
   weekStart: string
 ): Promise<(EESRecord & { id: string })[]> {
   try {
-    const snapshot = await firestore
-      .collection("ees-records")
-      .where("houseId", "==", houseId)
-      .where("weekStart", "==", weekStart)
-      .get();
+    const snapshot = await getDocs(
+      query(
+        eesRecords(),
+        where("houseId", "==", houseId),
+        where("weekStart", "==", weekStart)
+      )
+    );
 
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id } as EESRecord & { id: string })
+      (record) => ({ ...record.data(), id: record.id } as EESRecord & { id: string })
     );
   } catch (error) {
     logException(error);
@@ -45,7 +58,7 @@ export async function getEESRecords(
 
 export async function markEESPaid(recordId: string): Promise<void> {
   try {
-    await firestore.collection("ees-records").doc(recordId).update({
+    await updateDoc(doc(eesRecords(), recordId), {
       paid: true,
       paidAt: new Date().toISOString(),
     });
@@ -77,13 +90,15 @@ export async function getEESRecordsForRecentWeeks(
   }
   const uniqueWeeks = [...new Set(weekStarts)];
   try {
-    const snapshot = await firestore
-      .collection("ees-records")
-      .where("houseId", "==", houseId)
-      .where("weekStart", "in", uniqueWeeks)
-      .get();
+    const snapshot = await getDocs(
+      query(
+        eesRecords(),
+        where("houseId", "==", houseId),
+        where("weekStart", "in", uniqueWeeks)
+      )
+    );
     return snapshot.docs.map(
-      (doc) => ({ ...doc.data(), id: doc.id } as EESRecord & { id: string })
+      (record) => ({ ...record.data(), id: record.id } as EESRecord & { id: string })
     );
   } catch (error) {
     logException(error);
@@ -98,10 +113,10 @@ export async function createEESRecords(
   amountPerGuest: number
 ): Promise<void> {
   try {
-    const batch = firestore.batch();
+    const batch = writeBatch(firestore);
 
     guestIds.forEach((guestId) => {
-      const ref = firestore.collection("ees-records").doc();
+      const ref = doc(eesRecords());
       const record: EESRecord & { id: string } = {
         id: ref.id,
         guestId,

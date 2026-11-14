@@ -319,7 +319,9 @@ const HouseActivity: React.FC = () => {
         refreshControl={
           <RefreshControl
             refreshing={isFetching && !isLoading}
-            onRefresh={refetch}
+            onRefresh={() => {
+            refetch();
+          }}
             tintColor={color.baby_blue}
           />
         }

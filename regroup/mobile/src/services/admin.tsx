@@ -1,17 +1,16 @@
+import {
+  collection,
+  type WhereFilterOp,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import * as crud from './crud';
 import Admin from '../entities/Admin';
 import { House } from '../entities/House';
 import { Admins } from '../types';
-import {
-  firebase,
-  FirebaseFirestoreTypes,
-} from '@react-native-firebase/firestore';
 import map from 'lodash/map';
 import { createInvitation } from './invitations';
 
-export const adminCollection = firestore.collection('admins');
-export const adminArchive = firestore.collection('admin-archive');
+export const adminCollection = collection(firestore, 'admins');
 
 export function createAdminId(): string {
   return crud.createId(adminCollection);
@@ -29,19 +28,14 @@ export function createId() {
   return crud.createId(adminCollection);
 }
 
-export async function updateAdmin(
-  adminId: string,
-  updates: Partial<Admin>,
-): Promise<Admin> {
+export async function updateAdmin(adminId: string, updates: Partial<Admin>): Promise<Admin> {
   await crud.update<Admin>(adminCollection, { id: adminId, ...updates });
   return crud.get<Admin>(adminCollection, adminId);
 }
 
+// Nothing is archived: the old admin-archive copy was refused by the rules,
+// which made removal fail, and nothing read it (#196).
 export async function deleteAdmin(adminId: string): Promise<string> {
-  const admin = await crud.get<Admin>(adminCollection, adminId);
-  if (admin) {
-    await crud.create<Admin>(adminArchive, admin, adminId);
-  }
   await crud.deleteObject<Admin>(adminCollection, { id: adminId } as Admin);
   return adminId;
 }
@@ -64,7 +58,7 @@ export async function sendAdminInvite(
 
 export async function getHouseAdmins(house: House): Promise<Admin[]> {
   const admins = await getAdmins('houseIds', 'array-contains', house.id);
-  return map(admins, admin => admin);
+  return map(admins, (admin) => admin);
 }
 
 /**
@@ -74,18 +68,13 @@ export async function getHouseAdmins(house: House): Promise<Admin[]> {
  */
 export async function getAdmins(
   attribute: string,
-  operator: FirebaseFirestoreTypes.WhereFilterOp,
+  operator: WhereFilterOp,
   value: string,
 ): Promise<Admins> {
-  const result = await crud.getByAttribute<Admin>(
-    adminCollection,
-    attribute,
-    operator,
-    value,
-  );
+  const result = await crud.getByAttribute<Admin>(adminCollection, attribute, operator, value);
   const admins: Admins = {};
   if (result && result.length) {
-    result.forEach(admin => {
+    result.forEach((admin) => {
       const id = admin.id!;
       admins[id] = admin;
     });

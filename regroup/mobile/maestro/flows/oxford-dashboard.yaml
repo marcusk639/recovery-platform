@@ -22,8 +22,13 @@ tags:
     timeout: 30000
 # Oxford-only sections render because house.houseType==='oxford'.
 # "Oxford House Hub" has no testID — tap by its label text.
+- scrollUntilVisible:
+    element:
+      text: ".*Oxford House Hub.*"
+    direction: DOWN
+    centerElement: true
 - tapOn:
-    text: "Oxford House Hub"
+    text: ".*Oxford House Hub.*"
 - extendedWaitUntil:
     visible:
       id: "oxford-dashboard-content"

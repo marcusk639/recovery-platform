@@ -6,6 +6,9 @@ import {
   TouchableOpacity,
   StyleSheet,
 } from 'react-native';
+import RatsScrollView, {
+  IQ_SCROLL_VIEW_PROPS,
+} from '../../components/rats-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import DatePicker from 'react-native-date-picker';
 import { format } from 'date-fns';
@@ -17,6 +20,7 @@ import RatsWizardSlide from '../../components/rats-wizard-slide';
 import SetupHeader from '../../components/setup-header';
 import SetupButtons from '../../components/setup-buttons';
 import { useKeyboardVisible } from '../../hooks/useKeyboardVisible';
+import { RatsAndroidResizeView } from '../../components/rats-keyboard';
 import { color, fontSize, fontFamily, normalize } from '../../styles/theme';
 import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 import { useCompleteOxfordOnboarding } from '../../state/mutations/oxfordOnboardingMutations';
@@ -139,171 +143,176 @@ const OxfordOnboardingWizard: React.FC<Props> = ({ navigation }) => {
           testID="oxford-wizard-progress"
         />
       )}
-      <RatsWizardSlide currentStep={step} testID="oxford-wizard-slide">
-        {/* Step 0: Welcome */}
-        <ScrollView
-          contentContainerStyle={styles.content}
-          testID="wizard-step-1">
-          <SetupHeader
-            header="Welcome to Oxford House Management"
-            description="This quick setup takes 2 minutes. We'll configure your officers, first meeting, and equity distribution settings."
-            icon={STEPS[0].icon}
-            iconBackgroundColor={STEPS[0].bg}
-          />
-        </ScrollView>
-
-        {/* Step 1: Officers */}
-        <ScrollView
-          contentContainerStyle={styles.content}
-          testID="wizard-step-2">
-          <SetupHeader
-            header="Officers"
-            description="Assign your house's current leadership. All fields are optional."
-            icon={STEPS[1].icon}
-            iconBackgroundColor={STEPS[1].bg}
-          />
-          {(['president', 'treasurer', 'secretary'] as const).map(role => {
-            const key = `${role}Name` as
-              | 'presidentName'
-              | 'treasurerName'
-              | 'secretaryName';
-            return (
-              <View key={role} style={styles.fieldRow}>
-                <RatsText
-                  text={role.charAt(0).toUpperCase() + role.slice(1)}
-                  style={styles.label}
-                  translate={false}
-                />
-                <TextInput
-                  style={styles.input}
-                  placeholder={`${
-                    role.charAt(0).toUpperCase() + role.slice(1)
-                  } name (optional)`}
-                  value={state[key]}
-                  onChangeText={v => setState(s => ({ ...s, [key]: v }))}
-                />
-              </View>
-            );
-          })}
-        </ScrollView>
-
-        {/* Step 2: First Meeting */}
-        <ScrollView
-          contentContainerStyle={styles.content}
-          testID="wizard-step-3">
-          <SetupHeader
-            header="First business meeting"
-            description="Schedule your first business meeting. You can change this later."
-            icon={STEPS[2].icon}
-            iconBackgroundColor={STEPS[2].bg}
-          />
-          <View style={styles.fieldRow}>
-            <RatsText
-              text="Meeting date"
-              style={styles.label}
-              translate={false}
+      <RatsAndroidResizeView>
+        <RatsWizardSlide currentStep={step} testID="oxford-wizard-slide">
+          {/* Step 0: Welcome */}
+          <ScrollView
+            contentContainerStyle={styles.content}
+            testID="wizard-step-1">
+            <SetupHeader
+              header="Welcome to Oxford House Management"
+              description="This quick setup takes 2 minutes. We'll configure your officers, first meeting, and equity distribution settings."
+              icon={STEPS[0].icon}
+              iconBackgroundColor={STEPS[0].bg}
             />
-            <TouchableOpacity
-              testID="wizard-date-display"
-              accessibilityLabel="Select meeting date"
-              accessibilityRole="button"
-              style={styles.input}
-              onPress={() => setShowDatePicker(true)}>
+          </ScrollView>
+
+          {/* Step 1: Officers */}
+          <RatsScrollView
+            {...IQ_SCROLL_VIEW_PROPS}
+            contentContainerStyle={styles.content}
+            testID="wizard-step-2">
+            <SetupHeader
+              header="Officers"
+              description="Assign your house's current leadership. All fields are optional."
+              icon={STEPS[1].icon}
+              iconBackgroundColor={STEPS[1].bg}
+            />
+            {(['president', 'treasurer', 'secretary'] as const).map(role => {
+              const key = `${role}Name` as
+                | 'presidentName'
+                | 'treasurerName'
+                | 'secretaryName';
+              return (
+                <View key={role} style={styles.fieldRow}>
+                  <RatsText
+                    text={role.charAt(0).toUpperCase() + role.slice(1)}
+                    style={styles.label}
+                    translate={false}
+                  />
+                  <TextInput
+                    style={styles.input}
+                    placeholder={`${
+                      role.charAt(0).toUpperCase() + role.slice(1)
+                    } name (optional)`}
+                    value={state[key]}
+                    onChangeText={v => setState(s => ({ ...s, [key]: v }))}
+                  />
+                </View>
+              );
+            })}
+          </RatsScrollView>
+
+          {/* Step 2: First Meeting */}
+          <RatsScrollView
+            {...IQ_SCROLL_VIEW_PROPS}
+            contentContainerStyle={styles.content}
+            testID="wizard-step-3">
+            <SetupHeader
+              header="First business meeting"
+              description="Schedule your first business meeting. You can change this later."
+              icon={STEPS[2].icon}
+              iconBackgroundColor={STEPS[2].bg}
+            />
+            <View style={styles.fieldRow}>
               <RatsText
-                text={
-                  state.firstMeetingDate
-                    ? format(state.firstMeetingDate, 'yyyy-MM-dd')
-                    : 'Select a date'
-                }
-                style={{ fontSize: fontSize.regular, color: color.black }}
+                text="Meeting date"
+                style={styles.label}
                 translate={false}
               />
-            </TouchableOpacity>
-            <DatePicker
-              modal
-              mode="date"
-              open={showDatePicker}
-              date={state.firstMeetingDate ?? new Date()}
-              onConfirm={(d: Date) => {
-                setShowDatePicker(false);
-                setState(s => ({ ...s, firstMeetingDate: d }));
-              }}
-              onCancel={() => setShowDatePicker(false)}
+              <TouchableOpacity
+                testID="wizard-date-display"
+                accessibilityLabel="Select meeting date"
+                accessibilityRole="button"
+                style={styles.input}
+                onPress={() => setShowDatePicker(true)}>
+                <RatsText
+                  text={
+                    state.firstMeetingDate
+                      ? format(state.firstMeetingDate, 'yyyy-MM-dd')
+                      : 'Select a date'
+                  }
+                  style={{ fontSize: fontSize.regular, color: color.black }}
+                  translate={false}
+                />
+              </TouchableOpacity>
+              <DatePicker
+                modal
+                mode="date"
+                open={showDatePicker}
+                date={state.firstMeetingDate ?? new Date()}
+                onConfirm={(d: Date) => {
+                  setShowDatePicker(false);
+                  setState(s => ({ ...s, firstMeetingDate: d }));
+                }}
+                onCancel={() => setShowDatePicker(false)}
+              />
+            </View>
+            <View style={styles.fieldRow}>
+              <RatsText
+                text="Time (HH:MM, 24h)"
+                style={styles.label}
+                translate={false}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="19:00"
+                value={state.firstMeetingTime}
+                onChangeText={v => setState(s => ({ ...s, firstMeetingTime: v }))}
+              />
+            </View>
+          </RatsScrollView>
+
+          {/* Step 3: EES */}
+          <RatsScrollView
+            {...IQ_SCROLL_VIEW_PROPS}
+            contentContainerStyle={styles.content}
+            testID="wizard-step-4">
+            <SetupHeader
+              header="Oxford House Equity"
+              description="The Equity Expense Share (EES) is the monthly amount each resident contributes to house expenses."
+              icon={STEPS[3].icon}
+              iconBackgroundColor={STEPS[3].bg}
             />
-          </View>
-          <View style={styles.fieldRow}>
+            <View style={styles.fieldRow}>
+              <RatsText
+                text="Monthly EES Amount ($)"
+                style={styles.label}
+                translate={false}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder="0.00"
+                keyboardType="numeric"
+                value={state.eesMonthlyAmount}
+                onChangeText={v => setState(s => ({ ...s, eesMonthlyAmount: v }))}
+              />
+            </View>
             <RatsText
-              text="Time (HH:MM, 24h)"
-              style={styles.label}
+              text="You can change this at any time from the Oxford settings."
+              style={styles.hint}
               translate={false}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="19:00"
-              value={state.firstMeetingTime}
-              onChangeText={v => setState(s => ({ ...s, firstMeetingTime: v }))}
-            />
-          </View>
-        </ScrollView>
+          </RatsScrollView>
 
-        {/* Step 3: EES */}
-        <ScrollView
-          contentContainerStyle={styles.content}
-          testID="wizard-step-4">
-          <SetupHeader
-            header="Oxford House Equity"
-            description="The Equity Expense Share (EES) is the monthly amount each resident contributes to house expenses."
-            icon={STEPS[3].icon}
-            iconBackgroundColor={STEPS[3].bg}
-          />
-          <View style={styles.fieldRow}>
-            <RatsText
-              text="Monthly EES Amount ($)"
-              style={styles.label}
-              translate={false}
+          {/* Step 4: Done */}
+          <ScrollView
+            contentContainerStyle={styles.content}
+            testID="wizard-step-5">
+            <SetupHeader
+              header="You're all set!"
+              description="Your Oxford House is configured. You can update any of these settings from the Oxford Dashboard."
+              icon={STEPS[4].icon}
+              iconBackgroundColor={STEPS[4].bg}
             />
-            <TextInput
-              style={styles.input}
-              placeholder="0.00"
-              keyboardType="numeric"
-              value={state.eesMonthlyAmount}
-              onChangeText={v => setState(s => ({ ...s, eesMonthlyAmount: v }))}
-            />
-          </View>
-          <RatsText
-            text="You can change this at any time from the Oxford settings."
-            style={styles.hint}
-            translate={false}
-          />
-        </ScrollView>
+            {completeOnboarding.isError && (
+              <RatsText
+                text="Setup failed. Please try again."
+                style={styles.errorText}
+                translate={false}
+              />
+            )}
+          </ScrollView>
+        </RatsWizardSlide>
 
-        {/* Step 4: Done */}
-        <ScrollView
-          contentContainerStyle={styles.content}
-          testID="wizard-step-5">
-          <SetupHeader
-            header="You're all set!"
-            description="Your Oxford House is configured. You can update any of these settings from the Oxford Dashboard."
-            icon={STEPS[4].icon}
-            iconBackgroundColor={STEPS[4].bg}
-          />
-          {completeOnboarding.isError && (
-            <RatsText
-              text="Setup failed. Please try again."
-              style={styles.errorText}
-              translate={false}
-            />
-          )}
-        </ScrollView>
-      </RatsWizardSlide>
-
-      <SetupButtons
-        onBackPress={goBack}
-        onNextPress={goNext}
-        nextLabel={step === TOTAL_STEPS - 1 ? 'Finish' : 'Next'}
-        nextDisabled={nextDisabled}
-        isLoading={step === TOTAL_STEPS - 1 && completeOnboarding.isPending}
-      />
+        <SetupButtons
+          onBackPress={goBack}
+          onNextPress={goNext}
+          nextLabel={step === TOTAL_STEPS - 1 ? 'Finish' : 'Next'}
+          nextDisabled={nextDisabled}
+          isLoading={step === TOTAL_STEPS - 1 && completeOnboarding.isPending}
+        />
+      </RatsAndroidResizeView>
     </SafeAreaView>
   );
 };

@@ -9,6 +9,7 @@ const accounts = require('../../../e2e/setup/testAccounts.json').accounts;
 
 const HOUSE = 'test-house-123';
 const OXFORD = 'test-house-oxford';
+const OXFORD_NEW = 'test-house-oxford-new';
 const account = (id) => accounts.find((a) => a.id === id);
 const uidOf = (id) => `e2e-${id}`;
 const iso = (now) => new Date(now).toISOString();
@@ -45,6 +46,8 @@ function operator(id, houseId, oxford, now) {
       ...(oxford ? { houseType: 'oxford' } : {}),
       subscriptionMetadata: {
         status: 'active',
+        // The app's and server's gates on creating a house both require a tier.
+        ...(oxford ? {} : { tier: 'professional', maxResidents: 20, maxProperties: 3 }),
         subscriptionId: `sub_${uid}`,
         customerId: `cus_${uid}`,
         currentPeriodEnd: yearAhead,
@@ -218,4 +221,23 @@ function payments(Timestamp, now) {
   ];
 }
 
-module.exports = { HOUSE, OXFORD, uidOf, iso, operator, resident, house, activity, payments };
+/** A pending application, for operator-applications.yaml. */
+function application(now) {
+  return {
+    id: 'test-app-1',
+    houseId: HOUSE,
+    applicantUid: 'e2e-test-applicant',
+    applicantName: 'Test Applicant',
+    applicantEmail: 'test-applicant@rats-e2e.invalid',
+    applicantPhone: '512-555-0199',
+    sobrietyDate: '2026-01-01',
+    programType: 'AA',
+    currentSituation: 'E2E seed data.',
+    references: 'None',
+    status: 'pending',
+    createdAt: iso(now),
+    updatedAt: iso(now),
+  };
+}
+
+module.exports = { application, HOUSE, OXFORD, OXFORD_NEW, uidOf, iso, operator, resident, house, activity, payments };

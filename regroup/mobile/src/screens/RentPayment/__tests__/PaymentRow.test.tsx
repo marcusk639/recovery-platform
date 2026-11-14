@@ -19,6 +19,22 @@ const mockPayment: RentPayment = {
 };
 
 describe('PaymentRow', () => {
+  describe('after a refund or dispute', () => {
+    const cases: [string, Partial<RentPayment>, string][] = [
+      ['a full refund', { refundedAmountCents: mockPayment.amount }, 'Refunded'],
+      ['a part refund', { refundedAmountCents: 1 }, 'Partially refunded'],
+      ['a dispute', { disputed: true }, 'Disputed'],
+    ];
+    it.each(cases)('%s does not show as paid, and offers no receipt', (_name, change, label) => {
+      const { getByText, queryByText, queryByTestId } = render(
+        <PaymentRow payment={{ ...mockPayment, status: 'succeeded', ...change }} />,
+      );
+      expect(getByText(label)).toBeTruthy();
+      expect(queryByText('Paid')).toBeNull();
+      expect(queryByTestId('share-receipt-button')).toBeNull();
+    });
+  });
+
   it('renders the payment-history-row testID', () => {
     const { getByTestId } = render(<PaymentRow payment={mockPayment} />);
     expect(getByTestId('payment-history-row')).toBeTruthy();

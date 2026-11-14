@@ -183,6 +183,7 @@ import { Provider } from 'react-redux';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { configureStore } from '@reduxjs/toolkit';
 import { Alert } from 'react-native';
+import { isAdmin } from '../../../util/roles';
 
 import housesReducer from '../../../state/slices/housesSlice';
 import guestsReducer from '../../../state/slices/guestsSlice';
@@ -566,6 +567,33 @@ describe('IssueScreen', () => {
         IssueStatus.DISMISSED,
       );
     });
+  });
+
+  // ─── A visible Dismiss (long press alone is hard to find) ─────────────────
+  describe('dismiss button', () => {
+    it('an admin sees DISMISS on an open issue, and it asks to confirm', () => {
+      const store = buildStore({ 'open-1': makeIssue('open-1', IssueStatus.OPEN) });
+      const { getByTestId } = renderScreen(store);
+      fireEvent.press(getByTestId('dismiss-issue-button-open-1'));
+      expect(Alert.alert).toHaveBeenCalledWith('Dismiss Issue', expect.any(String), expect.any(Array));
+    });
+
+    it('offers no DISMISS on a closed issue', () => {
+      const store = buildStore({ 'resolved-1': makeIssue('resolved-1', IssueStatus.RESOLVED) });
+      const { getByTestId, queryByTestId } = renderScreen(store);
+      expect(getByTestId('issue-row-resolved-1')).toBeTruthy();
+      expect(queryByTestId('dismiss-issue-button-resolved-1')).toBeNull();
+    });
+
+    it('offers no DISMISS to someone who is not a house admin', () => {
+      (isAdmin as jest.Mock).mockReturnValue(false);
+      const store = buildStore({ 'open-1': makeIssue('open-1', IssueStatus.OPEN) });
+      const { getByTestId, queryByTestId } = renderScreen(store);
+      expect(getByTestId('issue-row-open-1')).toBeTruthy();
+      expect(queryByTestId('dismiss-issue-button-open-1')).toBeNull();
+    });
+
+    afterEach(() => (isAdmin as jest.Mock).mockReturnValue(true));
   });
 
   // ─── Buttons enabled/disabled states ─────────────────────────────────────

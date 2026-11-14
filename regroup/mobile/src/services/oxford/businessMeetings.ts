@@ -1,3 +1,13 @@
+import {
+  collection,
+  doc,
+  getDocs,
+  limit as limitTo,
+  orderBy,
+  query,
+  setDoc,
+  updateDoc,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../../firebase-setup';
 import { BusinessMeeting } from '../../entities/oxford/BusinessMeeting';
 import { logException } from '../../util/logging';
@@ -7,11 +17,9 @@ export async function createBusinessMeeting(
   meeting: Omit<BusinessMeeting, 'id'>,
 ): Promise<BusinessMeeting> {
   try {
-    const ref = firestore
-      .collection('houses')
-      .doc(houseId)
-      .collection('business-meetings')
-      .doc();
+    const ref = doc(
+      collection(doc(collection(firestore, 'houses'), houseId), 'business-meetings'),
+    );
 
     const newMeeting: BusinessMeeting = {
       ...meeting,
@@ -20,7 +28,7 @@ export async function createBusinessMeeting(
       createdAt: new Date().toISOString(),
     };
 
-    await ref.set(newMeeting);
+    await setDoc(ref, newMeeting);
     return newMeeting;
   } catch (error) {
     logException(error);
@@ -32,16 +40,16 @@ export async function getBusinessMeetings(
   houseId: string,
 ): Promise<BusinessMeeting[]> {
   try {
-    const snapshot = await firestore
-      .collection('houses')
-      .doc(houseId)
-      .collection('business-meetings')
-      .orderBy('scheduledDate', 'desc')
-      .limit(20)
-      .get();
+    const snapshot = await getDocs(
+      query(
+        collection(doc(collection(firestore, 'houses'), houseId), 'business-meetings'),
+        orderBy('scheduledDate', 'desc'),
+        limitTo(20),
+      ),
+    );
 
     return snapshot.docs.map(
-      doc => ({ ...doc.data(), id: doc.id } as BusinessMeeting),
+      meeting => ({ ...meeting.data(), id: meeting.id } as BusinessMeeting),
     );
   } catch (error) {
     logException(error);
@@ -55,12 +63,13 @@ export async function updateBusinessMeeting(
   update: Partial<BusinessMeeting>,
 ): Promise<void> {
   try {
-    await firestore
-      .collection('houses')
-      .doc(houseId)
-      .collection('business-meetings')
-      .doc(meetingId)
-      .update(update);
+    await updateDoc(
+      doc(
+        collection(doc(collection(firestore, 'houses'), houseId), 'business-meetings'),
+        meetingId,
+      ),
+      update,
+    );
   } catch (error) {
     logException(error);
     throw new Error('Failed to update business meeting');

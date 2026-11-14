@@ -1,8 +1,11 @@
+import {
+  collection,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import * as crud from './crud';
 import Organization from '../entities/Organization';
 
-const orgCollection = firestore.collection('organizations');
+const orgCollection = collection(firestore, 'organizations');
 
 /**
  * Create a new organization

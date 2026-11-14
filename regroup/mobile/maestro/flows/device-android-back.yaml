@@ -1,0 +1,69 @@
+# Device pass (#160) row 5: Android back (on API 36 it is the predictive back
+# gesture's key event) closes the top screen or modal, in order, and never skips
+# a level or leaves the app early. Android only; on iOS the flow signs in and out.
+# The fullscreen dispute modal isn't covered here: on Android a "Loading..."
+# overlay sits over it (#174); device-modal-swipe covers that modal.
+# Persona: guest-a.
+# Run (Android): maestro test -e APP_ID=com.regroup.app.e2e.emu maestro/flows/device-android-back.yaml
+appId: ${APP_ID}
+tags:
+  - device
+  - android
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      # A pushed screen: back returns to the tab it came from.
+      - tapOn:
+          id: "guest-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "guest-overview-screen"
+          timeout: 30000
+      - tapOn:
+          id: "chores-card"
+      - extendedWaitUntil:
+          visible:
+            id: "chore-summary-screen"
+          timeout: 20000
+      - pressKey: back
+      - extendedWaitUntil:
+          visible:
+            id: "guest-overview-screen"
+          timeout: 10000
+      # A picker modal over a pushed screen: the first back closes only the picker.
+      - tapOn:
+          id: "profile-tab"
+      - extendedWaitUntil:
+          visible:
+            id: "profile-screen"
+          timeout: 20000
+      - tapOn: ".*My Profile.*"
+      - extendedWaitUntil:
+          visible: ".*Date of Birth.*"
+          timeout: 20000
+      - tapOn:
+          text: ".*\\d{4}-\\d{2}-\\d{2}.*"
+          index: 0
+      - extendedWaitUntil:
+          visible: "Confirm"
+          timeout: 10000
+      - pressKey: back
+      - extendedWaitUntil:
+          notVisible: "Confirm"
+          timeout: 10000
+      - assertVisible: ".*Date of Birth.*"
+      - pressKey: back
+      - extendedWaitUntil:
+          visible:
+            id: "profile-screen"
+          timeout: 10000
+- runFlow:
+    file: ../subflows/logout.yaml

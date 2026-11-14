@@ -68,6 +68,11 @@ describe('paywall/config', () => {
     await assertFails(setDoc(doc(db, 'paywall/config'), { enabled: false }));
   });
 
+  it('a house admin cannot write it either', async () => {
+    const db = testEnv.authenticatedContext('admin', { admin: { house123: true } }).firestore();
+    await assertFails(setDoc(doc(db, 'paywall/config'), { enabled: false }));
+  });
+
   it('other paywall documents stay closed', async () => {
     const db = testEnv.authenticatedContext('anyUser').firestore();
     await assertFails(getDoc(doc(db, 'paywall/other')));

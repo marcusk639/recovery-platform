@@ -7,9 +7,9 @@ import { render, fireEvent, act } from '@testing-library/react-native';
 
 // Mock native modules before imports
 jest.mock('react-native-date-picker', () => 'RNDatePicker');
-jest.mock('react-native-vector-icons/Ionicons', () => 'IonIcon');
-jest.mock('react-native-vector-icons/FontAwesome5', () => 'FontAwesome5Icon');
-jest.mock('react-native-vector-icons/MaterialIcons', () => 'MaterialIcon');
+jest.mock('@react-native-vector-icons/ionicons/static', () => 'IonIcon');
+jest.mock('@react-native-vector-icons/fontawesome5/static', () => 'FontAwesome5Icon');
+jest.mock('@react-native-vector-icons/material-icons/static', () => 'MaterialIcon');
 
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn(), navigate: jest.fn() }),

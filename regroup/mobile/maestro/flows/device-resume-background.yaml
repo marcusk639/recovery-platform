@@ -1,0 +1,42 @@
+# Device pass (#160) row 7: resuming from the background keeps the user where
+# they were. Sign in, open Activities, send the app to the background and put
+# another app in front (iOS: Safari via a web link), then bring the app back
+# without relaunching it. It must still show Activities: no reset, no crash, no
+# sign-out.
+# Persona: guest-a.
+# Run: maestro/scripts/run-flows.sh device-resume-background
+appId: ${APP_ID}
+tags:
+  - device
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "activities-tab"
+- extendedWaitUntil:
+    visible:
+      id: "activity-screen"
+    timeout: 30000
+- pressKey: Home
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - openLink: "https://example.com"
+      - waitForAnimationToEnd
+# Bring the running app back to the front; stopApp: false keeps its process.
+- launchApp:
+    stopApp: false
+- extendedWaitUntil:
+    visible:
+      id: "activity-screen"
+    timeout: 15000
+- assertNotVisible:
+    id: "initial-landing-screen"
+- runFlow:
+    file: ../subflows/logout.yaml

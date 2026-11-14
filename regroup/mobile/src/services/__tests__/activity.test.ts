@@ -33,7 +33,7 @@ jest.mock('../../../firebase-setup', () => {
       // tests that exercise the increment path override this in beforeEach.
       runTransaction: jest.fn(async (fn: any) => {
         const stubTx = {
-          get: jest.fn(async () => ({ exists: false, data: () => undefined })),
+          get: jest.fn(async () => ({ exists: () => false, data: () => undefined })),
           set: jest.fn(),
         };
         return fn(stubTx);
@@ -42,7 +42,13 @@ jest.mock('../../../firebase-setup', () => {
   };
 });
 
+// The modular functions delegate to the firebase-setup mock's refs
+// (namespaced-adapter); the FieldValue helpers return this file's sentinels.
 jest.mock('@react-native-firebase/firestore', () => ({
+  ...require('../../../__mocks__/firebase-modular/namespaced-adapter'),
+  serverTimestamp: () => new Date('2024-01-15T10:00:00Z'),
+  deleteField: () => '__DELETE__',
+  increment: (n: number) => ({ __increment: n }),
   FieldValue: {
     serverTimestamp: () => new Date('2024-01-15T10:00:00Z'),
     delete: () => '__DELETE__',
@@ -62,7 +68,9 @@ jest.mock('../../util/logging', () => ({
 }));
 
 // Import firestore mock reference (resolves to mocked version after hoisting)
-import { firestore } from '../../../firebase-setup';
+import { firestore as setupFirestore } from '../../../firebase-setup';
+// The firebase-setup mock is namespaced-shaped; the real module's types are modular.
+const firestore = setupFirestore as any;
 import { logException } from '../../util/logging';
 
 // Import after mocks are set up
@@ -159,7 +167,7 @@ describe('Activity Service', () => {
         get: jest.fn(async () => {
           const activity = mockActivities.find(a => a.id === id);
           return {
-            exists: !!activity,
+            exists: () => !!activity,
             id,
             data: () => activity,
           };
@@ -234,7 +242,7 @@ describe('Activity Service', () => {
         get: jest.fn(async () => {
           const summary = mockSummaries.get(id);
           return {
-            exists: !!summary,
+            exists: () => !!summary,
             id,
             data: () => summary,
           };

@@ -10,6 +10,7 @@ import { Role } from "../entities/Roles";
 import { _verifyUserEmail } from "../util/user";
 import { parseInput } from "../validation";
 import { assertCanGrantClaimForHouses } from "../util/authGuard";
+import { removeStaffFromHouses } from "../util/houseAuth";
 import {
   assertMayGrantTier,
   assertMayRevokeAll,
@@ -262,6 +263,8 @@ export const deleteAdminAuthorization = onCall(async (request) => {
   for (const houseId of adminHouseIds ?? []) {
     await recordRoleRevoke(houseId, admin.userId, "admin");
   }
+  // isHouseAdmin reads these, so a removed manager must leave them too.
+  await removeStaffFromHouses(admin.userId, adminHouseIds ?? [], superAdminHouseIds ?? []);
 });
 
 export const promoteGuestsToAdmin = onCall(async (request) => {

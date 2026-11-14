@@ -1,0 +1,60 @@
+# Device pass (#160) row 5: house search with location. With location granted
+# and the device placed in Austin (the seeded E2E Test House), the search screen
+# gets a position (no location-denied banner), finishes loading and draws without
+# a crash.
+# Not asserted: the seeded house being listed. A signed-out visitor can't read
+# houses under the rules (houses: read only for the house's own guests and admins,
+# same on main), so the geohash query is refused and the empty state shows. That
+# is a launch bug outside the upgrade; tighten this flow when house search is fixed.
+# Run: maestro/scripts/run-flows.sh device-house-search-location
+appId: ${APP_ID}
+tags:
+  - device
+  - ui
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          clearState: true
+          permissions:
+            location: inuse
+            notifications: allow
+          arguments:
+            IS_E2E_TEST: "1"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          clearState: true
+          permissions:
+            location: allow
+            notifications: allow
+          arguments:
+            IS_E2E_TEST: "1"
+- setLocation:
+    latitude: 30.2672
+    longitude: -97.7431
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "landing-role-guest"
+- tapOn:
+    id: "nav-house-search"
+- extendedWaitUntil:
+    visible:
+      id: "house-search-screen"
+    timeout: 20000
+- extendedWaitUntil:
+    notVisible:
+      id: "house-search-loading"
+    timeout: 30000
+- assertNotVisible:
+    id: "location-denied-banner"
+- assertVisible: "Find Houses"
+- takeScreenshot: device-house-search

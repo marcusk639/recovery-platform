@@ -10,7 +10,8 @@
 
 import { logActivity, getWeekSummary } from '../services/activity';
 import { ActivityType, ActivityDataFactory } from '../entities/ActivityModel';
-import { firestore } from '../../firebase-setup';
+import { adminDb } from './firebase-admin-setup';
+import { adminOf, signInAs } from './actors';
 
 const TEST_GUEST = 'summary-guest-1';
 const TEST_HOUSE = 'summary-house-1';
@@ -42,10 +43,23 @@ const serverSummary = (stats: Record<string, number>, activityCount: number) => 
 describe('week summary updates (integration)', () => {
   const createdActivityIds: string[] = [];
 
+  // The rules read a summary through the guest its id names, so both guests
+  // exist; 'user-1' (the logger) is a house admin.
+  beforeAll(async () => {
+    await adminDb.doc(`guests/${TEST_GUEST}`).set({ id: TEST_GUEST, houseId: TEST_HOUSE, userId: 'summary-resident-1' });
+    await adminDb.doc('guests/no-activities-guest').set({ id: 'no-activities-guest', houseId: TEST_HOUSE });
+    await signInAs('user-1', adminOf(TEST_HOUSE));
+  });
+
+  afterAll(async () => {
+    await adminDb.doc(`guests/${TEST_GUEST}`).delete();
+    await adminDb.doc('guests/no-activities-guest').delete();
+  });
+
   afterEach(async () => {
-    await firestore.collection('week-summaries').doc(SUMMARY_ID).delete();
+    await adminDb.collection('week-summaries').doc(SUMMARY_ID).delete();
     await Promise.all(
-      createdActivityIds.map((id) => firestore.collection('activities').doc(id).delete()),
+      createdActivityIds.map((id) => adminDb.collection('activities').doc(id).delete()),
     );
     createdActivityIds.length = 0;
   });
@@ -61,13 +75,13 @@ describe('week summary updates (integration)', () => {
     );
     createdActivityIds.push(activity.id);
 
-    const saved = await firestore.collection('activities').doc(activity.id).get();
+    const saved = await adminDb.collection('activities').doc(activity.id).get();
     expect(saved.exists).toBe(true);
     expect(await getWeekSummary(TEST_GUEST, WEEK_START)).toBeNull();
   });
 
   it('logging a meeting does not create or change a summary the server wrote', async () => {
-    await firestore
+    await adminDb
       .collection('week-summaries')
       .doc(SUMMARY_ID)
       .set(serverSummary({ choresCompleted: 1 }, 1));
@@ -88,7 +102,7 @@ describe('week summary updates (integration)', () => {
   });
 
   it('getWeekSummary returns the server-aggregated chores and meetings', async () => {
-    await firestore
+    await adminDb
       .collection('week-summaries')
       .doc(SUMMARY_ID)
       .set(serverSummary({ choresCompleted: 1, meetingsAttended: 1 }, 2));
@@ -110,7 +124,7 @@ describe('week summary updates (integration)', () => {
   });
 
   it('week summary document id follows guestId_weekStart format', async () => {
-    await firestore
+    await adminDb
       .collection('week-summaries')
       .doc(SUMMARY_ID)
       .set(serverSummary({ choresCompleted: 1 }, 1));

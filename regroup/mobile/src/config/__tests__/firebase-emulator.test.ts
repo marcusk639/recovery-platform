@@ -2,7 +2,7 @@
  * Guards the fail-closed e2e emulator wiring.
  *
  * Two failures this exists to prevent:
- *  - a store build calling useEmulator (or even reaching the emulator module),
+ *  - a store build connecting an emulator (or even reaching the emulator module),
  *    which the old __DEV__ gate only approximated;
  *  - an e2e emulator build whose emulators are down silently carrying on
  *    against the project in its native config. The old try/catch did exactly
@@ -15,8 +15,22 @@ jest.unmock('../firebase-emulator');
 let mockProjectId = '';
 jest.mock('@react-native-firebase/app', () => ({
   __esModule: true,
-  default: { app: () => ({ options: { projectId: mockProjectId } }) },
+  getApp: () => ({ options: { projectId: mockProjectId } }),
 }));
+// The modular SDK surface firebase-setup builds its instances from.
+jest.mock('@react-native-firebase/auth', () => require('../../../__mocks__/firebase-modular/auth'));
+jest.mock('@react-native-firebase/firestore', () =>
+  require('../../../__mocks__/firebase-modular/firestore'),
+);
+jest.mock('@react-native-firebase/storage', () =>
+  require('../../../__mocks__/firebase-modular/storage'),
+);
+jest.mock('@react-native-firebase/functions', () =>
+  require('../../../__mocks__/firebase-modular/functions'),
+);
+jest.mock('@react-native-firebase/messaging', () =>
+  require('../../../__mocks__/firebase-modular/messaging'),
+);
 
 const PORTS = { auth: 19099, firestore: 18080, storage: 19199, functions: 15001 };
 
@@ -29,10 +43,11 @@ const originalVariant = process.env.E2E_VARIANT;
 // instances the modules under test see.
 let Platform: { OS: string };
 let LaunchArguments: { value: jest.Mock };
-let auth: () => { useEmulator: jest.Mock };
-let firestore: () => { useEmulator: jest.Mock };
-let storage: () => { useEmulator: jest.Mock };
-let functions: () => { useEmulator: jest.Mock };
+type Sdk<K extends string> = { instance: object } & Record<K, jest.Mock>;
+let auth: Sdk<'connectAuthEmulator'>;
+let firestore: Sdk<'connectFirestoreEmulator'>;
+let storage: Sdk<'connectStorageEmulator'>;
+let functions: Sdk<'connectFunctionsEmulator'>;
 
 const setVariant = (variant?: string) => {
   if (variant === undefined) {
@@ -42,13 +57,21 @@ const setVariant = (variant?: string) => {
   }
 };
 
-/** Every useEmulator mock across the four SDKs, flattened. */
+/** Every connect*Emulator call across the four SDKs, flattened. */
 const allUseEmulatorCalls = () => [
-  ...auth().useEmulator.mock.calls,
-  ...firestore().useEmulator.mock.calls,
-  ...storage().useEmulator.mock.calls,
-  ...functions().useEmulator.mock.calls,
+  ...auth.connectAuthEmulator.mock.calls,
+  ...firestore.connectFirestoreEmulator.mock.calls,
+  ...storage.connectStorageEmulator.mock.calls,
+  ...functions.connectFunctionsEmulator.mock.calls,
 ];
+
+/** The instances connectToEmulators is handed, as firebase-setup hands them. */
+const instances = () => ({
+  auth: auth.instance,
+  firestore: firestore.instance,
+  storage: storage.instance,
+  functions: functions.instance,
+});
 
 // Loads the real mobile-root firebase-setup. The `.ts` suffix sidesteps the
 // jest.config.js moduleNameMapper that sends `../firebase-setup` to the mock.
@@ -59,10 +82,10 @@ beforeEach(() => {
   jest.resetModules();
   ({ Platform } = require('react-native'));
   ({ LaunchArguments } = require('react-native-launch-arguments'));
-  auth = require('@react-native-firebase/auth').default;
-  firestore = require('@react-native-firebase/firestore').default;
-  storage = require('@react-native-firebase/storage').default;
-  functions = require('@react-native-firebase/functions').default;
+  auth = require('@react-native-firebase/auth');
+  firestore = require('@react-native-firebase/firestore');
+  storage = require('@react-native-firebase/storage');
+  functions = require('@react-native-firebase/functions');
   Platform.OS = 'ios';
   global.fetch = mockFetch as unknown as typeof fetch;
   mockFetch.mockReset();
@@ -80,12 +103,24 @@ describe('connectToEmulators', () => {
   it('points auth, firestore, storage and functions at the given host and ports', async () => {
     const { connectToEmulators } = loadEmulatorModule();
 
-    await connectToEmulators({ host: '10.0.2.2', ports: PORTS });
+    await connectToEmulators({ host: '10.0.2.2', ports: PORTS, instances: instances() });
 
-    expect(auth().useEmulator).toHaveBeenCalledWith('http://10.0.2.2:19099');
-    expect(firestore().useEmulator).toHaveBeenCalledWith('10.0.2.2', 18080);
-    expect(storage().useEmulator).toHaveBeenCalledWith('10.0.2.2', 19199);
-    expect(functions().useEmulator).toHaveBeenCalledWith('10.0.2.2', 15001);
+    expect(auth.connectAuthEmulator).toHaveBeenCalledWith(auth.instance, 'http://10.0.2.2:19099');
+    expect(firestore.connectFirestoreEmulator).toHaveBeenCalledWith(
+      firestore.instance,
+      '10.0.2.2',
+      18080,
+    );
+    expect(storage.connectStorageEmulator).toHaveBeenCalledWith(
+      storage.instance,
+      '10.0.2.2',
+      19199,
+    );
+    expect(functions.connectFunctionsEmulator).toHaveBeenCalledWith(
+      functions.instance,
+      '10.0.2.2',
+      15001,
+    );
   });
 
   it('wires every SDK before the first probe can settle', () => {
@@ -93,7 +128,7 @@ describe('connectToEmulators', () => {
     const { connectToEmulators } = loadEmulatorModule();
     mockFetch.mockReturnValue(new Promise(() => {}));
 
-    const pending = connectToEmulators({ host: '127.0.0.1', ports: PORTS });
+    const pending = connectToEmulators({ host: '127.0.0.1', ports: PORTS, instances: instances() });
     pending.catch(() => {});
 
     expect(allUseEmulatorCalls()).toHaveLength(4);
@@ -102,7 +137,7 @@ describe('connectToEmulators', () => {
   it('health-probes each of the four ports', async () => {
     const { connectToEmulators } = loadEmulatorModule();
 
-    await connectToEmulators({ host: '127.0.0.1', ports: PORTS });
+    await connectToEmulators({ host: '127.0.0.1', ports: PORTS, instances: instances() });
 
     const probed = mockFetch.mock.calls.map(([url]) => url).sort();
     expect(probed).toEqual(
@@ -119,7 +154,9 @@ describe('connectToEmulators', () => {
     const { connectToEmulators } = loadEmulatorModule();
     mockFetch.mockResolvedValue({ ok: false, status: 404 });
 
-    await expect(connectToEmulators({ host: '127.0.0.1', ports: PORTS })).resolves.toBeUndefined();
+    await expect(
+      connectToEmulators({ host: '127.0.0.1', ports: PORTS, instances: instances() }),
+    ).resolves.toBeUndefined();
   });
 
   it('rejects with E2EEmulatorUnreachable naming the port that refused', async () => {
@@ -130,7 +167,7 @@ describe('connectToEmulators', () => {
         : Promise.resolve({ ok: true, status: 200 }),
     );
 
-    const result = connectToEmulators({ host: '127.0.0.1', ports: PORTS });
+    const result = connectToEmulators({ host: '127.0.0.1', ports: PORTS, instances: instances() });
 
     await expect(result).rejects.toBeInstanceOf(E2EEmulatorUnreachable);
     await expect(result).rejects.toThrow(/firestore.*127\.0\.0\.1:18080/);
@@ -142,7 +179,11 @@ describe('connectToEmulators', () => {
     mockFetch.mockReturnValue(new Promise(() => {}));
 
     let outcome: unknown = 'pending';
-    const settled = connectToEmulators({ host: '127.0.0.1', ports: PORTS }).then(
+    const settled = connectToEmulators({
+      host: '127.0.0.1',
+      ports: PORTS,
+      instances: instances(),
+    }).then(
       () => (outcome = 'resolved'),
       (error: unknown) => (outcome = error),
     );
@@ -225,10 +266,18 @@ describe('app init (firebase-setup)', () => {
 
     await loadFirebaseSetup().emulatorConnection;
 
-    expect(auth().useEmulator).toHaveBeenCalledWith('http://10.0.2.2:9099');
-    expect(firestore().useEmulator).toHaveBeenCalledWith('10.0.2.2', 8080);
-    expect(storage().useEmulator).toHaveBeenCalledWith('10.0.2.2', 9199);
-    expect(functions().useEmulator).toHaveBeenCalledWith('10.0.2.2', 15001);
+    expect(auth.connectAuthEmulator).toHaveBeenCalledWith(auth.instance, 'http://10.0.2.2:9099');
+    expect(firestore.connectFirestoreEmulator).toHaveBeenCalledWith(
+      firestore.instance,
+      '10.0.2.2',
+      8080,
+    );
+    expect(storage.connectStorageEmulator).toHaveBeenCalledWith(storage.instance, '10.0.2.2', 9199);
+    expect(functions.connectFunctionsEmulator).toHaveBeenCalledWith(
+      functions.instance,
+      '10.0.2.2',
+      15001,
+    );
   });
 
   it('lets an unreachable emulator reject app init, with no fallback', async () => {

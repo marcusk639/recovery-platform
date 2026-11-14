@@ -14,7 +14,7 @@ import { useFocusEffect } from "@react-navigation/native";
 
 // Phase 3.3: Migrated from withPopover HOC to useNotification hook
 import { useNotification } from "../../context";
-import FontAwesome5 from "react-native-vector-icons/FontAwesome5";
+import FontAwesome5 from "../../components/rats-icon/font-awesome-5";
 import {
   View,
   StyleSheet,
@@ -62,7 +62,9 @@ const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
     justifyContent: "flex-start",
-    alignItems: "center",
+    // RN 0.88 sizes each list cell to its content under "center", so the
+    // header and rows (CARD_STYLE width: "100%") shrank; stretch fills the row.
+    alignItems: "stretch",
     backgroundColor: color.light_grey,
   },
   loadingContainer: {
@@ -181,7 +183,7 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
   const { house } = useSelectedHouse();
 
   // Current week start date — used to query compliance for each guest row
-  const { startDate: weekStart } = useCurrentWeek();
+  const { startDate: weekStart } = useCurrentWeek(house?.timezone);
 
   // Fetch guests using React Query
   // This automatically handles loading, error, and data states
@@ -312,7 +314,9 @@ const GuestList: React.FC<Props> = ({ navigation }) => {
       refreshControl={
         <RefreshControl
           refreshing={isFetching && !isLoading}
-          onRefresh={refetch}
+          onRefresh={() => {
+            refetch();
+          }}
         />
       }
       ListHeaderComponent={

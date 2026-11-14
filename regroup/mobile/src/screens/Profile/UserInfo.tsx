@@ -14,7 +14,8 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, SafeAreaView, Alert } from 'react-native';
+import { View, Alert } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import map from 'lodash/map';
 
 // Hooks

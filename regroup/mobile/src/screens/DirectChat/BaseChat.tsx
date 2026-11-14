@@ -1,5 +1,6 @@
-import React, { useCallback, Fragment } from 'react';
+import React, { useCallback, useContext, Fragment } from 'react';
 import {
+  FlatList,
   View,
   TouchableOpacity,
   ViewStyle,
@@ -33,10 +34,13 @@ import {
 } from '../../entities/DirectConversation';
 import Admin from '../../entities/Admin';
 import { User } from '../../entities/User';
-import { IOS, tabBarHeight } from '../../util/platform';
-import { getBottomSpace } from 'react-native-iphone-x-helper';
+import { IOS } from '../../util/platform';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { KeyboardAwareFlatList } from 'react-native-keyboard-aware-scroll-view';
+import { BottomTabBarHeightContext } from '@react-navigation/bottom-tabs';
+import {
+  KEYBOARD_TOOLBAR_SPACE,
+  RatsKeyboardStickyView,
+} from '../../components/rats-keyboard';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Routes, RootStackParamList } from '../../navigation/types';
 // Phase 4.1: Extracted business logic to useChatLogic hook
@@ -134,6 +138,10 @@ const BaseChat: React.FC<ChatProps> = props => {
     dialNumber,
     navigateToGuest,
   } = chatLogic;
+
+  // What sits between the composer and the bottom of the screen while the
+  // keyboard is down: the tab bar on the HouseChat tab, nothing elsewhere.
+  const bottomGap = useContext(BottomTabBarHeightContext) ?? 0;
 
   // Use parent-provided callbacks if available, otherwise fallback to hook
   const onSend = useCallback(
@@ -236,7 +244,11 @@ const BaseChat: React.FC<ChatProps> = props => {
               )}
               {chatType === 'group' && (
                 <TouchableOpacity
-                  ref={ref => (setRef ? setRef(ref) : null)}
+                  ref={ref => {
+                    if (setRef) {
+                      setRef(ref);
+                    }
+                  }}
                   onPress={renderHelp}>
                   <RatsIcon
                     name="question-circle"
@@ -388,39 +400,19 @@ const BaseChat: React.FC<ChatProps> = props => {
     (messages: Message[], chatType: 'direct' | 'group') => {
       const inputViewHeight = normalize(50);
 
-      const calculateInputOffset = () => {
-        if (!keyboard || keyboardHeight <= 0) return 0;
-
-        let offset = inputViewHeight;
-
-        if (IOS) {
-          if (chatType === 'direct') {
-            offset += getBottomSpace();
-            offset += normalize(55);
-          } else {
-            offset += normalize(tabBarHeight());
-            offset += normalize(5);
-          }
-        } else {
-          offset += normalize(chatType === 'direct' ? 55 : 75);
-        }
-
-        return offset;
-      };
+      const keyboardUp = keyboard && keyboardHeight > 0;
 
       return (
         <View style={{ flex: 1, backgroundColor: color.light_grey }}>
-          <KeyboardAwareFlatList
-            style={{
-              marginBottom:
-                keyboard && keyboardHeight > 0 ? 0 : inputViewHeight,
-            }}
+          <FlatList
+            style={{ marginBottom: inputViewHeight }}
+            // Inverted: paddingTop is the visual bottom. While the keyboard is
+            // up it keeps the newest message above the lifted composer.
             contentContainerStyle={{
               flexGrow: 1,
-              paddingTop:
-                keyboard && keyboardHeight > 0
-                  ? 0 + keyboardHeight - normalize(55)
-                  : 0,
+              paddingTop: keyboardUp
+                ? keyboardHeight - bottomGap + KEYBOARD_TOOLBAR_SPACE
+                : 0,
               paddingBottom: 0,
             }}
             data={messages}
@@ -434,13 +426,12 @@ const BaseChat: React.FC<ChatProps> = props => {
             inverted
             onEndReachedThreshold={0.25}
             onEndReached={() => loadMore(messages)}
-            extraScrollHeight={
-              keyboard && keyboardHeight > 0 ? keyboardHeight : normalize(30)
-            }
-            keyboardOpeningTime={0}
-            enableOnAndroid
           />
-          <View
+          {/* Rides on the keyboard, above the iOS toolbar. bottomGap is the
+              tab bar it sits on while the keyboard is down. */}
+          <RatsKeyboardStickyView
+            testID="chat-composer"
+            offset={{ closed: 0, opened: bottomGap - KEYBOARD_TOOLBAR_SPACE }}
             style={{
               width: '100%',
               height: normalize(50),
@@ -449,10 +440,6 @@ const BaseChat: React.FC<ChatProps> = props => {
               paddingTop: normalize(5),
               bottom: 0,
               position: 'absolute',
-              transform:
-                keyboard && keyboardHeight > 0
-                  ? [{ translateY: -keyboardHeight + calculateInputOffset() }]
-                  : [],
             }}>
             <View style={[ROW, { flex: 1, justifyContent: 'space-between' }]}>
               <TextInput
@@ -500,13 +487,14 @@ const BaseChat: React.FC<ChatProps> = props => {
                 />
               </View>
             </View>
-          </View>
+          </RatsKeyboardStickyView>
         </View>
       );
     },
     [
       keyboard,
       keyboardHeight,
+      bottomGap,
       text,
       setMessage,
       onSend,
