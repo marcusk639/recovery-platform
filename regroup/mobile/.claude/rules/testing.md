@@ -38,7 +38,7 @@ cd firebase && firebase emulators:exec --only firestore,auth --project demo-test
   "cd .. && npx jest --config jest.config.integration.js --runInBand --no-coverage --forceExit"
 ```
 
-Integration suites seed through the Admin SDK and act as signed-in users, so the security rules apply. Run them `--runInBand`: the suite is order-dependent. Baseline after the RN 0.88 upgrade: 35 of 55 pass (decision record, Appendix A).
+Integration suites seed through the Admin SDK and act as signed-in users, so the security rules apply. Since 2026-11-14 they give the same result in band and in parallel (37 of 57 pass); before, `activity.emulator.test.ts` wiped shared collections and the suite was order-dependent. Baseline after the RN 0.88 upgrade: 35 of 55 pass (decision record, Appendix A).
 
 Emulator must use `127.0.0.1` (not `localhost`) — see `src/config/firebase-emulator.ts`.
 

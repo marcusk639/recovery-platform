@@ -57,7 +57,7 @@ describeIfEmulator('Activity Service - Firebase Emulator Integration', () => {
 
   afterEach(async () => {
     // Clear data after each test
-    await clearEmulatorData();
+    await clearEmulatorData('guest123');
   });
 
   // ==========================================================================
