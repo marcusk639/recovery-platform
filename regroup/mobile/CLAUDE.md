@@ -54,8 +54,8 @@ cd firebase && firebase emulators:exec --only firestore,storage,auth \
   --project demo-test \
   "cd .. && npx jest --config jest.config.rules.js --no-coverage --forceExit"
 
-# Integration — needs firestore + auth. 37 of 57 pass, in band or in parallel
-# (decision record Appendix A; §4 item 6 fixed 2026-11-14).
+# Integration — needs firestore + auth. All 57 pass, in band or in parallel
+# (decision record Appendix A; §4 item 6 and the 20 stale failures fixed 2026-11-14).
 cd firebase && firebase emulators:exec --only firestore,auth \
   --project demo-test \
   "cd .. && npx jest --config jest.config.integration.js --runInBand --no-coverage --forceExit"

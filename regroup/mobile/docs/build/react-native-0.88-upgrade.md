@@ -175,7 +175,12 @@ fixing one is a visible, deliberate test change.
    now deletes only the given guest's activities and `{guestId}_` week summaries
    (`firebase-test-utils.emulator.test.ts` pins it). In band and in three parallel runs the
    suite gives the same 37 pass, 20 fail, with identical failures; before, parallel runs failed 3–4
-   more tests in `activity.integration` and `weekSummary.integration`.
+   more tests in `activity.integration` and `weekSummary.integration`. _The 20 remaining failures,
+   fixed 2026-11-14:_ 18 were `activity.emulator.test.ts`, written against an older
+   `logActivity`/`getActivities` signature and hidden behind `as any` casts (no `loggedBy`, so the
+   rules denied every create); it now uses the current API with no casts. The other 2 logged at
+   today's date but listed a fixed week in February 2026; they now log inside that week. All 57
+   pass, in band and in parallel.
 
 ## 5. Audits
 
