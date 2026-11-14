@@ -5,6 +5,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import EmptyScreen from '../index';
+import RatsButton from '../../rats-button/rats-button';
 
 jest.mock('../../../context', () => ({
   useTheme: () => ({
@@ -110,5 +111,29 @@ describe('EmptyScreen', () => {
     fireEvent.press(getByText('ADD ITEM'));
     fireEvent.press(getByText('ADD ITEM'));
     expect(onPress).toHaveBeenCalledTimes(2);
+  });
+
+  describe('with nothing for the button to do', () => {
+    it('shows only the message when given no button title or action', () => {
+      const { getByText, UNSAFE_queryAllByType } = render(
+        <EmptyScreen message="No notes for this resident yet." />,
+      );
+      expect(getByText('No notes for this resident yet.')).toBeTruthy();
+      expect(UNSAFE_queryAllByType(RatsButton)).toHaveLength(0);
+    });
+
+    it('shows no button with a title but no action', () => {
+      const { queryByText } = render(
+        <EmptyScreen message="Nothing here" buttonTitle="Add Item" />,
+      );
+      expect(queryByText('ADD ITEM')).toBeNull();
+    });
+
+    it('shows no button with an action but no title', () => {
+      const { UNSAFE_queryAllByType } = render(
+        <EmptyScreen message="Nothing here" onPress={jest.fn()} />,
+      );
+      expect(UNSAFE_queryAllByType(RatsButton)).toHaveLength(0);
+    });
   });
 });
