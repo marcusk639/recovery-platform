@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import type { Page } from '@playwright/test';
 import { expect, reseed, signInAs, test } from './helpers';
 
-test.beforeAll(() => reseed());
+test.beforeEach(() => reseed());
 
 test('manager signs in and sees seeded residents', async ({ page }) => {
   await signInAs(page, 'manager');

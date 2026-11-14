@@ -72,9 +72,12 @@ test('a failed refresh, as when offline, keeps the current screen', async ({ pag
   await signInAs(page, 'manager');
   await expect(page.getByText('Bob Rivera')).toBeVisible();
   await context.setOffline(true);
+  // The refresh really ran and failed: its token request didn't get through.
+  const failed = page.waitForEvent('requestfailed', (r) => r.url().includes('securetoken'));
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
-  await page.waitForTimeout(1000);
+  await failed;
   await expect(page.getByText('Bob Rivera')).toBeVisible();
+  await expect(page.locator('#sign-in-form')).toHaveCount(0);
   await context.setOffline(false);
 });
 

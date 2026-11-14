@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 import { addHouseClaim, addOxfordResident, removeSecondHouse, setRooms, setWeekStats, twoBedsOneFilled } from './fixtures';
-import { addSecondHouseForManager, admin, expect, reseed, SECOND_HOUSE, signInAs, test } from './helpers';
+import { addSecondHouseForManager, admin, expect, FIRESTORE_PORT, reseed, SECOND_HOUSE, signInAs, test } from './helpers';
 
 const row = (page: Page, name: string) => page.getByRole('row', { name: new RegExp(name) });
 
@@ -48,8 +48,8 @@ test('a lapsed house shows its state and its residents are not read', async ({ p
     try {
       body = decodeURIComponent(body);
     } catch {}
-    if (r.url().includes(':18080') && body.includes('guests')) reads.push(body);
-    if (r.url().includes(':18080') && body.includes('house-disputes/')) disputeReads.push(body);
+    if (r.url().includes(FIRESTORE_PORT) && body.includes('guests')) reads.push(body);
+    if (r.url().includes(FIRESTORE_PORT) && body.includes('house-disputes/')) disputeReads.push(body);
   });
   await signInAs(page, 'manager');
   await page.click('#nav-home');
@@ -84,12 +84,12 @@ test('a house taken away leaves the table and the totals', async ({ page }) => {
 });
 
 test('a balance that changes shows after returning to the tab', async ({ page }) => {
-  test.setTimeout(90_000);
+  await page.clock.install();
   await signInAs(page, 'manager');
   await page.click('#nav-home');
   await expect(row(page, 'E2E Test House')).toContainText('$150.00');
   await admin().doc('guests/guest-a').update({ rentOwed: 9900 });
-  await page.waitForTimeout(31_000); // the guest list's staleTime
+  await page.clock.fastForward('00:31'); // past the guest list's 30-second staleTime
   await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
   await expect(row(page, 'E2E Test House')).toContainText('$99.00', { timeout: 10_000 });
 });

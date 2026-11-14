@@ -1,8 +1,9 @@
 import type { Page } from '@playwright/test';
 import { getStorage } from 'firebase-admin/storage';
-import { admin, expect, reseed, revokeClaimsAndRefresh, signInAs, test } from './helpers';
+import { EMULATOR_HOST, EMULATOR_PORTS } from '../src/adapter/firebase/emulator-config';
+import { admin, expect, reseed, revokeClaimsAndRefresh, signInAs, STORAGE_PORT, test } from './helpers';
 
-process.env.FIREBASE_STORAGE_EMULATOR_HOST = '127.0.0.1:19199';
+process.env.FIREBASE_STORAGE_EMULATOR_HOST = `${EMULATOR_HOST}:${EMULATOR_PORTS.storage}`;
 const stored = async (path: string) =>
   (await getStorage().bucket('demo-regroup-e2e.appspot.com').file(path).exists())[0];
 
@@ -105,7 +106,7 @@ test('choosing no category uploads nothing', async ({ page }) => {
   await pickLease(page);
   const uploads: string[] = [];
   page.on('request', (request) => {
-    if (request.url().includes(':19199/') && request.method() === 'POST') uploads.push(request.url());
+    if (request.url().includes(`${STORAGE_PORT}/`) && request.method() === 'POST') uploads.push(request.url());
   });
   await page.getByRole('alertdialog').getByRole('button', { name: 'Cancel' }).click();
   await page.waitForTimeout(500);

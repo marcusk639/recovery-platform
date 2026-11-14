@@ -3,9 +3,14 @@ import { execFileSync } from 'node:child_process';
 import { getApps, initializeApp } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
 import { FieldValue, getFirestore } from 'firebase-admin/firestore';
+import { EMULATOR_HOST, EMULATOR_PORTS } from '../src/adapter/firebase/emulator-config';
 
-process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:18080';
-process.env.FIREBASE_AUTH_EMULATOR_HOST = '127.0.0.1:19099';
+process.env.FIRESTORE_EMULATOR_HOST = `${EMULATOR_HOST}:${EMULATOR_PORTS.firestore}`;
+process.env.FIREBASE_AUTH_EMULATOR_HOST = `${EMULATOR_HOST}:${EMULATOR_PORTS.auth}`;
+
+// For matching emulator requests in the browser, e.g. r.url().includes(FIRESTORE_PORT).
+export const FIRESTORE_PORT = `:${EMULATOR_PORTS.firestore}`;
+export const STORAGE_PORT = `:${EMULATOR_PORTS.storage}`;
 if (getApps().length === 0) initializeApp({ projectId: 'demo-regroup-e2e' });
 
 export const admin = () => getFirestore();

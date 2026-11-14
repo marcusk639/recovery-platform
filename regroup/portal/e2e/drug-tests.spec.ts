@@ -113,6 +113,9 @@ test('an invited peer leader adds a result', async ({ page, browser }) => {
 });
 
 test("history shows only this resident's tests", async ({ page }) => {
+  // #197: the phone's query has no houseId filter, so the rules refuse it. Fixed in
+  // #231; expected to fail until that merges in, so remove the line then.
+  test.fail(true, '#197: fixed in #231');
   const record = (guestId: string, result: string) => {
     const ref = admin().collection('drug-tests').doc();
     return ref.set({

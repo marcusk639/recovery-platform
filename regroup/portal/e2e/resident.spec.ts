@@ -72,7 +72,10 @@ test('sort and filter are still there on coming back from a resident', async ({ 
 
 test('a peer leader sees no house money, balances, Payments or Reports', async ({ page }) => {
   await makePeerLeader('manager');
+  // Money stays hidden while the tier is checked, so assert only once it has answered.
+  const tiers = page.waitForResponse((r) => r.url().includes('myHouseTiers'));
   await signInAs(page, 'manager');
+  await tiers;
   await expect(page.getByTestId('guest-list-item').first()).toBeVisible();
   await expect(page.getByTestId('guest-list-item').first()).not.toContainText('$');
   await expect(page.getByTestId('house-numbers')).not.toContainText('$');
@@ -95,6 +98,25 @@ test('a manager sees what an owner sees', async ({ page }) => {
   await expect(page.locator('#nav-reports')).toBeVisible();
   await page.click('#nav-home');
   await expect(page.getByTestId('total-overdue')).toHaveText(/\$150\.00/);
+});
+
+// The claims refresh (on focus, and every 10 minutes) rechecks the tier, so a
+// manager demoted while signed in loses the money without signing out.
+test('a manager demoted mid-session loses the money at the next claims refresh', async ({ page }) => {
+  await makeManager('manager');
+  await page.goto(record('guest-a'));
+  await fillSignIn(page, 'test-manager@rats-e2e.com');
+  await expect(page.getByTestId('record-payments')).toContainText('$150.00', { timeout: 20_000 });
+  await expect(page.locator('#nav-payments')).toBeVisible();
+  await makePeerLeader('manager');
+  const tiers = page.waitForResponse((r) => r.url().includes('myHouseTiers'));
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await tiers;
+  await expect(page.getByTestId('record-payments')).toHaveCount(0);
+  await expect(page.locator('#nav-payments')).toHaveCount(0);
+  await expect(page.getByTestId('record-recovery')).toBeVisible();
+  await page.goto('/houses/test-house-123/payments');
+  await expect(page.getByText("This page isn't available for your role.")).toBeVisible({ timeout: 20_000 });
 });
 
 test('when the role cannot be confirmed, the limited view shows and says so', async ({ page }) => {

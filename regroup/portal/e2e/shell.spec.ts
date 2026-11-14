@@ -1,4 +1,4 @@
-import { expect, fillSignIn, reseed, signInAs, test } from './helpers';
+import { expect, fillSignIn, FIRESTORE_PORT, reseed, signInAs, test } from './helpers';
 
 test.beforeEach(() => reseed());
 
@@ -41,7 +41,7 @@ test("home lists the operator's houses and links into one", async ({ page }) => 
 test('a house the operator does not run shows a message and no residents', async ({ page }) => {
   const reads: string[] = [];
   page.on('request', (r) => {
-    if (r.url().includes(':18080') && (r.postData() ?? '').includes('test-house-123')) reads.push(r.url());
+    if (r.url().includes(FIRESTORE_PORT) && (r.postData() ?? '').includes('test-house-123')) reads.push(r.url());
   });
   await page.goto('/houses/test-house-123/residents');
   await fillSignIn(page, 'test-oxford-operator@rats-e2e.com');
