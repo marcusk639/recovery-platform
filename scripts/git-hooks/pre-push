@@ -50,9 +50,20 @@ if [ -f "$CACHE_FILE" ] && [ "$(cat "$CACHE_FILE")" = "$HEAD_SHA" ]; then
   exit 0
 fi
 
+# Paths outside a package that also run its tests: the portal bundles the phone's
+# code, so a change there can break the portal without touching regroup/portal.
+also_tested_by() {
+  case "$1" in
+    regroup/portal) echo "regroup/mobile/src/" ;;
+  esac
+}
+
 RAN=0
 for PKG in $PACKAGES; do
-  echo "$CHANGED" | grep -q "^$PKG/" || continue
+  PATTERN="^$PKG/"
+  EXTRA=$(also_tested_by "$PKG")
+  [ -n "$EXTRA" ] && PATTERN="$PATTERN|^$EXTRA"
+  echo "$CHANGED" | grep -qE "$PATTERN" || continue
   if [ ! -d "$REPO_ROOT/$PKG/node_modules" ]; then
     echo "[pre-push] ⚠ $PKG changed but node_modules missing — run 'npm ci' there; skipping its tests" >&2
     continue
