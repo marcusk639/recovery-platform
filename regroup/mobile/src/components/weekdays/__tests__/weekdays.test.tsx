@@ -132,6 +132,17 @@ describe("Weekdays component", () => {
     expect(onWeekdayPress.mock.calls[0][0]).toBe(1);
   });
 
+  // F-b39e6f: today's border colour went into the shared StyleSheet entry, so
+  // every later render and every other Weekdays saw the last theme's colour.
+  it("colours today's border without changing the shared day style", () => {
+    const weekdayStyles = require("../styles").default;
+    const { UNSAFE_getAllByType } = render(<Weekdays onWeekdayPress={jest.fn()} />);
+    const { TouchableOpacity, StyleSheet } = require("react-native");
+    const today = StyleSheet.flatten(UNSAFE_getAllByType(TouchableOpacity)[3].props.style);
+    expect(today.borderColor).toBe("#89CFF0");
+    expect(weekdayStyles.presentDay.borderColor).toBeUndefined();
+  });
+
   it("calls onWeekdayPress with the current day number", () => {
     const onWeekdayPress = jest.fn();
     const { UNSAFE_getAllByType } = render(
