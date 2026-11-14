@@ -647,6 +647,23 @@ describe('Disputes', () => {
       );
     });
 
+    // #244: the house's open-dispute count keeps a dispute until it is decided,
+    // so the list must too, however old its activity is.
+    it('lists open disputes of any age, and decided ones from the last two weeks', () => {
+      renderScreen(buildStore());
+      const calls = (useActivities as jest.Mock).mock.calls.map(([o]) => o);
+      const open = calls.filter((o) => o.status === 'disputed');
+      expect(open.length).toBeGreaterThan(0);
+      for (const o of open) {
+        expect(o.startDate).toBeUndefined();
+        expect(o.endDate).toBeUndefined();
+      }
+      for (const o of calls.filter((c) => c.status !== 'disputed')) {
+        expect(o.startDate).toBe('2024-01-08');
+        expect(o.endDate).toBe('2024-01-21');
+      }
+    });
+
     it("lists an older build's delete resolution (undoable), but not a plain deletion", () => {
       const at = '2024-01-15T12:00:00.000Z';
       const upheld = {
