@@ -46,7 +46,9 @@ const Disputes: React.FC = () => {
     return date.toISOString().split('T')[0];
   }, [startDate]);
 
-  // Fetch DISPUTED activities from new Activity system (current + previous week)
+  // Every open (DISPUTED) activity, however old. The open counts come from the
+  // server's house-disputes mirror, which keeps a dispute until it is decided,
+  // so a week window here left older open disputes counted but undecidable (#244).
   const {
     activities: disputedActivitySystemActivities,
     loading: activitiesLoading,
@@ -55,13 +57,11 @@ const Disputes: React.FC = () => {
   } = useActivities({
     houseId: house?.id,
     timeZone: house?.timezone,
-    startDate: previousWeekStart, // Start from previous week
-    endDate, // End at current week
-    status: ActivityStatus.DISPUTED, // Only disputed activities
+    status: ActivityStatus.DISPUTED,
     limit: 500,
   });
-  // ...and the decided ones in the same window, so an admin can undo a
-  // decision (UNDO DECISION reopens it; APPROVE / REJECT then show again).
+  // ...and the decided ones from the current and previous week, so an admin can
+  // undo a recent decision (UNDO DECISION reopens it; APPROVE / REJECT then show again).
   const {
     activities: decidedActivities,
     error: decidedError,

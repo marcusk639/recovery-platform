@@ -662,6 +662,45 @@ describe('Disputes', () => {
       );
     });
 
+    // The open count comes from the server's house-disputes mirror, which keeps a
+    // dispute until it is decided, so the list of open ones has no week window
+    // (#244). Decisions keep the two-week window for UNDO DECISION.
+    it('asks for open disputes of any age, and decided ones from the last two weeks', () => {
+      renderScreen(buildStore());
+
+      const calls = (useActivities as jest.Mock).mock.calls.map(([o]) => o);
+      const open = calls.filter(o => o.status === 'disputed');
+      expect(open.length).toBeGreaterThan(0);
+      for (const o of open) {
+        expect(o).toMatchObject({ houseId: 'house-1' });
+        expect(o.startDate).toBeUndefined();
+        expect(o.endDate).toBeUndefined();
+      }
+      const decided = calls.filter(o => o.status === 'resolved' || o.status === 'deleted');
+      expect(decided.length).toBeGreaterThan(0);
+      for (const o of decided) {
+        expect(o).toMatchObject({ startDate: '2024-01-08', endDate: '2024-01-21' });
+      }
+    });
+
+    it('lists an open dispute on an activity from weeks ago, so it can still be decided', () => {
+      const old = makeActivity('activity-old', {
+        status: 'disputed',
+        timestamp: '2023-12-01T10:00:00.000Z',
+        loggedAt: '2023-12-01T10:00:00.000Z',
+      });
+      (useActivities as jest.Mock).mockImplementation(({ status, startDate }: any) => ({
+        // A dated query can't return it: its activity is older than the window.
+        activities: status === 'disputed' && !startDate ? [old] : [],
+        loading: false,
+        error: null,
+        refetch: jest.fn(),
+      }));
+
+      const { getByTestId } = renderScreen(buildStore());
+      expect(getByTestId('activity-item-activity-old')).toBeTruthy();
+    });
+
     it("lists an older build's delete resolution (undoable), but not a plain deletion", () => {
       const at = '2024-01-15T12:00:00.000Z';
       const upheld = {
