@@ -24,6 +24,9 @@ done
 : "${E2E_TEST_PASSWORD:?set E2E_TEST_PASSWORD}"
 
 xcrun simctl uninstall "$SIM" "$APP_ID" >/dev/null 2>&1 || true
+# Firebase Auth keeps the session in the Keychain, which outlives an uninstall:
+# without this a rerun starts signed in and sign-in.yaml fails.
+xcrun simctl keychain "$SIM" reset
 xcrun simctl install "$SIM" "$OLD"
 node maestro/scripts/e2e-build-guard.js --platform ios --app-id "$APP_ID" --device "$SIM"
 ./maestro/scripts/reset-and-seed.sh >/dev/null
