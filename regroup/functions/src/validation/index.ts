@@ -4,13 +4,13 @@ import { logger } from 'firebase-functions';
 
 // Origins permitted as Stripe return/refresh redirect targets. Shared by the
 // billing portal and Stripe Connect onboarding so both enforce the same
-// open-redirect allowlist. This is the default list; deployments override it via
-// the comma-separated ALLOWED_RETURN_ORIGINS env var (see allowedReturnOrigins()).
+// open-redirect allowlist. This is the default list, and production uses it, so it
+// holds production origins only; local and e2e runs set the comma-separated
+// ALLOWED_RETURN_ORIGINS env var instead (see allowedReturnOrigins()).
 export const ALLOWED_RETURN_ORIGINS = [
   'https://regroup-app.com',
   'https://phoenix-cleanhouse.web.app',
   'https://phoenix-cleanhouse.firebaseapp.com',
-  'http://localhost:4200',
 ];
 
 // True when `entry` is exactly what URL.origin renders for an http(s) URL. Any

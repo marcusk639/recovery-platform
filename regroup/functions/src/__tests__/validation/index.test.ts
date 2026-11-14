@@ -66,7 +66,8 @@ describe("safeReturnUrlSchema", () => {
       safeReturnUrlSchema.safeParse("https://regroup-app.com/return").success,
     ).toBe(true);
     expect(
-      safeReturnUrlSchema.safeParse("http://localhost:4200/x").success,
+      safeReturnUrlSchema.safeParse("https://phoenix-cleanhouse.web.app/x")
+        .success,
     ).toBe(true);
   });
 
