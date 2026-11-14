@@ -354,36 +354,56 @@ describe('paymentQueries', () => {
   // ─── useFailedPayments ───────────────────────────────────────────────────────
 
   describe('useFailedPayments', () => {
-    it('fetches failed payments for a house', async () => {
-      const failedPayment = {
-        id: 'pay-1',
-        guestId: 'guest-1',
-        houseId: 'house-1',
-        amount: 500,
-        status: 'failed',
-        createdAt: new Date().toISOString(),
-        description: 'Rent Payment',
-        stripePaymentIntentId: 'pi_mock',
-      };
-      (paymentService.listHousePayments as jest.Mock).mockResolvedValue([
-        failedPayment,
+    // From the house's payment records, keyed by PaymentIntent, not Stripe
+    // charges: a declined card that succeeds on retry keeps its failed charge in
+    // Stripe, but its record moves to succeeded (#238).
+    const record = (id: string, status: string) => ({
+      id,
+      guestId: 'guest-1',
+      houseId: 'house-1',
+      amount: 50000,
+      status,
+      createdAt: new Date().toISOString(),
+      description: 'Rent Payment',
+      stripePaymentIntentId: id,
+    });
+
+    it("lists the house's failed payment records", async () => {
+      (paymentService.getHousePaymentRecords as jest.Mock).mockResolvedValue([
+        record('pi_failed', 'failed'),
       ]);
 
       const { result } = renderHook(() => useFailedPayments('house-1'), {
         wrapper,
       });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(result.current.data).toHaveLength(1);
-      expect(result.current.data?.[0].status).toBe('failed');
+      expect(paymentService.getHousePaymentRecords).toHaveBeenCalledWith('house-1');
+      expect(result.current.data?.map(p => p.id)).toEqual(['pi_failed']);
+      expect(paymentService.listHousePayments).not.toHaveBeenCalled();
     });
 
-    it('returns empty array when no failed payments', async () => {
-      (paymentService.listHousePayments as jest.Mock).mockResolvedValue([]);
+    it('leaves out payments that were paid, resolved or are still pending', async () => {
+      (paymentService.getHousePaymentRecords as jest.Mock).mockResolvedValue([
+        record('pi_retried', 'succeeded'),
+        record('pi_resolved', 'resolved_offline'),
+        record('pi_pending', 'pending'),
+      ]);
       const { result } = renderHook(() => useFailedPayments('house-1'), {
         wrapper,
       });
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(result.current.data).toHaveLength(0);
+    });
+
+    it('reports a failed read instead of an empty list, and logs it', async () => {
+      const error = new Error('permission-denied');
+      (paymentService.getHousePaymentRecords as jest.Mock).mockRejectedValue(error);
+      const { result } = renderHook(() => useFailedPayments('house-1'), {
+        wrapper,
+      });
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(result.current.data).toBeUndefined();
+      expect(loggingModule.logException).toHaveBeenCalledWith(error);
     });
 
     it('does not fetch when houseId is empty', () => {

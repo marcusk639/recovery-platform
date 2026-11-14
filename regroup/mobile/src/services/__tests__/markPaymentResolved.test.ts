@@ -1,56 +1,58 @@
-jest.mock('../../../firebase-setup', () => {
-  const mockUpdate = jest.fn().mockResolvedValue(undefined);
-  const mockDoc = jest.fn(() => ({ update: mockUpdate }));
-  const mockCollection = jest.fn(() => ({ doc: mockDoc }));
-  return {
-    firestore: {
-      collection: mockCollection,
-      _mockCollection: mockCollection,
-      _mockUpdate: mockUpdate,
-      _mockDoc: mockDoc,
-    },
-    auth: { currentUser: { uid: 'admin-uid-1' } },
-  };
+/**
+ * markPaymentResolvedOffline asks the resolveFailedPaymentOffline callable
+ * (#238). payments is server-written only (firestore.rules), so the client
+ * update this used to make was always refused and "Mark Resolved" always failed.
+ */
+jest.mock('../../../firebase-setup', () => require('../../../__mocks__/firebase-modular/setup'));
+jest.mock('@react-native-firebase/firestore', () =>
+  require('../../../__mocks__/firebase-modular/firestore'),
+);
+jest.mock('@react-native-firebase/functions', () =>
+  require('../../../__mocks__/firebase-modular/functions'),
+);
+jest.mock('@react-native-firebase/auth', () => require('../../../__mocks__/firebase-modular/auth'));
+jest.mock('../../util/logging', () => ({ logException: jest.fn() }));
+
+import {
+  failNext,
+  getOpLog,
+  readDoc,
+  resetOpLog,
+  seedDoc,
+} from '../../../__mocks__/firebase-modular/log';
+import { markPaymentResolvedOffline } from '../payments';
+
+beforeEach(() => {
+  resetOpLog();
 });
 
-import { firestore } from '../../../firebase-setup';
-import { markPaymentResolvedOffline, paymentsCollection } from '../payments';
-
-const getUpdate = () => (firestore as any)._mockUpdate as jest.Mock;
-
 describe('markPaymentResolvedOffline', () => {
-  it('writes to the payments collection', async () => {
-    // Verify that firestore.collection was called with 'payments' by the paymentsCollection export
-    // We do this by verifying the mock is set up and trying to use the collection
-    const paymentsRef = (firestore as any).collection('payments');
-    expect((firestore as any)._mockCollection).toHaveBeenCalledWith('payments');
+  it('asks the resolveFailedPaymentOffline callable for the payment', async () => {
+    await markPaymentResolvedOffline('pi_abc123');
 
-    // Verify the chain works: collection('payments').doc('id').update(data)
-    const docRef = paymentsRef.doc('test-id');
-    expect((firestore as any)._mockDoc).toHaveBeenCalledWith('test-id');
-
-    await docRef.update({ test: true });
-    expect(getUpdate()).toHaveBeenCalledWith({ test: true });
+    expect(getOpLog()).toEqual([
+      { op: 'call', path: 'resolveFailedPaymentOffline', data: { paymentId: 'pi_abc123' } },
+    ]);
   });
 
-  beforeEach(() => jest.clearAllMocks());
+  it('writes nothing to Firestore itself, which the rules refuse', async () => {
+    seedDoc('payments/pi_abc123', { status: 'failed', amount: 50000 });
 
-  it('updates status to resolved_offline on the payments document', async () => {
-    await markPaymentResolvedOffline('pay-abc-123');
+    await markPaymentResolvedOffline('pi_abc123');
 
-    expect(getUpdate()).toHaveBeenCalledWith(
-      expect.objectContaining({ status: 'resolved_offline' }),
-    );
+    expect(getOpLog().filter(entry => entry.op !== 'call')).toEqual([]);
+    expect(readDoc('payments/pi_abc123')).toEqual({ status: 'failed', amount: 50000 });
   });
 
-  it('writes resolvedAt as a valid ISO string', async () => {
-    await markPaymentResolvedOffline('pay-abc-123');
-    const written = getUpdate().mock.calls[0][0];
-    expect(new Date(written.resolvedAt).toISOString()).toBe(written.resolvedAt);
+  it('rejects when the server refuses, so the banner can say so', async () => {
+    failNext('call', Object.assign(new Error('permission-denied'), { code: 'permission-denied' }));
+
+    await expect(markPaymentResolvedOffline('pi_abc123')).rejects.toThrow('permission-denied');
   });
 
-  it('targets the correct document id', async () => {
-    await markPaymentResolvedOffline('pay-abc-123');
-    expect((firestore as any)._mockDoc).toHaveBeenCalledWith('pay-abc-123');
+  it('sends only the payment id', async () => {
+    await markPaymentResolvedOffline('pay-manual-1');
+
+    expect(getOpLog()[0].data).toEqual({ paymentId: 'pay-manual-1' });
   });
 });

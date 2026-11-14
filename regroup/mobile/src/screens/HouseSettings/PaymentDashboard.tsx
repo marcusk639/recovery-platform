@@ -87,7 +87,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
   // React Query is the source of truth for guests; see .full-review [A2].
   const { data: guestsData = {} } = useGuests(house?.id ?? "");
   const guests = guestsData as Record<string, Guest>;
-  const { data: failedPayments = [] } = useFailedPayments(house?.id ?? "");
+  const { data: failedPayments = [], isError: failedPaymentsError } =
+    useFailedPayments(house?.id ?? "");
   // Peer leaders do not record payments at launch (owner decision 2026-11-10);
   // the rules refuse it (payments create, guest rentOwed).
   const canRecordPayments = useMayEditRentMoney(house?.id ?? "");
@@ -303,6 +304,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
           failedPayments={failedPayments}
           houseId={house?.id ?? ""}
           guestNames={guestNames}
+          loadError={failedPaymentsError}
         />
         <StalePendingBanner
           stalePendingPayments={stalePendingPayments}

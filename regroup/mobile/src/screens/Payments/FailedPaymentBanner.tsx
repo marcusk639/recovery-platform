@@ -12,6 +12,8 @@ interface Props {
   failedPayments: RentPayment[];
   houseId: string;
   guestNames: Record<string, string>;
+  /** The failed list couldn't be read: say so rather than show nothing. */
+  loadError?: boolean;
 }
 
 interface RowProps {
@@ -72,7 +74,19 @@ const FailedPaymentBanner: React.FC<Props> = ({
   failedPayments,
   houseId,
   guestNames,
+  loadError = false,
 }) => {
+  if (loadError) {
+    return (
+      <View style={styles.banner} testID="failed-payment-load-error">
+        <RatsText
+          translate={false}
+          text="Couldn't check for failed payments. Close and reopen this screen to try again."
+          style={styles.detail}
+        />
+      </View>
+    );
+  }
   if (failedPayments.length === 0) return null;
 
   return (

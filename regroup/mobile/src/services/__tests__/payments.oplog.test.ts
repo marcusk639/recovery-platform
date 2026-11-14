@@ -202,16 +202,17 @@ describe('recordManualPayment', () => {
 });
 
 describe('markPaymentResolvedOffline', () => {
-  it('updates only status and resolvedAt', async () => {
+  // payments is server-written only, so the server sets the status (#238).
+  it('asks the server to resolve it and writes nothing itself', async () => {
     seedDoc('payments/p1', { status: 'failed', amount: 50000 });
 
     await markPaymentResolvedOffline('p1');
 
     expect(getOpLog()).toEqual([
-      { op: 'update', path: 'payments/p1', data: { status: 'resolved_offline', resolvedAt: ISO } },
+      { op: 'call', path: 'resolveFailedPaymentOffline', data: { paymentId: 'p1' } },
     ]);
     expect(readDoc('payments/p1')).toEqual(
-      expect.objectContaining({ status: 'resolved_offline', amount: 50000 }),
+      expect.objectContaining({ status: 'failed', amount: 50000 }),
     );
   });
 });
