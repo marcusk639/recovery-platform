@@ -9,6 +9,12 @@
  *
  * Requires the Storage emulator (FIREBASE_STORAGE_EMULATOR_HOST, set by
  * `firebase emulators:exec`).
+ *
+ * The suite tests the ruleset the emulator loaded from firebase.json at start
+ * (storage.rules) and does not upload its own. The Storage emulator holds one
+ * ruleset for every suite, so a suite that re-uploads it leaves the others a
+ * moment with none ("no Storage ruleset is currently loaded"), and their
+ * requests are denied when the rules suites run in parallel.
  */
 import {
   initializeTestEnvironment,
@@ -18,8 +24,6 @@ import {
   RulesTestContext,
 } from '@firebase/rules-unit-testing';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
-import * as fs from 'fs';
-import * as path from 'path';
 
 const [STORAGE_HOST, STORAGE_PORT] = (
   process.env.FIREBASE_STORAGE_EMULATOR_HOST ?? '127.0.0.1:9199'
@@ -42,7 +46,6 @@ beforeAll(async () => {
   testEnv = await initializeTestEnvironment({
     projectId: 'rats-document-uploads-rules-test',
     storage: {
-      rules: fs.readFileSync(path.resolve(__dirname, '../storage.rules'), 'utf8'),
       host: STORAGE_HOST,
       port: Number(STORAGE_PORT),
     },
