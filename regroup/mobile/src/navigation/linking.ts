@@ -23,7 +23,10 @@ import { RootStackParamList, Routes } from './types';
 
 export const linkingConfig: LinkingOptions<RootStackParamList> = {
   prefixes: [
-    'regroup://',  // Custom URL scheme
+    // The canonical custom scheme, registered by iOS and Android (launch spec
+    // §4.2). The old 'regroup://' was registered by neither and sent by
+    // nothing (#183 item 18).
+    'regroup-app://',
     'https://regroup-app.com',  // Universal link
     'https://*.regroup-app.com',  // Universal link wildcard
   ],
@@ -111,9 +114,9 @@ export const linkingConfig: LinkingOptions<RootStackParamList> = {
 /**
  * Example deep link URLs:
  *
- * - regroup://auth/login
- * - regroup://chat/user123
- * - regroup://guest/guest456/meetings
+ * - regroup-app://auth/login
+ * - regroup-app://chat/user123
+ * - regroup-app://guest/guest456/meetings
  * - https://regroup-app.com/house/house789
  * - https://regroup-app.com/app/activities
  *
@@ -121,12 +124,12 @@ export const linkingConfig: LinkingOptions<RootStackParamList> = {
  *
  * iOS (Simulator):
  * ```bash
- * xcrun simctl openurl booted "regroup://app/house"
+ * xcrun simctl openurl booted "regroup-app://app/house"
  * ```
  *
  * Android (Device/Emulator):
  * ```bash
- * adb shell am start -W -a android.intent.action.VIEW -d "regroup://app/house"
+ * adb shell am start -W -a android.intent.action.VIEW -d "regroup-app://app/house"
  * ```
  *
  * Universal Links (iOS):
