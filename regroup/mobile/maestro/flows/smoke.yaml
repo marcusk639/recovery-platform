@@ -5,8 +5,9 @@
 #     builds may run; the guard subflow refuses anything else.
 #  3. The pre-auth landing screen renders.
 #
-# Run (iOS):     maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/smoke.yaml
-# Run (Android): maestro test -e APP_ID=com.regroup.app.e2e.emu maestro/flows/smoke.yaml
+# Run (iOS):     npm run maestro:smoke:ios       (runs e2e-build-guard.js first)
+# Run (Android): npm run maestro:smoke:android
+# Plain `maestro test -e APP_ID=… maestro/flows/smoke.yaml` skips the build guard.
 appId: ${APP_ID}
 tags:
   - smoke
