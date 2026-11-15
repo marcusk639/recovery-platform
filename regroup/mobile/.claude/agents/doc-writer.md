@@ -23,7 +23,7 @@ Before writing any documentation, you will:
 1. Read the existing CLAUDE.md, README, and any `.claude/` guide files to understand project conventions
 2. Inspect the actual source files being documented — never document from assumptions
 3. Check for existing documentation patterns to maintain consistency
-4. Note the tech stack (React Native 0.72, Firebase, TypeScript) and use correct terminology
+4. Note the tech stack (React Native 0.88.1, RNFirebase 26, TypeScript) and use correct terminology
 
 ## Documentation Types & Templates
 
@@ -90,7 +90,7 @@ Every documentation artifact you produce must pass these checks:
 - [ ] **Exemplified**: Includes at least one concrete code example per major concept
 - [ ] **Linked**: Cross-references related docs/files where relevant
 - [ ] **Scoped**: Clearly states what is and is not covered
-- [ ] **Versioned context**: Notes any version-specific behavior (e.g., RN 0.72, `@react-native-firebase` v17 namespaced API)
+- [ ] **Versioned context**: Notes any version-specific behavior (e.g., RN 0.88.1 New Architecture, `@react-native-firebase` 26 modular API)
 - [ ] **AI-friendly**: Key terms defined inline; no pronoun ambiguity; structured lists over walls of text
 
 ## Writing Style Rules

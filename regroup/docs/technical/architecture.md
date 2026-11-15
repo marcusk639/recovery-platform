@@ -38,11 +38,11 @@ This document provides a comprehensive breakdown of the Regroup sober living man
 
 ### Repository Structure
 
-| Component             | Path                 | Purpose                                     | Key Tech                                                  |
-| --------------------- | -------------------- | ------------------------------------------- | --------------------------------------------------------- |
-| **Regroup mobile**    | `regroup/mobile/`    | Mobile client + Firestore rules + E2E tests | React Native 0.72, TypeScript, Redux Toolkit, React Query |
-| **Regroup functions** | `regroup/functions/` | Cloud Functions backend                     | TypeScript, Firebase Admin SDK, Stripe SDK                |
-| **Regroup web**       | `regroup/web/`       | Marketing/landing page + web portal         | Angular, TypeScript, Firebase Hosting                     |
+| Component             | Path                 | Purpose                                     | Key Tech                                                                   |
+| --------------------- | -------------------- | ------------------------------------------- | -------------------------------------------------------------------------- |
+| **Regroup mobile**    | `regroup/mobile/`    | Mobile client + Firestore rules + E2E tests | React Native 0.88.1, TypeScript, Redux Toolkit, React Query, RNFirebase 26 |
+| **Regroup functions** | `regroup/functions/` | Cloud Functions backend                     | TypeScript, Firebase Admin SDK, Stripe SDK                                 |
+| **Regroup web**       | `regroup/web/`       | Marketing/landing page + web portal         | Angular, TypeScript, Firebase Hosting                                      |
 
 ### Data Flow Summary
 

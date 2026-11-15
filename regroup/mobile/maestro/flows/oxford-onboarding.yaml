@@ -1,14 +1,10 @@
 # Flow 26 — Oxford: onboarding wizard
 # Persona: oxford operator (admin of test-house-oxford-new, not onboarded yet).
 #
-# PRECONDITION (re-seed required): this flow only renders the onboarding wizard
-# when the Oxford house has oxfordOnboardingComplete===false. The default seed
-# (maestro/scripts/seed/index.js) sets test-house-oxford.oxfordOnboardingComplete=true
-# (so the dashboard flow 31 works). To run this flow, EITHER:
-#   - re-seed test-house-oxford with oxfordOnboardingComplete:false, OR
-#   - seed a SECOND oxford house with onboarding incomplete and point this
-#     operator at it.
-# Until then this flow will land on oxford-dashboard-content instead of the wizard.
+# The wizard renders only while the house has oxfordOnboardingComplete===false.
+# The seed (maestro/scripts/seed/index.js) creates test-house-oxford-new that way
+# for this flow, and keeps test-house-oxford onboarded for the dashboard flow 31.
+# The flow completes the wizard, so re-seed (reset-and-seed.sh) before a rerun.
 #
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/oxford-onboarding.yaml
 appId: ${APP_ID}
