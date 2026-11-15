@@ -224,7 +224,7 @@ export const determineDisputeResult = async (
     ? 'currentWeek'
     : 'previousWeek';
 
-  const guestWeek = legacyGuest[week] as Week | undefined;
+  const guestWeek = legacyGuest[week];
   if (!guestWeek) {
     logger.error(`Guest ${guestId} has no ${week}`);
     return;
@@ -276,7 +276,7 @@ export const determineDisputeResult = async (
 
   if (result !== 'none') {
     const victimLegacy = victim as LegacyGuest;
-    const victimWeek = victimLegacy[week] as Week | undefined;
+    const victimWeek = victimLegacy[week];
     if (victimWeek) {
       victimWeek.activities = updateActivity(victimWeek, dispute, result);
     }

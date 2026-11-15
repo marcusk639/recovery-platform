@@ -123,6 +123,6 @@ export async function recordResidentAccepted(
       ...meta,
       houses: { ...houses, [houseId]: { numberOfGuests: current + 1 } },
       lastUpdatedAt: new Date().toISOString(),
-    } as unknown as OperatorSubscription,
+    },
   });
 }

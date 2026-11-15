@@ -56,7 +56,7 @@ describe('evaluateEntitlement', () => {
     // a write bug, not legacy data. Denying is the safe reading.
     it.each([undefined, '', null])('denies access and flags the gap for %p', (status) => {
       expect(
-        evaluateEntitlement({ subscriptionStatus: status as string | undefined }, NOW),
+        evaluateEntitlement({ subscriptionStatus: status }, NOW),
       ).toEqual({ entitled: false, reason: 'absent_status' });
     });
   });

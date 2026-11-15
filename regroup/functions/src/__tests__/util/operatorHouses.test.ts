@@ -6,7 +6,12 @@ const mockGet = jest.fn();
 jest.mock('firebase-admin', () => {
   const firestore = Object.assign(
     () => ({
-      collection: () => ({ where: (...args: unknown[]) => (mockWhere(...args), { get: mockGet }) }),
+      collection: () => ({
+        where: (...args: unknown[]) => {
+          mockWhere(...args);
+          return { get: mockGet };
+        },
+      }),
       batch: () => ({ update: mockBatchUpdate, commit: mockBatchCommit }),
     }),
     {

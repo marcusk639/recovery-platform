@@ -62,7 +62,7 @@ export const addHousesToSubscription = (
     ...meta,
     houses: added,
     lastUpdatedAt: now.toISOString(),
-  } as unknown as OperatorSubscription;
+  };
 };
 
 /**
@@ -79,5 +79,5 @@ export const removeHouseFromSubscription = (
     ...meta,
     houses: remaining,
     lastUpdatedAt: now.toISOString(),
-  } as unknown as OperatorSubscription;
+  };
 };

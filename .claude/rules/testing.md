@@ -1,12 +1,12 @@
 ---
 paths:
-  - "**/*.test.*"
-  - "**/*.spec.*"
-  - "**/*.e2e.*"
-  - "**/__tests__/**"
-  - "**/tests/**"
-  - "**/e2e/**"
-  - "e2e-maestro/**"
+  - '**/*.test.*'
+  - '**/*.spec.*'
+  - '**/*.e2e.*'
+  - '**/__tests__/**'
+  - '**/tests/**'
+  - '**/e2e/**'
+  - 'e2e-maestro/**'
 ---
 
 # Testing
@@ -16,7 +16,7 @@ paths:
 - Run from the package root, never from the repo root: `npm test -- path/to/file.test.ts` for a single file.
 - For `homegroups/mobile` and `regroup/mobile`, install with `npm ci --ignore-scripts` for JS-only work (postinstall runs `pod install`).
 - Emulator ports differ per package. Read that package's `firebase.json` and do not run two products' emulators at once.
-- `pre-push` runs `npm test` in each changed package among recovery-api, detox-recovery, homegroups/functions and regroup/functions.
+- `pre-push` runs `npm test` in each changed package among recovery-api, detox-recovery, homegroups/functions, regroup/functions and regroup/portal (also when `regroup/mobile/src` changes, since the portal bundles it).
 
 ## Writing tests
 

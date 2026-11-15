@@ -223,7 +223,7 @@ describe("computeApplicationFee", () => {
       for (const bad of [Infinity, -Infinity, NaN]) {
         const fee = computeApplicationFee(
           { amountCents: 50000, paymentMethodType: "card" },
-          { ...DEFAULT_FEES, stripeCardRate: bad } as RentFeeConfig,
+          { ...DEFAULT_FEES, stripeCardRate: bad },
         );
         expect(Number.isFinite(fee)).toBe(true);
         expect(fee).toBeLessThan(50000);
@@ -233,7 +233,7 @@ describe("computeApplicationFee", () => {
 
       const achFee = computeApplicationFee(
         { amountCents: 50000, paymentMethodType: "ach" },
-        { ...DEFAULT_FEES, stripeAchCapCents: Infinity } as RentFeeConfig,
+        { ...DEFAULT_FEES, stripeAchCapCents: Infinity },
       );
       expect(Number.isFinite(achFee)).toBe(true);
       expect(achFee).toBeLessThan(50000);

@@ -46,7 +46,7 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
     const guestRef = guestCollection.doc(guestId);
     const guestSnap = await txn.get(guestRef);
     if (!guestSnap.exists) return skipped('missing');
-    const guest = (guestSnap.data() ?? {}) as Data;
+    const guest = guestSnap.data() ?? {};
     if (!isActiveGuestDoc(guest)) return skipped('inactive');
     if (str(guest.rentLinkedTo)) return skipped('linked');
     // increment replaces a field that isn't a number, which would erase a legacy
@@ -66,7 +66,7 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
     const houseSnap = await txn.get(houseCollection.doc(houseId));
     const stateSnap = await txn.get(rentHouseStateCollection.doc(houseId));
     const settings = houseSnap.exists
-      ? rentSettingsOf((houseSnap.data() ?? {}) as Data, stateSnap.data() as Data | undefined)
+      ? rentSettingsOf(houseSnap.data() ?? {}, stateSnap.data())
       : null;
     if (!settings) return skipped('charging-off');
     const { startDate, startedAtMs, timeZone, frequency } = settings;
@@ -151,7 +151,7 @@ export async function chargeResident(guestId: string, now: Date): Promise<Charge
       });
       notifyUid = userId;
     }
-    return { status: 'charged', totalCents: total, periods: plan.length } as ChargeOutcome;
+    return { status: 'charged', totalCents: total, periods: plan.length } satisfies ChargeOutcome;
   });
 
   if (outcome.status === 'charged') {

@@ -53,7 +53,7 @@ export async function verifyStamp(
   if (!apply) {
     const guest = guestRef ? await guestRef.get() : undefined;
     if (!guest?.exists) return 'guestMissing';
-    return stampCheck(data, residentUidFrom(guest.data() as Data));
+    return stampCheck(data, residentUidFrom(guest.data()));
   }
   const ref = db.collection('activities').doc(activityId);
   return db.runTransaction(async (tx): Promise<StampCheck> => {
@@ -70,7 +70,7 @@ export async function verifyStamp(
       if (flag) tx.update(ref, { flaggedForReview: flag });
       return 'guestMissing';
     }
-    const derived = residentUidFrom(guest.data() as Data);
+    const derived = residentUidFrom(guest.data());
     const check = stampCheck(now, derived);
     if (check === 'restamped' || check === 'filled') {
       tx.update(

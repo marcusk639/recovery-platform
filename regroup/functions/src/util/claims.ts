@@ -17,7 +17,7 @@ function toHouseRoleClaim(raw: unknown): Record<string, true> {
     }, {});
   }
   if (raw != null && typeof raw === 'object') {
-    return Object.keys(raw as Record<string, unknown>).reduce<Record<string, true>>(
+    return Object.keys(raw).reduce<Record<string, true>>(
       (acc, id) => {
         acc[id] = true;
         return acc;

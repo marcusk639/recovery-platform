@@ -131,7 +131,7 @@ export async function mirrorHouseDispute(
   const guestSnap = guestId ? await db.collection('guests').doc(guestId).get() : undefined;
   const guest = trustedGuestFrom(
     guestId,
-    guestSnap?.exists ? (guestSnap.data() as Data) : undefined,
+    guestSnap?.exists ? (guestSnap.data()) : undefined,
   );
   const houseId = guest?.houseId ?? null;
   const activityRef = db.collection('activities').doc(activityId);

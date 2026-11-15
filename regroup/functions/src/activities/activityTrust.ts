@@ -68,7 +68,7 @@ export async function loadGuestContext(
   guestId: string,
 ): Promise<GuestContext | null> {
   const snap = await db.collection('guests').doc(guestId).get();
-  const guest = trustedGuestFrom(guestId, snap.exists ? (snap.data() as Data) : undefined);
+  const guest = trustedGuestFrom(guestId, snap.exists ? (snap.data()) : undefined);
   if (!guest) {
     logger.warn('week_summary.guest_missing', { guestId });
     return null;

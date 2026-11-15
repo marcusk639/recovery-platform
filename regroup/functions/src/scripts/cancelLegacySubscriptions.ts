@@ -125,7 +125,7 @@ export async function main(
   }
   const mode = key.startsWith('sk_live_') || key.startsWith('rk_live_') ? 'live' : 'test';
   const stripe = (
-    deps.makeStripe ?? ((k) => new Stripe(k, { apiVersion: STRIPE_API_VERSION as never }))
+    deps.makeStripe ?? ((k) => new Stripe(k, { apiVersion: STRIPE_API_VERSION }))
   )(key);
   log(`Stripe mode: ${mode}`);
 

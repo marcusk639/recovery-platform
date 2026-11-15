@@ -5,7 +5,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
 // typescript is a devDependency: this test reads the exports statically.
-// tslint:disable-next-line:no-implicit-dependencies
 import * as ts from 'typescript';
 
 it('deploy-batched.sh ALL_FUNCTIONS lists exactly the exported endpoints', () => {

@@ -43,12 +43,12 @@ export async function restampGuestActivities(
     const page = await (last ? base.startAfter(last) : base).limit(pageSize).get();
     for (const doc of page.docs) {
       scanned++;
-      const existing = doc.data() as Data;
+      const existing = doc.data();
       if (typeof existing.residentUid === 'string' && existing.residentUid !== '') continue;
       const fill = db.runTransaction(async (tx) => {
         const activity = await tx.get(doc.ref);
         const guest = await tx.get(guestRef);
-        const uid = residentUidFrom(guest.exists ? (guest.data() as Data) : undefined);
+        const uid = residentUidFrom(guest.exists ? (guest.data()) : undefined);
         const data = activity.exists ? (activity.data() as Data) : undefined;
         const isStamped = typeof data?.residentUid === 'string' && data.residentUid !== '';
         if (!uid || !data || data.guestId !== guestId || isStamped) return false;
@@ -68,6 +68,7 @@ export async function restampGuestActivities(
     last = page.docs[page.docs.length - 1];
   }
   logger.info('resident_restamp.done', { guestId, scanned, stamped, failed: !!failed });
+  // eslint-disable-next-line @typescript-eslint/only-throw-error -- rethrows the caught error as is
   if (failed) throw failed; // retried until RETRY_CUTOFF_MS
   return { scanned, stamped };
 }

@@ -1231,7 +1231,7 @@ describe("tier subscriptions skip Stripe quantity updates", () => {
     "refuses to remove a house that still exists (%s), so the cap cannot be bypassed",
     async (_label, houseDoc) => {
       mockGetUser.mockResolvedValue(tierUserUnderCap);
-      mockGetHouse.mockResolvedValueOnce(houseDoc as any);
+      mockGetHouse.mockResolvedValueOnce(houseDoc);
       await expect(
         call(updateSubscriptionHouses, {
           ownerUserId: "user-1",

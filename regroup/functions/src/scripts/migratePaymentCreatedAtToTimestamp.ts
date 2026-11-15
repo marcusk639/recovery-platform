@@ -77,7 +77,7 @@ export async function run(database: FirebaseFirestore.Firestore, apply: boolean)
 
   for (const doc of snapshot.docs) {
     counts.scanned++;
-    const verdict = classify(doc.data() as Record<string, unknown>);
+    const verdict = classify(doc.data());
 
     switch (verdict.kind) {
       case 'timestamp':

@@ -152,7 +152,7 @@ describe("mapRecipientAccountStatus", () => {
     const result = mapRecipientAccountStatus({
       ...accountWithTransfers("active"),
       closed: true,
-    } as Stripe.V2.Core.Account);
+    });
 
     expect(result.closed).toBe(true);
     expect(result.status).not.toBe("active");

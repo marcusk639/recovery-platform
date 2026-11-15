@@ -188,6 +188,6 @@ describe("calculateWeeklyHealth", () => {
 
     await calculateWeeklyHealth(guestsQuery, house);
 
-    expect(Object.keys(house.health!).length).toBe(1);
+    expect(Object.keys(house.health).length).toBe(1);
   });
 });

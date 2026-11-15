@@ -148,7 +148,7 @@ export async function recomputeWeekSummary(
 
     const guest = trustedGuestFrom(
       guestId,
-      guestSnap.exists ? (guestSnap.data() as Data) : undefined,
+      guestSnap.exists ? (guestSnap.data()) : undefined,
     );
     if (!guest) {
       return {
@@ -168,11 +168,11 @@ export async function recomputeWeekSummary(
     if (resolveTimeZone(house.data()?.timezone).timeZone !== timeZone) throw guestChanged();
 
     const { trusted, excluded } = await trustedActivities(
-      activities.docs.map((d) => d.data() as Data),
+      activities.docs.map((d) => d.data()),
       guest,
       prefetchedAdmin,
     );
-    const next = aggregateWeek(trusted as ActivityLike[], weekStart, timeZone);
+    const next = aggregateWeek(trusted, weekStart, timeZone);
     const result = {
       skipped: false,
       activityCount: next.activityCount,

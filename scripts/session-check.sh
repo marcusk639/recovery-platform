@@ -46,7 +46,7 @@ fi
 
 # Dependencies installed?
 MISSING=""
-for pkg in recovery-api detox-recovery homegroups/functions homegroups/mobile regroup/functions regroup/mobile regroup/web; do
+for pkg in recovery-api detox-recovery homegroups/functions homegroups/mobile regroup/functions regroup/mobile regroup/portal regroup/web; do
   [ -d "$REPO_ROOT/$pkg/node_modules" ] || MISSING="$MISSING $pkg"
 done
 if [ -n "$MISSING" ]; then

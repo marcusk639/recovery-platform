@@ -6,6 +6,7 @@ This directory contains the Firebase Cloud Functions backend for Regroup. Loaded
 
 ```bash
 npm run build                   # TypeScript compile
+npm run lint                    # ESLint + typescript-eslint, type-aware (eslint.config.mjs; replaced tslint, #113). Errors fail it; warnings don't
 npm test                        # Jest unit tests (run in band)
 npm run test:watch              # Jest watch mode
 npm run test:coverage           # Jest with coverage

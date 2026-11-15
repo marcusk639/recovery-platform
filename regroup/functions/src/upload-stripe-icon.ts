@@ -2,7 +2,7 @@ import { stripe } from "./api/stripe";
 import fs from "fs";
 import path from "path";
 
-(async () => {
+void (async () => {
   const PATH =
     "/Users/marcusklein/dev/regroup-functions/functions/src/assets/app-icon.png";
 
