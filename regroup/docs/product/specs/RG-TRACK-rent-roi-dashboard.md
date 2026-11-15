@@ -1,6 +1,6 @@
 # RG-TRACK — Rent-Collection ROI Dashboard
 
-**Status:** v1 + accuracy follow-ups shipped (`rentRoiMetrics`: gross/net $, refunds, outstanding $, overdue count, on-time %) — issues [#32](https://github.com/marcusk639/recovery-platform/issues/32), [#34](https://github.com/marcusk639/recovery-platform/issues/34), [#35](https://github.com/marcusk639/recovery-platform/issues/35). Deferred: hours-saved, UI.
+**Status:** v1 + accuracy follow-ups shipped (`rentRoiMetrics`: gross/net $, refunds, outstanding $, overdue count, on-time %) — issues [#32](https://github.com/marcusk639/recovery-platform/issues/32), [#34](https://github.com/marcusk639/recovery-platform/issues/34), [#35](https://github.com/marcusk639/recovery-platform/issues/35). Hours saved and the dashboard card shipped for #32 (owner decisions 2026-11-15: every payment collected through Stripe counts, 10 minutes each, labelled an estimate; a card on the phone's Payment Dashboard, for the selected period).
 **Tier:** Professional / Plus and higher (value-ladder capability `analytics`)
 **Source rationale:** [regroup-pricing-justification.md §6c](../../launch-readiness/regroup-pricing-justification.md) · [regroup-pricing-revision-plan.md Phase 5](../../launch-readiness/regroup-pricing-revision-plan.md)
 

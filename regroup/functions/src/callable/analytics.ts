@@ -42,7 +42,14 @@ interface PaymentRecord {
   createdAt?: unknown; // Firestore Timestamp | ISO string | Date
   refundedAmountCents?: number; // cumulative refunds in CENTS (#35, charge.refunded)
   dueDate?: string; // YYYY-MM-DD due date captured at charge time (#34)
+  stripePaymentIntentId?: string; // set on every Stripe-collected payment; manual ones have none
 }
+
+// "Hours saved" (#32, owner decisions 2026-11-15): each payment collected
+// through Stripe (autopay or the resident's own card/bank payment) is credited
+// this many minutes of staff time a manual collection would have taken; manual
+// cash/check records count for nothing. An estimate, and labelled as one.
+export const MINUTES_SAVED_PER_STRIPE_COLLECTION = 10;
 
 interface GuestRecord {
   status?: string;
@@ -203,6 +210,13 @@ export const rentRoiMetrics = onCall(async (request) => {
       ? Math.round((onTimePayments.length / duePaymentCount) * 100)
       : null;
 
+  const automatedCollectionCount = filteredPayments.filter(
+    (p) => typeof p.stripePaymentIntentId === "string" && p.stripePaymentIntentId.length > 0,
+  ).length;
+  // Hours, to one decimal.
+  const hoursSavedEstimate =
+    Math.round((automatedCollectionCount * MINUTES_SAVED_PER_STRIPE_COLLECTION) / 6) / 10;
+
   const guests = (await getGuestsForHouse(houseId)) as GuestRecord[];
   // Missing status ⇒ treat as active.
   const activeGuests = guests.filter(
@@ -242,14 +256,16 @@ export const rentRoiMetrics = onCall(async (request) => {
   //     per-charge dueDate. If some windowed payments predate dueDate capture
   //     (or the guest had no due date), the rate covers only those with a
   //     recorded due date — flag that partial coverage.
-  //   • hours-saved remains deferred.
+  //   • hours-saved is an estimate (#32): say so, with its constant.
   const caveats: string[] = [];
   if (duePaymentCount < paymentCount) {
     caveats.push(
       "on-time rate covers only payments with a recorded due date; payments without a captured dueDate are excluded",
     );
   }
-  caveats.push("hours-saved is deferred (not yet computed)");
+  caveats.push(
+    `hours-saved is an estimate: ${MINUTES_SAVED_PER_STRIPE_COLLECTION} minutes for each payment collected through Stripe; manual payments count for nothing`,
+  );
 
   return {
     available: true,
@@ -266,6 +282,9 @@ export const rentRoiMetrics = onCall(async (request) => {
     duePaymentCount,
     outstandingCents,
     overdueResidentCount,
+    automatedCollectionCount,
+    minutesSavedPerCollection: MINUTES_SAVED_PER_STRIPE_COLLECTION,
+    hoursSavedEstimate,
     caveats,
   };
 });

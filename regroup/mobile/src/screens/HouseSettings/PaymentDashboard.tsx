@@ -26,6 +26,7 @@ import {
 } from "../../state/queries/paymentQueries";
 import FailedPaymentBanner from "../Payments/FailedPaymentBanner";
 import StalePendingBanner from "../Payments/StalePendingBanner";
+import RentRoiCard from "./RentRoiCard";
 import { logException } from "../../util/logging";
 import { toDateSafe } from "../../util/firestore";
 import {
@@ -170,6 +171,15 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
       ),
     [guestList],
   );
+
+  // The ROI card's period, the same as the pills': this week or month so far, or all time.
+  const periodStart =
+    dateFilter === "all"
+      ? undefined
+      : format(
+          dateFilter === "week" ? startOfISOWeek(new Date()) : startOfMonth(new Date()),
+          "yyyy-MM-dd",
+        );
 
   const filteredPayments = useMemo(() => {
     if (dateFilter === "all") return allPayments;
@@ -335,6 +345,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
           ))}
         </View>
+
+        <RentRoiCard houseId={house?.id ?? ""} startDate={periodStart} />
 
         {overdueGuests.length > 0 && (
           <View
