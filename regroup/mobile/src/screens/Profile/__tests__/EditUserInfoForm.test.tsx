@@ -139,6 +139,21 @@ describe("EditUserInfoFormWrapper", () => {
     expect(mockGoBack).not.toHaveBeenCalled();
   });
 
+  // #183 item 13: an unset date must stay unset when the profile is saved
+  // without touching it (the picker's today default is only a display value).
+  it("saves unset Date of Birth and Sobriety Date as unset, not today", async () => {
+    render(<EditUserInfoFormWrapper navigation={{ goBack: jest.fn() } as any} />);
+
+    act(() => {
+      capturedProps.handleSubmit();
+    });
+
+    await waitFor(() => expect(mockUpdateUserThunkCreator).toHaveBeenCalled());
+    const { updates } = mockUpdateUserThunkCreator.mock.calls[0][0];
+    expect(updates.dateOfBirth).toBeUndefined();
+    expect(updates.sobrietyDate).toBeUndefined();
+  });
+
   it("navigates back after a successful profile update, without showing an error", async () => {
     const mockGoBack = jest.fn();
     render(
