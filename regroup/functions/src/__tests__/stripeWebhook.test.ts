@@ -982,7 +982,7 @@ describe("payment_intent.succeeded", () => {
       metadata: { guestId: "guest_1", houseId: "house_1" },
       amount: 50000,
       currency: "jpy",
-    } as never);
+    });
     mockConstructEvent.mockReturnValue(
       makeStripeEvent("payment_intent.succeeded", pi),
     );
@@ -1013,7 +1013,7 @@ describe("payment_intent.succeeded", () => {
       metadata: { guestId: "guest_1", houseId: "house_1" },
       amount: 50000,
       currency: "jpy",
-    } as never);
+    });
     const event = makeStripeEvent("payment_intent.succeeded", pi);
     mockConstructEvent.mockReturnValue(event);
     setupForPaymentSucceeded();
@@ -1034,7 +1034,7 @@ describe("payment_intent.succeeded", () => {
       metadata: { guestId: "guest_1", houseId: "house_1" },
       amount: 50000,
       currency: "jpy",
-    } as never);
+    });
     const event = makeStripeEvent("payment_intent.succeeded", pi);
     mockConstructEvent.mockReturnValue(event);
     setupForPaymentSucceeded();
@@ -1143,7 +1143,7 @@ describe("payment_intent.succeeded", () => {
 
   test("missing guestId in metadata: handles gracefully without throwing", async () => {
     const pi = makePaymentIntent({
-      metadata: { houseId: "house_1" } as Stripe.Metadata,
+      metadata: { houseId: "house_1" },
     });
     const event = makeStripeEvent("payment_intent.succeeded", pi);
     mockConstructEvent.mockReturnValue(event);
@@ -1207,7 +1207,7 @@ describe("payment_intent.succeeded", () => {
 
   test("missing metadata: partial payment doc carries createdAt", async () => {
     const pi = makePaymentIntent({
-      metadata: { houseId: "house_1" } as Stripe.Metadata,
+      metadata: { houseId: "house_1" },
     });
     mockConstructEvent.mockReturnValue(makeStripeEvent("payment_intent.succeeded", pi));
     mockCollection.mockImplementation((name: string) => {
@@ -1246,7 +1246,7 @@ describe("payment_intent.succeeded", () => {
   describe("createdAt is write-once on redelivery", () => {
     const run = async (existing: { exists: boolean; data?: () => unknown }) => {
       const pi = makePaymentIntent({
-        metadata: { houseId: "house_1" } as Stripe.Metadata,
+        metadata: { houseId: "house_1" },
       });
       mockConstructEvent.mockReturnValue(
         makeStripeEvent("payment_intent.succeeded", pi),

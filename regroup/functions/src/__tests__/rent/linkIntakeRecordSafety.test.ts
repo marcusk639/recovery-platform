@@ -19,7 +19,7 @@ const intake = (o: Record<string, unknown> = {}, id = 'gIntake') =>
   guest({ userId: '', email: 'Pat@Example.com ', rentOwed: 12500, ...o }, id);
 const invite = (o: Record<string, unknown> = {}, invitedEmail = 'pat@example.com') => {
   invitedAs(typeof o.userId === 'string' ? o.userId : 'u1', invitedEmail);
-  return guest({ userId: 'u1', email: 'pat@example.com', moveInDate: undefined, ...o }, 'gNew');
+  guest({ userId: 'u1', email: 'pat@example.com', moveInDate: undefined, ...o }, 'gNew');
 };
 const doc = (id: string) => mem.get(`guests/${id}`) ?? {};
 

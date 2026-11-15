@@ -1059,7 +1059,7 @@ async function handleInvoicePaymentFailed(
   }
   // A late failure for an invoice since paid (or voided) must not set grace,
   // even while a later invoice keeps the subscription past due.
-  const currentInvoice = await stripeClient.invoices.retrieve(invoice.id as string);
+  const currentInvoice = await stripeClient.invoices.retrieve(invoice.id);
   if (currentInvoice.status === "paid" || currentInvoice.status === "void") {
     logger.info("invoice.payment_failed: this invoice is since settled", {
       stripeSubscriptionId,
@@ -1273,7 +1273,7 @@ async function handleSubscriptionUpdated(
   const periodEnd = periodEndSeconds(fresh);
   const planId = fresh.items?.data?.[0]?.price?.id ?? previousData.planId;
   const guestCount = parseInt(
-    (fresh.metadata?.guestCount as string | undefined) ??
+    (fresh.metadata?.guestCount) ??
       String(previousData.guestCount),
     10,
   );
@@ -1749,19 +1749,19 @@ export const stripeWebhook = onRequest(
         // --- Payment events (Stripe Connect) ---
         case "payment_intent.succeeded":
           await handlePaymentIntentSucceeded(
-            event.data.object as Stripe.PaymentIntent,
+            event.data.object,
           );
           break;
 
         case "payment_intent.payment_failed":
           await handlePaymentIntentFailed(
-            event.data.object as Stripe.PaymentIntent,
+            event.data.object,
           );
           break;
 
         case "charge.dispute.created":
           await handleDisputeCreated(
-            event.data.object as Stripe.Dispute,
+            event.data.object,
             getStripe(),
             reversalCtx,
           );
@@ -1769,7 +1769,7 @@ export const stripeWebhook = onRequest(
 
         case "charge.refunded":
           await handleChargeRefunded(
-            event.data.object as Stripe.Charge,
+            event.data.object,
             getStripe(),
             reversalCtx,
           );
@@ -1777,7 +1777,7 @@ export const stripeWebhook = onRequest(
 
         // A refund that was pending when charge.refunded fired settles here.
         case "charge.refund.updated": {
-          const refund = event.data.object as Stripe.Refund;
+          const refund = event.data.object;
           const chargeId =
             typeof refund.charge === "string"
               ? refund.charge
@@ -1790,7 +1790,7 @@ export const stripeWebhook = onRequest(
         case "charge.dispute.closed":
           await restoreTransferAfterWonDispute(
             getStripe(),
-            event.data.object as Stripe.Dispute,
+            event.data.object,
             reversalCtx,
           );
           break;
@@ -1798,39 +1798,39 @@ export const stripeWebhook = onRequest(
         // --- Subscription events (RATS platform) ---
         case "invoice.payment_succeeded":
           await handleInvoicePaymentSucceeded(
-            event.data.object as Stripe.Invoice,
+            event.data.object,
             getStripe(),
           );
           break;
 
         case "invoice.payment_failed":
           await handleInvoicePaymentFailed(
-            event.data.object as Stripe.Invoice,
+            event.data.object,
             getStripe(),
           );
           break;
 
         case "customer.subscription.trial_will_end":
-          await handleTrialWillEnd(event.data.object as Stripe.Subscription);
+          await handleTrialWillEnd(event.data.object);
           break;
 
         case "invoice.payment_action_required":
           await handlePaymentActionRequired(
-            event.data.object as Stripe.Invoice,
+            event.data.object,
             getStripe(),
           );
           break;
 
         case "customer.subscription.deleted":
           await handleSubscriptionDeleted(
-            event.data.object as Stripe.Subscription,
+            event.data.object,
           );
           break;
 
         case "customer.subscription.created":
         case "customer.subscription.updated":
           await handleSubscriptionUpdated(
-            event.data.object as Stripe.Subscription,
+            event.data.object,
             getStripe(),
           );
           break;
@@ -1838,13 +1838,13 @@ export const stripeWebhook = onRequest(
         // --- Stripe Connect account events ---
         case "account.updated":
           await handleAccountUpdated(
-            (event.data.object as Stripe.Account).id,
+            (event.data.object).id,
           );
           break;
 
         case "payout.failed":
           await handlePayoutFailed(
-            event.data.object as Stripe.Payout,
+            event.data.object,
             event.account ?? undefined,
           );
           break;
@@ -2031,7 +2031,7 @@ export const handleStripeConnectWebhook = onRequest(
       switch (event.type) {
         case "account.updated":
           await handleAccountUpdated(
-            (event.data.object as Stripe.Account).id,
+            (event.data.object).id,
           );
           break;
 

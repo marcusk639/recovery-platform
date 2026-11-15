@@ -111,7 +111,7 @@ export class Guest extends BaseEntity {
   phase: number | string = "default";
   avatar: string = "";
   supporters: string[] = [];
-  roles: Roles = {} as Roles;
+  roles: Roles = {};
   phoneNumber: string = "";
   infoEntered: boolean = false;
   jobs: string[] = [];

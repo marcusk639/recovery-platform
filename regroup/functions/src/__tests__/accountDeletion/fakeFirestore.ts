@@ -22,7 +22,7 @@ export function applyUpdate(data: Data, update: Data): Data {
     const parts = key.split('.');
     let target = out;
     for (const p of parts.slice(0, -1)) {
-      target[p] = (target[p] as Data | undefined) ?? {};
+      target[p] = (target[p]) ?? {};
       target = target[p] as Data;
     }
     const last = parts[parts.length - 1];

@@ -25,9 +25,9 @@ export const DOCUMENT_LINK_LIFETIME_MS = 15 * 60 * 1000;
  */
 export const getDocumentLink = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
-  const { documentId } = parseInput(GetDocumentLinkSchema, request.data) as {
+  const { documentId } = parseInput<{
     documentId: string;
-  };
+  }>(GetDocumentLinkSchema, request.data);
 
   try {
     const snap = await admin.firestore().collection("documents").doc(documentId).get();

@@ -127,7 +127,7 @@ export async function loadInFlightCentsByGuest(now: Date): Promise<InFlightScan>
         createdAt: (data.createdAt as string) ?? null,
       });
       if (data.needsReconciliation !== true) {
-        staleRefs.push(doc.ref as unknown as RentAttemptRef);
+        staleRefs.push(doc.ref);
       }
       continue;
     }
@@ -193,7 +193,7 @@ export async function recordRentAttempt(params: {
     createdAt: nowIso,
   });
 
-  return ref as unknown as RentAttemptRef;
+  return ref;
 }
 
 /** Record the Stripe outcome of a recorded attempt. Never throws. */
@@ -208,7 +208,7 @@ export async function markRentAttemptCharged(
 
   try {
     await ref.update({
-      status: (settled ? 'charged' : 'awaiting_confirmation') as RentAttemptStatus,
+      status: (settled ? 'charged' : 'awaiting_confirmation'),
       paymentIntentId: intent.id,
       stripeStatus: intent.status,
       updatedAt: new Date().toISOString(),
@@ -240,7 +240,7 @@ export async function markRentAttemptFailed(
     await ref.update({
       // Terminal only for a decline. Leaving an unknown outcome `pending` is
       // what stops a timeout that did charge from being charged again.
-      status: (declined ? 'failed' : 'pending') as RentAttemptStatus,
+      status: (declined ? 'failed' : 'pending'),
       needsReconciliation: !declined,
       failureReason: (err as Error)?.message ?? String(err),
       updatedAt: new Date().toISOString(),

@@ -1,6 +1,6 @@
 import { Email } from "../entities/Email";
 import sendgrid from "@sendgrid/mail";
-import { MailDataRequired } from "@sendgrid/helpers/classes/mail";
+import type { MailDataRequired } from "@sendgrid/helpers/classes/mail";
 import { logger } from "firebase-functions";
 
 export const regroupEmail = "admin@regroup-app.com";

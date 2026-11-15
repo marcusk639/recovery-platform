@@ -236,7 +236,7 @@ export const redeemInvitation = onCall(async (request) => {
   }
   const { token } = parseInput(redeemInvitationSchema, request.data);
   const callerUid = request.auth.uid;
-  const callerEmail = ((request.auth.token?.email as string | undefined) ?? '').toLowerCase();
+  const callerEmail = ((request.auth.token?.email) ?? '').toLowerCase();
 
   const inv = await fetchInvitationByToken(token);
   const meta = inv as { redeemedByUid?: string; grantPending?: boolean; grantCompletedAt?: string };

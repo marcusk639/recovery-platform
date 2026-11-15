@@ -210,7 +210,7 @@ export const createOperatorSubscription = onCall(
     // P-8: block checkout for tiers held back until a chapter signs (Oxford
     // Network). The tier stays defined so existing subs are unaffected.
     if (
-      !isTierAvailableForSale(data.houseType as HouseType, data.tier as TierKey)
+      !isTierAvailableForSale(data.houseType, data.tier as TierKey)
     ) {
       throw new HttpsError(
         "failed-precondition",
@@ -239,7 +239,7 @@ export const createOperatorSubscription = onCall(
       const tierMetadata = await initializeTierCustomer(
         data.user.email,
         data.paymentMethod,
-        data.houseType as HouseType,
+        data.houseType,
         data.tier as TierKey,
         data.user.id,
         data.billingInterval ?? "month",
@@ -260,7 +260,7 @@ export const createOperatorSubscription = onCall(
       // mobile Oxford gating keeps working. The stored houses map is kept: it is
       // the property-cap count (see writeOperatorSubscription).
       const writtenTierMetadata = await writeOperatorSubscription(
-        data.user.id!,
+        data.user.id,
         persistedTierMetadata,
       );
       await upsertSubscriptionDoc({
@@ -306,7 +306,7 @@ export const createOperatorSubscription = onCall(
     // hard-coding 'active'. Fall back to 'pending' only if no status came back.
     // W11: Always include lastUpdatedAt.
     const resolvedStatus = metadata.status || "pending";
-    await writeOperatorSubscription(data.user.id!, {
+    await writeOperatorSubscription(data.user.id, {
       ...metadata,
       status: resolvedStatus,
       lastUpdatedAt: new Date().toISOString(),
@@ -412,7 +412,7 @@ export const reactivateOperatorSubscription = onCall(
       );
     }
     logger.info("Subscription reactivated");
-    await updateUser(data.user.id!, { subscriptionMetadata });
+    await updateUser(data.user.id, { subscriptionMetadata });
     if (replacement) {
       // The webhooks find a subscription only through its subscriptions doc, and
       // the replacement's first events can arrive before the record above points
@@ -433,7 +433,7 @@ export const reactivateOperatorSubscription = onCall(
         guestCount: 0,
         userId: data.user.id,
       });
-      await setOperatorHousesStatus(data.user.id!, subscriptionMetadata.status);
+      await setOperatorHousesStatus(data.user.id, subscriptionMetadata.status);
     }
     return { ...data.user, subscriptionMetadata };
   },
@@ -468,7 +468,7 @@ export const cancelUserSubscription = onCall(
       status: "cancelling",
     };
     await updateUser(request.auth.uid, { subscriptionMetadata });
-    return { ...data.user, subscriptionMetadata } as User;
+    return { ...data.user, subscriptionMetadata };
   },
 );
 
@@ -534,7 +534,7 @@ export const updateSubscriptionGuests = onCall(
           ...guestMeta,
           houses: { ...houses, [houseId]: { numberOfGuests: newGuests } },
           lastUpdatedAt: new Date().toISOString(),
-        } as unknown as OperatorSubscription,
+        },
       });
       logger.info("Tier subscription resident occupancy updated", {
         ownerUserId,
@@ -561,10 +561,10 @@ export const updateSubscriptionHouses = onCall(
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
-    const data = parseInput(
+    const data = parseInput<SubParams>(
       updateSubscriptionHousesSchema,
       request.data,
-    ) as SubParams;
+    );
     if (data.ownerUserId !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
     const amount = !isNil(data.amountToAdjust) ? data.amountToAdjust : 1;
@@ -644,9 +644,9 @@ export const applyBundleDiscount = onCall(
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
-    const data = parseInput(applyBundleDiscountSchema, request.data) as {
+    const data = parseInput<{
       userId: string;
-    };
+    }>(applyBundleDiscountSchema, request.data);
     if (data.userId !== request.auth.uid)
       throw new HttpsError("permission-denied", "User ID mismatch");
     const user = await getUser(data.userId);
@@ -689,10 +689,10 @@ export const createBillingPortalSession = onCall(
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
 
-    const { returnUrl } = parseInput(
+    const { returnUrl } = parseInput<{ returnUrl: string }>(
       createBillingPortalSessionSchema,
       request.data,
-    ) as { returnUrl: string };
+    );
 
     const user = await getUser(request.auth.uid);
     const customerId = user?.subscriptionMetadata?.customerId;
@@ -721,10 +721,10 @@ export const sendConfirmationEmail = onCall(
   async (request) => {
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
-    const data = parseInput(
+    const data = parseInput<EmailConfirmationPayload>(
       sendConfirmationEmailSchema,
       request.data,
-    ) as EmailConfirmationPayload;
+    );
     const { email, dynamicLink, name } = data;
     // Confirmation emails may only be sent to the caller's own address —
     // prevents abusing the SendGrid sender to email arbitrary recipients.

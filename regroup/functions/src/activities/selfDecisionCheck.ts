@@ -34,7 +34,7 @@ export async function flagSelfDecision(
   const guestId = typeof after.guestId === 'string' ? after.guestId : '';
   const guest = guestId ? await db.collection('guests').doc(guestId).get() : undefined;
   const owners = [
-    residentUidFrom(guest?.exists ? (guest.data() as Data) : undefined),
+    residentUidFrom(guest?.exists ? (guest.data()) : undefined),
     typeof after.residentUid === 'string' ? after.residentUid : null,
     typeof after.loggedBy === 'string' ? after.loggedBy : null,
   ];

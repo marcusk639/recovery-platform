@@ -78,8 +78,8 @@ async function chargeHouse(
 ): Promise<boolean> {
   const state = await rentHouseStateCollection.doc(houseDoc.id).get();
   const settings = rentSettingsOf(
-    (houseDoc.data() ?? {}) as Data,
-    state.data() as Data | undefined,
+    (houseDoc.data() ?? {}),
+    state.data(),
   );
   if (!settings || settings.startDate === null || settings.startedAtMs === null) return true;
   counts.houses++;
@@ -88,7 +88,7 @@ async function chargeHouse(
   const guests = await guestCollection.where('houseId', '==', houseDoc.id).get();
   // A linked intake record is never charged; chargeResident would only skip it.
   const active = guests.docs.filter((d) => {
-    const g = (d.data() ?? {}) as Data;
+    const g = (d.data() ?? {});
     return isActiveGuestDoc(g) && !g.rentLinkedTo;
   });
   if (active.length === 0) return true;
@@ -98,7 +98,7 @@ async function chargeHouse(
 
   for (let i = 0; i < active.length; i++) {
     const guestDoc = active[i];
-    const acct = accounts[i].exists ? ((accounts[i].data() ?? {}) as Data) : null;
+    const acct = accounts[i].exists ? ((accounts[i].data() ?? {})) : null;
     const due = acct
       ? acct.anchoredTo !== settings.startDate ||
         typeof acct.chargeFrom !== 'string' ||
@@ -117,7 +117,7 @@ async function chargeHouse(
       // A record with no account may be half of a pair its own trigger never linked
       // (the trigger failed or came late). Link first, as the trigger does, so days an
       // intake record was already charged for are never charged again on this one.
-      const link = acct ? 'none' : await linkIntakeRecord(guestDoc.id, (guestDoc.data() ?? {}) as Data);
+      const link = acct ? 'none' : await linkIntakeRecord(guestDoc.id, (guestDoc.data() ?? {}));
       if (linkHeld(link)) {
         counts.skipped++;
         logger.error('rentCharges: matches a record it could not link; not charged until a manager resolves it', {

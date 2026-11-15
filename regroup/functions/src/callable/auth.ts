@@ -5,9 +5,8 @@ import { z } from "zod";
 import { Guest } from "../entities/Guest";
 import { addHouseRoles, createClaims, deleteClaim } from "../util/claims";
 import Admin from "../entities/Admin";
-import { getGuestsAsUsers } from "../util/user";
+import { _verifyUserEmail, getGuestsAsUsers } from "../util/user";
 import { Role } from "../entities/Roles";
-import { _verifyUserEmail } from "../util/user";
 import { parseInput } from "../validation";
 import { assertCanGrantClaimForHouses } from "../util/authGuard";
 import { removeStaffFromHouses } from "../util/houseAuth";
@@ -404,9 +403,9 @@ export const removePrivilegesForGuests = onCall(async (request) => {
 
 export const verifyUserEmail = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
-  const data = parseInput(verifyEmailSchema, request.data) as {
+  const data = parseInput<{
     userId: string;
-  };
+  }>(verifyEmailSchema, request.data);
   // Ownership: a caller may only verify their own email. Without this guard any
   // authenticated user could mark any account's email as verified.
   if (data.userId !== request.auth.uid) {
@@ -424,9 +423,9 @@ export const givePotentialSuperAdminPrivilege = onCall(async (request) => {
   // Check 1: token-based (fast, catches most cases)
   const token = request.auth.token as Record<string, unknown>;
   const tokenHasAdmin =
-    token.admin && Object.keys(token.admin as object).length > 0;
+    token.admin && Object.keys(token.admin).length > 0;
   const tokenHasSuperAdmin =
-    token.superAdmin && Object.keys(token.superAdmin as object).length > 0;
+    token.superAdmin && Object.keys(token.superAdmin).length > 0;
 
   if (tokenHasAdmin || tokenHasSuperAdmin) {
     throw new HttpsError(
@@ -440,10 +439,10 @@ export const givePotentialSuperAdminPrivilege = onCall(async (request) => {
   const user = await auth().getUser(request.auth.uid);
   const liveClaims = (user.customClaims ?? {}) as Record<string, unknown>;
   const liveHasAdmin =
-    liveClaims.admin && Object.keys(liveClaims.admin as object).length > 0;
+    liveClaims.admin && Object.keys(liveClaims.admin).length > 0;
   const liveHasSuperAdmin =
     liveClaims.superAdmin &&
-    Object.keys(liveClaims.superAdmin as object).length > 0;
+    Object.keys(liveClaims.superAdmin).length > 0;
 
   if (liveHasAdmin || liveHasSuperAdmin) {
     throw new HttpsError(

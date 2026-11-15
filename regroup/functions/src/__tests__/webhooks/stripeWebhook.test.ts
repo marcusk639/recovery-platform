@@ -353,7 +353,7 @@ beforeEach(() => {
 describe("stripeWebhook — signature verification", () => {
   it("returns 400 when stripe-signature header is missing", async () => {
     const req = makeReq({}, {}); // override to remove sig header
-    (req.headers as any)["stripe-signature"] = undefined;
+    (req.headers)["stripe-signature"] = undefined;
     const res = makeRes();
 
     await (stripeWebhook as any)(req, res);
@@ -1763,7 +1763,7 @@ describe("handleStripeConnectWebhook", () => {
 
   it("returns 400 when stripe-signature header is missing", async () => {
     const req = makeReq();
-    (req.headers as any)["stripe-signature"] = undefined;
+    (req.headers)["stripe-signature"] = undefined;
     const res = makeRes();
 
     await (handleStripeConnectWebhook as any)(req, res);

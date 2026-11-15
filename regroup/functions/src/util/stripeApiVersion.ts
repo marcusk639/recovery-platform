@@ -40,7 +40,7 @@ import type Stripe from 'stripe';
  * Changing this value changes the shape of objects Stripe returns. Treat a bump
  * as its own change with its own verification, never as a drive-by.
  */
-const PINNED_API_VERSION = '2026-01-28.clover' as Stripe.LatestApiVersion;
+const PINNED_API_VERSION = '2026-01-28.clover';
 
 // Empty-string-as-unset, matching util/stripeWebhookSecrets.ts. `??` alone does
 // not catch '', and an empty apiVersion is not inert: stripe-node selects its

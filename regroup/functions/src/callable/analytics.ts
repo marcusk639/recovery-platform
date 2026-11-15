@@ -99,10 +99,10 @@ function inWindow(dateStr: string, start?: string, end?: string): boolean {
 export const rentRoiMetrics = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
-  const { houseId, startDate, endDate } = parseInput(
+  const { houseId, startDate, endDate } = parseInput<z.infer<typeof rentRoiMetricsSchema>>(
     rentRoiMetricsSchema,
     request.data,
-  ) as z.infer<typeof rentRoiMetricsSchema>;
+  );
 
   const house = await getHouse(houseId);
   if (!house) throw new HttpsError("not-found", "House not found");

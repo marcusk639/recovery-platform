@@ -93,7 +93,7 @@ function filterByName(meetings: RatsMeeting[], criteria?: MeetingSearchCriteria)
 // Do not add enforceHouseEntitlement here.
 export const findMeetings = onCall({ secrets: [RECOVERY_PLATFORM_API_KEY] }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
-  const data = parseInput(findMeetingsSchema, request.data) as MeetingSearchInput;
+  const data = parseInput<MeetingSearchInput>(findMeetingsSchema, request.data);
   const start = Date.now();
   const { location, day, type } = data.filters;
   const criteria = data.criteria;
@@ -172,7 +172,7 @@ export interface MeetingVerificationInput {
 // Do not add enforceHouseEntitlement here.
 export const userIsAtMeeting = onCall({ secrets: [GOOGLE_MAPS_API_KEY] }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
-  const data = parseInput(userIsAtMeetingSchema, request.data) as MeetingVerificationInput;
+  const data = parseInput<MeetingVerificationInput>(userIsAtMeetingSchema, request.data);
   // 200 metres (~1/8 mile). getDistance uses haversine-distance, which
   // returns metres. The previous comment claimed "quarter of a mile", which
   // is ~402m — correcting the comment rather than the value, because the

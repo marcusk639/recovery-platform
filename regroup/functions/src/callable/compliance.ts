@@ -379,9 +379,9 @@ export const complianceExport = onCall(async (request) => {
     startDate,
     endDate,
     format: requestedFormat,
-  } = parseInput(complianceExportSchema, request.data) as z.infer<
+  } = parseInput<z.infer<
     typeof complianceExportSchema
-  >;
+  >>(complianceExportSchema, request.data);
   const format = requestedFormat ?? "csv";
 
   const house = await getHouse(houseId);
@@ -454,7 +454,7 @@ export const complianceExport = onCall(async (request) => {
     }
     residents = [{ ...guest, id: residentId }];
   } else {
-    residents = (await getGuestsForHouse(houseId)) as ResidentRecord[];
+    residents = (await getGuestsForHouse(houseId));
   }
 
   // Gather the shared in-memory structure once; both renderers consume it.

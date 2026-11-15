@@ -779,10 +779,10 @@ describe("removePrivilegesForGuests — input validation", () => {
 
 describe("claim grants opt in to the entitlement gate; revocations do not", () => {
   const flagFor = (callableName: string) => {
-    const call = mockAssertCanGrantClaimForHouses.mock.calls.find(
+    const grantCall = mockAssertCanGrantClaimForHouses.mock.calls.find(
       (c: any[]) => c[0]?.callableName === callableName,
     );
-    return call?.[0]?.enforceEntitlement;
+    return grantCall?.[0]?.enforceEntitlement;
   };
 
   it("passes enforceEntitlement on grants and omits it on revocations", () => {

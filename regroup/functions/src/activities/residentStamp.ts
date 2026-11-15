@@ -124,7 +124,7 @@ export async function stampResidentUid(
     if (!restamp && !fill) return 'unchanged';
     const gid = typeof data.guestId === 'string' ? data.guestId : '';
     const guest = gid ? await tx.get(db.collection('guests').doc(gid)) : undefined;
-    const residentUid = residentUidFrom(guest?.exists ? (guest.data() as Data) : undefined);
+    const residentUid = residentUidFrom(guest?.exists ? (guest.data()) : undefined);
     if (residentUid) {
       if (data.residentUid === residentUid && !('residentUidPending' in data)) return 'unchanged';
       tx.update(ref, fillStamp(residentUid));

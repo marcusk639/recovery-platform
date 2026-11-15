@@ -38,7 +38,7 @@ export interface SuspectedDuplicate {
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
   if (value && typeof value === 'object' && !(value instanceof Date)) {
-    const keys = Object.keys(value as Data).sort();
+    const keys = Object.keys(value).sort();
     return `{${keys.map((k) => `${JSON.stringify(k)}:${stable((value as Data)[k])}`).join(',')}}`;
   }
   return JSON.stringify(value ?? null);

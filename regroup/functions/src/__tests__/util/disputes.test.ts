@@ -72,7 +72,7 @@ describe('disputeResult', () => {
 
   it('supports createdDate as fallback for initiatedDate', () => {
     const dispute = { ...makeDispute({ initiatedDate: undefined }), createdDate: '2020-01-01' };
-    expect(disputeResult(dispute as any, makeActivity(0))).toBe('success');
+    expect(disputeResult(dispute, makeActivity(0))).toBe('success');
   });
 
   it('supports status "pending" as fallback for active field', () => {
@@ -81,7 +81,7 @@ describe('disputeResult', () => {
       status: 'pending',
       initiatedDate: '2020-01-01',
     };
-    expect(disputeResult(dispute as any, makeActivity(0))).toBe('success');
+    expect(disputeResult(dispute, makeActivity(0))).toBe('success');
   });
 
   it('returns "none" when status is not "pending" and active is undefined', () => {
@@ -90,16 +90,16 @@ describe('disputeResult', () => {
       status: 'resolved',
       initiatedDate: '2020-01-01',
     };
-    expect(disputeResult(dispute as any, makeActivity(0))).toBe('none');
+    expect(disputeResult(dispute, makeActivity(0))).toBe('none');
   });
 });
 
 describe('runDisputeTransaction', () => {
-  it('calls ratsFirestore.runTransaction', () => {
+  it('calls ratsFirestore.runTransaction', async () => {
     mockRunTransaction.mockResolvedValue(undefined);
     const house = { id: 'h1', name: 'Test House', disputes: {} } as any;
     const dispute = makeDispute();
-    runDisputeTransaction(house, dispute);
+    await runDisputeTransaction(house, dispute);
     expect(mockRunTransaction).toHaveBeenCalled();
   });
 
