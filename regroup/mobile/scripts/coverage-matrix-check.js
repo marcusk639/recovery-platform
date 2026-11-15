@@ -132,6 +132,19 @@ function structuralErrors(r, repoRoot) {
   return errs;
 }
 
+// A checklist deferral moves a row to the device pass, so it must name the
+// DEVS-/DEVP- row that will check it (#176).
+function deferralErrors(rows) {
+  const deviceIds = new Set(rows.map((r) => r.id).filter((id) => /^DEV[SP]-\d{3}$/.test(id)));
+  return rows
+    // Only deferrals that are otherwise valid: money/data rows and malformed
+    // reasons already have their own error.
+    .filter((r) => r.status === 'deferred' && r.guard === 'none' && DEFERRAL.test(r.deferred))
+    .filter((r) => /^checklist:/.test(r.deferred))
+    .filter((r) => !(r.deferred.match(/DEV[SP]-\d{3}/g) || []).some((id) => deviceIds.has(id)))
+    .map((r) => `${r.id}: a checklist deferral must cite an existing DEVS- or DEVP- row`);
+}
+
 function validate(rows, { repoRoot, release, selected = rows }) {
   const errs = [];
   const seen = new Set();
@@ -140,6 +153,7 @@ function validate(rows, { repoRoot, release, selected = rows }) {
     seen.add(r.id);
     errs.push(...structuralErrors(r, repoRoot));
   }
+  errs.push(...deferralErrors(rows));
   if (release) {
     for (const r of selected) {
       const ok =
@@ -153,17 +167,26 @@ function validate(rows, { repoRoot, release, selected = rows }) {
 
 function main(argv) {
   const opt = { file: path.join(__dirname, '..', 'docs/e2e/coverage-matrix.md') };
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i];
-    if (a === '--release') opt.release = true;
-    else if (a === '--kinds') opt.kinds = argv[++i].split(',');
-    else if (a === '--exclude-kinds') opt.excludeKinds = argv[++i].split(',');
-    else if (a === '--id-prefix') opt.idPrefix = argv[++i];
-    else if (a === '--file') opt.file = path.resolve(argv[++i]);
-    else {
-      process.stderr.write(`unknown argument ${a}\n`);
-      return 1;
+  // A flag that takes a value must get one: a missing --kinds used to crash,
+  // and a missing --id-prefix meant "no filter" (#176).
+  const value = (i) => {
+    const v = argv[i + 1];
+    if (v === undefined || v === '' || v.startsWith('--')) throw new Error(`${argv[i]} needs a value`);
+    return v;
+  };
+  try {
+    for (let i = 0; i < argv.length; i++) {
+      const a = argv[i];
+      if (a === '--release') opt.release = true;
+      else if (a === '--kinds') opt.kinds = value(i++).split(',');
+      else if (a === '--exclude-kinds') opt.excludeKinds = value(i++).split(',');
+      else if (a === '--id-prefix') opt.idPrefix = value(i++);
+      else if (a === '--file') opt.file = path.resolve(value(i++));
+      else throw new Error(`unknown argument ${a}`);
     }
+  } catch (err) {
+    process.stderr.write(`coverage-matrix: ${err.message}\n`);
+    return 1;
   }
   const repoRoot = path.resolve(__dirname, '../../..');
   let rows;
@@ -190,4 +213,4 @@ if (require.main === module) {
   process.exit(main(process.argv.slice(2)));
 }
 
-module.exports = { parseMatrix, selectRows, validate };
+module.exports = { parseMatrix, selectRows, validate, main };

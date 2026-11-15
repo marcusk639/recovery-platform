@@ -115,7 +115,11 @@ maestro/scripts/run-flows.sh all --no-reboot # don't reboot the sim first
    driver-connection error it reboots and **retries once**.
 5. **Summary** — prints PASS/FAIL and writes per-flow logs to `maestro/output/`.
 
-**Plain Maestro (no orchestration):**
+**Plain Maestro (no orchestration):** use this only to debug a single flow. It
+skips `e2e-build-guard.js`, so nothing checks the installed bundle's e2e marker
+or that no production build (`com.rats.dev`, `com.regroup.app`) is installed on
+the device. The flows' guard subflow still refuses a non-e2e `APP_ID`. Prefer
+`run-flows.sh` or the npm scripts below, which run the guard first.
 
 ```bash
 cd regroup/mobile
@@ -128,6 +132,11 @@ maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/run-all.yaml    # whol
 ## npm script reference
 
 <!-- AUTO-GENERATED: from regroup/mobile/package.json -->
+
+With several simulators or emulators booted, set `E2E_DEVICE` to a UDID (iOS) or
+serial (Android): the scripts pass it as `--device` to both the guard and Maestro,
+so the device the guard checks is the device Maestro drives. Unset, both pick
+the booted device as before.
 
 | Script                          | Command                                                                                                                |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |

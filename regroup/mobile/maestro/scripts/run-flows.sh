@@ -24,7 +24,8 @@
 # Options:
 #   --no-seed     Do not re-seed the emulator before running.
 #   --no-reboot   Do not reboot the simulator before running.
-#   --sim <udid>  Target a specific simulator UDID (default: E2E-iPhone).
+#   --sim <udid>  Target a specific simulator UDID (default: the simulator named
+#                 regroup-e2e, from regroup/e2e/scripts/provision-simulators.sh).
 #   -h, --help    Show this help.
 #
 # Env: E2E_TEST_PASSWORD (required; the shared e2e test account password, see
@@ -39,7 +40,7 @@ MOBILE_DIR="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 cd "${MOBILE_DIR}"
 
 APP_ID="${APP_ID:-com.rats.dev.e2e.emu}"
-SIM_UDID="${SIM_UDID:-809BD7B9-D9D5-45D2-AEA8-12F885F54407}" # E2E-iPhone
+SIM_UDID="${SIM_UDID:-}" # empty: the regroup-e2e simulator, resolved after the args
 EMU_UI="http://127.0.0.1:4000"
 FLOWS_DIR="maestro/flows"
 OUT_DIR="maestro/output"
@@ -98,6 +99,16 @@ fail() { red "✗ $1"; [[ -n "${2:-}" ]] && echo "  → $2"; exit 1; }
 
 command -v maestro >/dev/null || fail "maestro CLI not found on PATH" \
   "Install: curl -fsSL https://get.maestro.mobile.dev | bash"
+
+# The e2e gate's simulator (regroup/e2e/scripts/provision-simulators.sh). The old
+# hardcoded default named a simulator that no longer exists (#176).
+E2E_SIM_NAME="regroup-e2e"
+if [[ -z "${SIM_UDID}" ]]; then
+  SIM_UDID="$(xcrun simctl list devices available 2>/dev/null \
+    | sed -nE "s/^[[:space:]]+${E2E_SIM_NAME} \(([0-9A-Fa-f-]{36})\).*/\1/p" | head -1)"
+  [[ -n "${SIM_UDID}" ]] || fail "No simulator named ${E2E_SIM_NAME}" \
+    "Create it with regroup/e2e/scripts/provision-simulators.sh, or pass --sim <udid>"
+fi
 
 xcrun simctl list devices booted 2>/dev/null | grep -q "${SIM_UDID}" || {
   blue "▶ Booting simulator ${SIM_UDID} ..."
