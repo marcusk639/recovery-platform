@@ -35,7 +35,17 @@ This covers backfills, migration scripts and bulk deletes. Run the script's dry 
 
 2. Note the UTC time just before the live run. That time is the PITR restore point.
 3. Keep the script's log of changed document IDs (counts and IDs only, no PII). It makes a targeted restore possible.
-4. **Delete the export when it is no longer needed.** It holds full production documents, including resident data. The retention rule is still to be decided (issue #177, before the first backfill).
+4. **Delete the export once it is no longer needed.** It holds full production documents, including resident personal and recovery data. Retention is this runbook step, not a bucket lifecycle rule (owner decision, 2026-11-14, issue #177). Delete a pre-write export when both hold:
+   - the backfill is verified: the live run's counts match its dry run, and the script's log of changed IDs has been spot-checked against the data; and
+   - 7 days have passed since the restore point (step 2), so the PITR window has rolled past it.
+
+   After that, PITR can no longer roll the database back to before the write. Delete sooner if the owner decides the backfill needs no rollback.
+
+   ```sh
+   gcloud storage rm --recursive gs://phoenix-cleanhouse-firestore-exports/<YYYY-MM-DD>-<script>
+   ```
+
+   Record the deletion (folder name and date, no contents) wherever the run is logged. Before each new backfill, list the bucket with `gcloud storage ls gs://phoenix-cleanhouse-firestore-exports/`. Any folder from an earlier run that meets both conditions is deleted then, so none outlives its run by long. Leave the bucket's access as it is: Firestore's service agent and the project owners only, with public access prevention enforced.
 
 ## Recovering
 
@@ -58,7 +68,7 @@ The safest order: restore into a separate database, compare, then copy back only
 
 - **From a pre-write export:** `gcloud firestore import gs://phoenix-cleanhouse-firestore-exports/<export-folder> --database=<restore-db-id>`. Import overwrites documents that have the same IDs, so import into a scratch database first.
 - **Copying back:** write only the affected document IDs back to `(default)` with an Admin SDK script that follows the `functions/src/scripts/` pattern (dry run by default, no PII in logs).
-- **Clean up** the restore database afterwards; it is billed while it exists.
+- **Clean up** the restore database afterwards; it is billed while it exists. Delete any `restore-<time>` export folder at the same time (`gcloud storage rm --recursive …`): it holds the same production data as a pre-write export.
 
 ## Server switches
 
