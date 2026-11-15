@@ -130,7 +130,7 @@ export const createHousesTx = async (
   let adminId = user?.adminId || '';
   if (adminId) {
     const adminSnap = await tx.get(adminCollection.doc(adminId));
-    existingAdmin = adminSnap.exists ? (adminSnap.data() as Partial<AdminDoc>) : undefined;
+    existingAdmin = adminSnap.exists ? (adminSnap.data()) : undefined;
     if (existingAdmin?.userId !== uid) {
       logger.warn('createHouses: refused', { uid, adminId, reason: 'admin-not-owned' });
       throw new HttpsError('permission-denied', 'Admin profile does not belong to this user');

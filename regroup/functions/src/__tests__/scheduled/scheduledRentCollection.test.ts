@@ -166,7 +166,7 @@ describe('runRentCollection', () => {
       // Charging without a destination would keep the resident's rent in the
       // platform balance. Skipping leaves the balance owed and visible, and the
       // next run charges it once the house can receive transfers.
-      mockHouses['house-1'] = house as Record<string, unknown> | undefined;
+      mockHouses['house-1'] = house;
 
       const summary = await runRentCollection();
 

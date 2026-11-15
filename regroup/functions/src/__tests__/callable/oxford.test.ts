@@ -575,7 +575,7 @@ describe("setOxfordEnabled — tier subscriptions", () => {
 });
 
 describe("castOxfordVote — entitlement gate", () => {
-  const oxfordHouse = {
+  const gatedOxfordHouse = {
     id: "house-1",
     houseType: "oxford",
     superAdminId: "op-1",
@@ -584,7 +584,7 @@ describe("castOxfordVote — entitlement gate", () => {
   };
 
   beforeEach(() => {
-    mockGetHouse.mockResolvedValue(oxfordHouse);
+    mockGetHouse.mockResolvedValue(gatedOxfordHouse);
     mockEnforceHouseEntitlement.mockResolvedValue({
       entitled: true,
       reason: "active",
@@ -598,7 +598,7 @@ describe("castOxfordVote — entitlement gate", () => {
     }).catch(() => undefined);
 
     expect(mockEnforceHouseEntitlement).toHaveBeenCalledWith(
-      oxfordHouse,
+      gatedOxfordHouse,
       "house-1",
     );
   });

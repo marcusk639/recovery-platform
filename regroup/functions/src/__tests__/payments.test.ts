@@ -188,7 +188,7 @@ jest.mock("firebase-admin", () => ({
 // ── Mock: api/firestore getUser (caller's own record for ownership checks) ─────
 const mockGetUser = jest.fn();
 jest.mock("../api/firestore", () => ({
-  ...(jest.requireActual("../api/firestore") as object),
+  ...(jest.requireActual<object>("../api/firestore")),
   getUser: (...args: unknown[]) => mockGetUser(...args),
 }));
 
@@ -264,6 +264,9 @@ import {
   getStripeAccountStatus,
   createPaymentIntent,
   listPayments,
+  listHousePayments,
+  getPaymentMethod,
+  updatePaymentInfo,
 } from "../callable/payments";
 
 // ── Helper: make Firestore return value ───────────────────────────────────────
@@ -2540,11 +2543,6 @@ describe("listPayments", () => {
 // Input validation tests
 // ──────────────────────────────────────────────────────────────────────────────
 
-import {
-  listHousePayments,
-  getPaymentMethod,
-  updatePaymentInfo,
-} from "../callable/payments";
 
 // helper: call a callable function using the (data, context) convention
 // that matches the onCall mock wrapper

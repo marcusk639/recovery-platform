@@ -49,7 +49,7 @@ export const holds = (claims: Claims, role: 'admin' | 'superAdmin' | 'guest', ho
  */
 export async function liveClaims(uid: string): Promise<Claims> {
   try {
-    return ((await admin.auth().getUser(uid)).customClaims ?? {}) as Claims;
+    return ((await admin.auth().getUser(uid)).customClaims ?? {});
   } catch (err) {
     if ((err as { code?: string }).code === 'auth/user-not-found') return {};
     throw err;

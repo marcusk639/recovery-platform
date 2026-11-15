@@ -13,7 +13,7 @@ export const house = (o: Record<string, unknown> = {}, id = H) => {
     rentChargesStartDate = '2026-11-11',
     rentChargesStartedAtMs = 0,
     ...rest
-  } = o as Record<string, unknown>;
+  } = o;
   mem.seed(`houses/${id}`, {
     rentFrequency: 'weekly',
     weeklyRent: 175,

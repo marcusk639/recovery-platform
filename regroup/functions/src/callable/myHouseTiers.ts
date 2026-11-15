@@ -21,7 +21,7 @@ const staffHouseIds = (claims: Record<string, unknown>): string[] => {
 export const myHouseTiers = onCall(async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
   const uid = request.auth.uid;
-  const claims = ((await liveClaims(uid)) ?? {}) as Record<string, unknown>;
+  const claims = ((await liveClaims(uid)) ?? {});
   const houseIds = staffHouseIds(claims);
   const tiers = await Promise.all(houseIds.map((houseId) => houseTierOf(uid, houseId)));
   return { tiers: Object.fromEntries(houseIds.map((houseId, i) => [houseId, tiers[i]])) };

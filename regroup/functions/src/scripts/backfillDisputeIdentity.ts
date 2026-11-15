@@ -146,7 +146,7 @@ async function stamp(
   const guestId = typeof data.guestId === 'string' ? data.guestId : '';
   if (!guests.has(guestId)) {
     const snap = guestId ? await db.collection('guests').doc(guestId).get() : undefined;
-    guests.set(guestId, snap?.exists ? ((snap.data() ?? {}) as Data) : null);
+    guests.set(guestId, snap?.exists ? ((snap.data() ?? {})) : null);
   }
   const guest = guests.get(guestId);
   if (!guest) {
@@ -246,7 +246,7 @@ export async function run(db: Firestore, opts: Options): Promise<Counts> {
     const page = await (last ? base.startAfter(last) : base).limit(opts.pageSize ?? 300).get();
     for (const doc of page.docs) {
       counts.scanned++;
-      const data = doc.data() as Data;
+      const data = doc.data();
       if (opts.rulesLiveAt && createdBefore(doc.createTime?.toMillis(), data, opts.rulesLiveAt)) {
         await checkPreRules(db, doc.id, data, opts.rulesLiveAt, opts.apply, pre);
       } else {

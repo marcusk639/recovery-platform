@@ -97,7 +97,7 @@ export const verifyStripeWebhook = ({
   for (const candidate of candidates) {
     let event: Stripe.Event;
     try {
-      event = stripe.webhooks.constructEvent(rawBody, signature as string, candidate.value);
+      event = stripe.webhooks.constructEvent(rawBody, signature, candidate.value);
     } catch (err) {
       failures.push({ candidate: candidate.name, err: (err as Error).message });
       continue;

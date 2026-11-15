@@ -337,7 +337,7 @@ export const listPayments = onCall(
     // Authorization step 1: caller must hold a claim for this house at all.
     // Cheap, and keeps a non-member from probing house existence below.
     assertHouseMemberFromClaims(
-      request.auth.token as Record<string, unknown>,
+      request.auth.token,
       houseId,
     );
 
@@ -428,7 +428,7 @@ export const listHousePayments = onCall(
     );
 
     assertHouseMemberFromClaims(
-      request.auth.token as Record<string, unknown>,
+      request.auth.token,
       houseId,
     );
 

@@ -109,7 +109,7 @@ export async function run(database: FirebaseFirestore.Firestore, apply: boolean)
 
   for (const doc of snapshot.docs) {
     counts.scanned++;
-    const verdict = classify(doc.data() as Record<string, unknown>, (id) => guestUserIds.get(id));
+    const verdict = classify(doc.data(), (id) => guestUserIds.get(id));
 
     switch (verdict.kind) {
       case 'has-uid':

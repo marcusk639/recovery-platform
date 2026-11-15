@@ -36,7 +36,7 @@ type Doc = Record<string, unknown>;
 
 export const houseKeys = (v: unknown): string[] => {
   if (Array.isArray(v)) return v.filter((x): x is string => typeof x === 'string');
-  if (v && typeof v === 'object') return Object.keys(v as Doc);
+  if (v && typeof v === 'object') return Object.keys(v);
   return [];
 };
 

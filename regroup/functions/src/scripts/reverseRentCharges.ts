@@ -53,7 +53,7 @@ async function chargingStopped(houseId: string): Promise<boolean> {
   const config = await rentConfigRef().get();
   if (config.exists && config.data()?.paused === true) return true;
   const house = await houseCollection.doc(houseId).get();
-  return !house.exists || rentSettingsOf((house.data() ?? {}) as Data) === null;
+  return !house.exists || rentSettingsOf((house.data() ?? {})) === null;
 }
 
 /** The amount reversed, or null when no record exists to take it (nothing changed). */
@@ -62,7 +62,7 @@ async function reverseOne(chargeId: string, nowMs: number): Promise<number | nul
     const chargeRef = rentChargeCollection.doc(chargeId);
     const charge = await txn.get(chargeRef);
     if (!charge.exists) return 0;
-    const c = (charge.data() ?? {}) as Data;
+    const c = (charge.data() ?? {});
     const amount = typeof c.amountCents === 'number' ? c.amountCents : 0;
     // A linked intake record's balance and account moved to its invite record
     // (rent/linkIntakeRecord), so the reversal applies there. The charge's own linkedTo
@@ -107,7 +107,7 @@ export async function reverseRentCharges(opts: ReverseOptions): Promise<ReverseR
   const ownerOf = (d: Data) =>
     owner.get(String(d.guestId)) ?? nonEmpty(d.linkedTo) ?? String(d.guestId);
   const selected = snap.docs
-    .map((d) => ({ id: d.id, data: (d.data() ?? {}) as Data }))
+    .map((d) => ({ id: d.id, data: (d.data() ?? {}) }))
     .filter((d) => !opts.since || String(d.data.from) >= opts.since)
     .filter((d) => !opts.guestId || ownerOf(d.data) === opts.guestId)
     // Newest first per resident (after links): resident ascending, then first day descending.

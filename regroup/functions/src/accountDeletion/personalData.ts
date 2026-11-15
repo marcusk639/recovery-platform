@@ -63,34 +63,34 @@ export async function deletePersonalData(
   let documents = 0;
   for (const guestId of guestIds) {
     documents += await deleteAllMatching(
-      collection('documents').where('guestId', '==', guestId) as unknown as PagedQuery,
+      collection('documents').where('guestId', '==', guestId),
     );
   }
   const counts = {
     notifications: await deleteAllMatching(
-      collection('notifications').where('userId', '==', uid) as unknown as PagedQuery,
+      collection('notifications').where('userId', '==', uid),
     ),
     applications: await deleteAllMatching(
       ratsFirestore
         .collectionGroup('applications')
-        .where('applicantUid', '==', uid) as unknown as PagedQuery,
+        .where('applicantUid', '==', uid),
     ),
     // Only DMs the user sent; received messages and house group chat (houses/*/chat) survive.
     messages: await deleteAllMatching(
-      ratsFirestore.collectionGroup('chat').where('senderId', '==', uid) as unknown as PagedQuery,
+      ratsFirestore.collectionGroup('chat').where('senderId', '==', uid),
       isDirectMessage,
     ),
     // Feedback the user submitted (mobile Personal screen; `reviewer` is the uid).
     feedback: await deleteAllMatching(
-      collection('feedback').where('reviewer', '==', uid) as unknown as PagedQuery,
+      collection('feedback').where('reviewer', '==', uid),
     ),
     // Bug reports the user filed (`reporter` is the uid).
     bugs: await deleteAllMatching(
-      collection('bugs').where('reporter', '==', uid) as unknown as PagedQuery,
+      collection('bugs').where('reporter', '==', uid),
     ),
     // Defensive: no current writer.
     guestWeeks: await deleteAllMatching(
-      collection('guest-weeks').where('userId', '==', uid) as unknown as PagedQuery,
+      collection('guest-weeks').where('userId', '==', uid),
     ),
     documents,
   };

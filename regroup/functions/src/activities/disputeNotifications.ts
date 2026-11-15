@@ -94,7 +94,7 @@ export async function notifyDispute(
   const guestSnap = guestId ? await db.collection('guests').doc(guestId).get() : undefined;
   const guest = trustedGuestFrom(
     guestId,
-    guestSnap?.exists ? (guestSnap.data() as Data) : undefined,
+    guestSnap?.exists ? (guestSnap.data()) : undefined,
   );
   if (!guest) {
     logger.warn('dispute_notify.skipped_no_guest', { activityId, guestId });

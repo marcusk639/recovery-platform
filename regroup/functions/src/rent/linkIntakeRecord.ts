@@ -63,7 +63,7 @@ export async function linkIntakeRecord(
   newGuestId: string,
   newGuest?: Data,
 ): Promise<LinkOutcome> {
-  const fresh = newGuest ?? ((await guestCollection.doc(newGuestId).get()).data() as Data);
+  const fresh = newGuest ?? ((await guestCollection.doc(newGuestId).get()).data());
   const email = normalEmail(fresh?.email);
   const houseId = typeof fresh?.houseId === 'string' ? fresh.houseId : '';
   if (!fresh || !email || !houseId || fresh.rentLinkedTo) return 'none';
@@ -83,7 +83,7 @@ export async function linkIntakeRecord(
 
   const inHouse = await guestCollection.where('houseId', '==', houseId).get();
   const candidates = inHouse.docs.filter((d) => {
-    const g = (d.data() ?? {}) as Data;
+    const g = (d.data() ?? {});
     return (
       d.id !== newGuestId &&
       isActiveGuestDoc(g) &&
@@ -108,7 +108,7 @@ export async function linkIntakeRecord(
     // charged on both records. Not linked by a resident-written email; a manager decides.
     if (
       !newIsInvite &&
-      candidates.some((d) => normalEmail(((d.data() ?? {}) as Data).email) === email)
+      candidates.some((d) => normalEmail(((d.data() ?? {})).email) === email)
     ) {
       logger.warn(
         'linkIntakeRecord: an account record has this email but no invitation; not linked',
@@ -130,7 +130,7 @@ export async function linkIntakeRecord(
   }
   const intakeId = newIsInvite ? matches[0].id : newGuestId;
   const inviteId = newIsInvite ? newGuestId : matches[0].id;
-  const userId = (newIsInvite ? fresh : (matches[0].data() as Data)).userId as string;
+  const userId = (newIsInvite ? fresh : (matches[0].data())).userId as string;
   return linkRecords(intakeId, inviteId, userId, houseId);
 }
 
@@ -157,8 +157,8 @@ async function linkRecords(
     );
     // Read here, with the records: a transaction does every read before any write.
     const history = await txn.get(rentChargeCollection.where('guestId', '==', intakeId));
-    const target = (newSnap.data() ?? {}) as Data;
-    const source = (intakeSnap.data() ?? {}) as Data;
+    const target = (newSnap.data() ?? {});
+    const source = (intakeSnap.data() ?? {});
     if (
       !newSnap.exists ||
       !intakeSnap.exists ||

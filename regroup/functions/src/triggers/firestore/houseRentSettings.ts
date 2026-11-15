@@ -34,8 +34,8 @@ export async function syncRentChargeStart(
     const snap = await txn.get(houseRef);
     const stateSnap = await txn.get(stateRef);
     if (!snap.exists) return 'unchanged';
-    const settings = rentSettingsOf((snap.data() ?? {}) as Data);
-    const state = (stateSnap.data() ?? {}) as Data;
+    const settings = rentSettingsOf((snap.data() ?? {}));
+    const state = (stateSnap.data() ?? {});
     const stamped =
       !!state.startDate || (state.startedAtMs !== null && state.startedAtMs !== undefined);
     const clearedAtMs = typeof state.clearedAtMs === 'number' ? state.clearedAtMs : null;

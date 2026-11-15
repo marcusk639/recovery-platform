@@ -161,6 +161,8 @@ export const onGuestWrite = onDocumentWritten(
       await resplitEES(houseId, event.time).catch((e) => remember('EES recalculation', e));
     }
 
+    // TypeScript can't see `remember` set failure, so it types it null here.
+    // eslint-disable-next-line @typescript-eslint/only-throw-error -- it holds an Error when set
     if (failure) throw failure;
   },
 );

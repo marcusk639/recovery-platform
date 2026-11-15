@@ -48,13 +48,13 @@ export const setOxfordEnabled = onCall(
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
 
-    const { houseId, enabled } = parseInput(
-      setOxfordEnabledSchema,
-      request.data,
-    ) as {
+    const { houseId, enabled } = parseInput<{
       houseId: string;
       enabled: boolean;
-    };
+    }>(
+      setOxfordEnabledSchema,
+      request.data,
+    );
 
     const house = await getHouse(houseId);
     if (!house) throw new HttpsError("not-found", "House not found");
@@ -194,14 +194,14 @@ const castOxfordVoteSchema = z.object({
 export const castOxfordVote = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
-  const { houseId, voteId, choice } = parseInput(
-    castOxfordVoteSchema,
-    request.data,
-  ) as {
+  const { houseId, voteId, choice } = parseInput<{
     houseId: string;
     voteId: string;
     choice: "yes" | "no" | "abstain";
-  };
+  }>(
+    castOxfordVoteSchema,
+    request.data,
+  );
 
   const house = await getHouse(houseId);
   if (!house) throw new HttpsError("not-found", "House not found");

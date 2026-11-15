@@ -85,7 +85,7 @@ export async function checkPreRules(
   if (!hasDisputeHistory(data)) return;
   const log = await db.collection('activities').doc(id).collection('dispute-decisions').get();
   for (const d of log.docs) {
-    const e = d.data() as Data;
+    const e = d.data();
     const at = millisOf(e.at);
     if (e.backfilled !== true && at !== null && at < cutoff.getTime()) {
       report.preRulesDecisions.push(`${id}/${d.id}`);
