@@ -1,7 +1,16 @@
 // Phone screens that lay out from the window width (intake's step bar) assume the
 // window is the screen. In the portal the screen is a column inside the window,
 // so a reused screen's frame tells them its own width instead.
-import { createContext, useContext, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 
 const FrameWidthContext = createContext<number | null>(null);
 
@@ -10,6 +19,13 @@ export const useFrameWidth = (): number | null => useContext(FrameWidthContext);
 export function FrameWidth(props: { style?: CSSProperties; testID?: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState<number | null>(null);
+  // Measured before the first paint: ResizeObserver reports after it, and under
+  // load much later, so until then screens laid out at the window's width.
+  // A 0 width means not laid out yet (or jsdom), so the window's stands in.
+  useLayoutEffect(() => {
+    const measured = Math.round(ref.current?.getBoundingClientRect().width ?? 0);
+    if (measured > 0) setWidth(measured);
+  }, []);
   useEffect(() => {
     const element = ref.current;
     if (!element || typeof ResizeObserver === 'undefined') return;

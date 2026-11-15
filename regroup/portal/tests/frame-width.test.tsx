@@ -39,6 +39,19 @@ test('inside a frame, screens get its width as it resizes', () => {
   expect(screen.getByTestId('frame')).toBeTruthy();
 });
 
+// The observer reports after the first paint; until it does, screens laid out at
+// the window's width.
+test("screens get the frame's width before the observer reports", () => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 960.4 } as DOMRect);
+  render(
+    <FrameWidth>
+      <Width />
+    </FrameWidth>,
+  );
+  expect(screen.getByTestId('width').textContent).toBe('960');
+  vi.restoreAllMocks();
+});
+
 // react-native-modal sizes its backdrop from Dimensions, so that must stay the window.
 test("Dimensions keeps the window's width inside a frame", () => {
   const before = Dimensions.get('window').width;

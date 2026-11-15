@@ -79,6 +79,24 @@ for (const width of [1440, 1024]) {
   });
 }
 
+// ResizeObserver reports after the first paint, and under load later still. The
+// column's width must not wait for it: until then, intake laid out at the window's.
+test("intake's steps fit before the column's size is reported", async ({ page }) => {
+  await page.addInitScript(() => {
+    (window as any).ResizeObserver = class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    };
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await signInAs(page, 'manager');
+  await page.evaluate(() => (window as any).__portalTest.open('ResidentIntake', { houseId: 'test-house-123' }));
+  const legal = page.getByText('Legal', { exact: true });
+  await expect(legal).toBeVisible({ timeout: 20_000 });
+  expect(await right(legal)).toBeLessThanOrEqual(await frameRight(page));
+});
+
 // The column clips sideways, so page overflow can't show content cut off at its
 // edge. This checks what an operator can see against the column itself.
 const REUSED: (string | [string, object])[] = [
