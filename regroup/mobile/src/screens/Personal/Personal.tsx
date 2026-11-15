@@ -374,13 +374,18 @@ const PersonalScreen: React.FC<PersonalProps> = ({ navigation }) => {
 
   const renderAvatarHeader = () => {
     const _user = admin || guest;
+    // An operator whose admins record hadn't loaded, or has no name, saw
+    // "Admin" with a blank name: fall back to the account's own name
+    // (#183 item 16).
+    const named = _user?.firstName || _user?.lastName ? _user : user;
+    const fullName = `${named?.firstName ?? ""} ${named?.lastName ?? ""}`.trim();
     return (
       <AvatarItem
         container={CARD_STYLE}
         avatarStyle={{ height: normalize(45), width: normalize(45) }}
         nameStyle={{ fontSize: fontSize.medium_large }}
         subTextStyle={{ fontSize: fontSize.regular_medium }}
-        name={_user ? _user.firstName + " " + _user.lastName : " "}
+        name={fullName || " "}
         type={user && user.isAdmin ? "Admin" : "Guest"}
         avatarUrl={_user?.avatar || ""}
       />

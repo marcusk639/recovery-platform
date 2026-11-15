@@ -18,7 +18,7 @@
  *
  * IMPORTANT: Requires backend data migration before deployment
  */
-import { firestore } from '../../firebase-setup';
+import { auth, firestore } from '../../firebase-setup';
 import { Message } from '../entities/Message';
 import { DirectMessage } from '../entities/DirectConversation';
 import * as crud from './crud';
@@ -29,11 +29,14 @@ import {
   getDocs,
   limit as limitTo,
   onSnapshot,
+  or,
   orderBy,
   query,
   startAfter,
   updateDoc,
+  where,
   type QueryConstraint,
+  type QueryNonFilterConstraint,
   type QuerySnapshot,
   type Timestamp,
 } from '@react-native-firebase/firestore';
@@ -148,6 +151,20 @@ export function subscribeToHouseChat(
 export const CHAT_ID = (ids: string[]) => ids.sort().join('');
 
 /**
+ * The rules let only a chat doc's senderId or recipientId read it, so a list
+ * query over a direct chat must filter to the signed-in user's own messages;
+ * the unfiltered query was refused and the screen never loaded (#183 item 2).
+ * Null when nobody is signed in.
+ */
+function ownMessagesFilter() {
+  const uid = auth.currentUser?.uid;
+  if (!uid) {
+    return null;
+  }
+  return or(where('senderId', '==', uid), where('recipientId', '==', uid));
+}
+
+/**
  * Handle house chat snapshot (Firestore)
  */
 const onHouseChatSnapshot = (
@@ -207,8 +224,12 @@ export const loadDirectChat = async (
   startAfterDoc?: string,
 ): Promise<Message[]> => {
   try {
+    const ownMessages = ownMessagesFilter();
+    if (!ownMessages) {
+      throw new Error('loadDirectChat: not signed in');
+    }
     const chat = collection(doc(directMessageCollection, id), 'chat');
-    const constraints: QueryConstraint[] = [orderBy('sortKey', 'desc'), limitTo(20)];
+    const constraints: QueryNonFilterConstraint[] = [orderBy('sortKey', 'desc'), limitTo(20)];
 
     if (startAfterDoc) {
       const startDoc = await getDoc(
@@ -217,7 +238,7 @@ export const loadDirectChat = async (
       constraints.push(startAfter(startDoc));
     }
 
-    const snapshot = await getDocs(query(chat, ...constraints));
+    const snapshot = await getDocs(query(chat, ownMessages, ...constraints));
     const messages: Message[] = [];
     snapshot.forEach(messageDoc => {
       messages.push({ id: messageDoc.id, ...messageDoc.data() } as Message);
@@ -242,9 +263,14 @@ export function subscribeToDirectChat(
   newMessageHandler: (directMessages: Message[], chatId?: string) => any,
 ): () => void {
   const id = CHAT_ID(ids);
+  const ownMessages = ownMessagesFilter();
+  if (!ownMessages) {
+    return () => {};
+  }
   return onSnapshot(
     query(
       collection(doc(directMessageCollection, id), 'chat'),
+      ownMessages,
       orderBy('sortKey', 'desc'),
       limitTo(20),
     ),

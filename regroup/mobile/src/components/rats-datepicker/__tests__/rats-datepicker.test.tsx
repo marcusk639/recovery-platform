@@ -38,7 +38,13 @@ jest.mock('../../rats-modal', () => {
 // Mock RatsTextInput to avoid deep dependency chain (gesture handler, address utils, etc.)
 jest.mock('../../rats-text-input/rats-text-input', () => {
   const { TextInput } = require('react-native');
-  return (props: any) => <TextInput testID="rats-text-input" value={props.field?.value ?? ''} />;
+  return (props: any) => (
+    <TextInput
+      testID="rats-text-input"
+      value={props.field?.value ?? ''}
+      placeholder={props.placeholder}
+    />
+  );
 });
 
 import RatsDatePicker from '../rats-datepicker';
@@ -161,6 +167,22 @@ describe('RatsDatePicker', () => {
     const { UNSAFE_getAllByType } = render(<RatsDatePicker {...props} />);
     const { TextInput } = require('react-native');
     expect(UNSAFE_getAllByType(TextInput).length).toBeGreaterThan(0);
+  });
+
+  // #183 item 13: an unset date showed today's date as its placeholder, which
+  // read as a stored Date of Birth / Sobriety Date.
+  it('does not show a date in the input when no value is set', () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-11-14T12:00:00Z'));
+    const { getByTestId } = render(<RatsDatePicker {...(makeFieldProps('') as any)} />);
+    const input = getByTestId('rats-text-input');
+    expect(input.props.value).toBe('');
+    expect(input.props.placeholder).toBe('Select a date');
+    jest.useRealTimers();
+  });
+
+  it('shows no placeholder once a date is set', () => {
+    const { getByTestId } = render(<RatsDatePicker {...(makeFieldProps('2024-03-20') as any)} />);
+    expect(getByTestId('rats-text-input').props.placeholder).toBeUndefined();
   });
 
   it('snapshot matches', () => {

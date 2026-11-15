@@ -32,6 +32,21 @@ export const useHouseAdmins = (houseId: string, enabled: boolean = true) => {
 };
 
 /**
+ * A house's admins keyed by id, read from its adminIds, which its residents
+ * can read too: Contacts' ADMIN section (#183 item 4). useHouseAdmins' list
+ * query is refused for a resident.
+ */
+export const useAdminsForHouse = (house?: House | null) => {
+  const adminIds = house?.adminIds ?? [];
+  return useQuery({
+    queryKey: [...adminKeys.list(house?.id ?? ''), 'byId', adminIds.join(',')],
+    queryFn: () => adminService.getAdminsForHouse(house as House),
+    enabled: !!house?.id,
+    staleTime: 30000,
+  });
+};
+
+/**
  * Fetch a single admin by ID
  */
 export const useAdmin = (adminId: string, enabled: boolean = true) => {

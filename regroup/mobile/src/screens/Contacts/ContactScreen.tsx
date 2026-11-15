@@ -49,6 +49,7 @@ import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useAppSelector, useAppDispatch } from "../../state/store";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { useGuests } from "../../state/queries/guestQueries";
+import { useAdminsForHouse } from "../../state/queries/adminQueries";
 import {
   setActiveConversation,
   setRecipient,
@@ -89,7 +90,10 @@ const ContactScreen: React.FC<Props> = ({ navigation }) => {
   const { house } = useSelectedHouse();
   // React Query is the source of truth for guests; see .full-review [A2].
   const { data: guests = {} } = useGuests(house?.id ?? "");
-  const admins = useAppSelector((state) => state.admin.houseAdmins || {});
+  // Read by id from house.adminIds, which residents may read too. The old
+  // state.admin.houseAdmins was never written, so ADMIN was always empty
+  // (#183 item 4).
+  const { data: admins = {} } = useAdminsForHouse(house);
   const conversations = useAppSelector((state) => state.chat.conversations);
   // Phase C removed the admin/guest async thunks that wrote to
   // state.admin.loading and state.guests.status, so those reads are
