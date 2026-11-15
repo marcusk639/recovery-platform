@@ -38,7 +38,7 @@ test("the admin report shows the house's numbers", async ({ page }) => {
   await expect(page.getByTestId('discharge-section')).toContainText('No discharges in the last 30 days.');
 });
 
-// Passes today, so a broken compliance section can't hide behind the expected failure below.
+// The section itself: four weeks, each with a rate.
 test('the 4-week compliance section shows four weeks with a rate in each', async ({ page }) => {
   await setWeekStats('guest-a', { choresCompleted: 1, meetingsAttended: 3 });
   await signInAs(page, 'manager');
@@ -49,10 +49,9 @@ test('the 4-week compliance section shows four weeks with a rate in each', async
   for (const row of await weeks.all()) await expect(row).toContainText(/\d+%/);
 });
 
-// Phone defect #249: summaries are keyed by their Monday (the
-// server's weekStartFor and useCurrentWeek), but getComplianceTrend looks them up
-// by Sunday-anchored week starts, so the 4-week compliance is always 0%.
-test.fail("the 4-week compliance counts this week's summaries", async ({ page }) => {
+// Summaries are keyed by their Monday (the server's weekStartFor); the phone's
+// getComplianceTrend keys its weeks the same way since #249.
+test("the 4-week compliance counts this week's summaries", async ({ page }) => {
   await setWeekStats('guest-a', { choresCompleted: 1, meetingsAttended: 3 });
   // The rates the phone's getComplianceTrend would give this week (Monday-keyed).
   const active = await activeCount();
