@@ -154,7 +154,10 @@ service cloud.firestore {
     }
     
     match /admins/{adminId} {
-      allow read: if isAdmin(resource.data.houseIds) || isSameUser(adminId);
+      // Residents read their own houses' admins too, so Contacts can show who
+      // to call or message (#183 item 4). The app gets each id in the house's
+      // adminIds; a list query still can't prove this rule and is refused.
+      allow read: if isGuestOrAdmin(resource.data.houseIds) || isSameUser(adminId);
       // admins docs are profile data for the app; the server reads the tier
       // from house-roles/{houseId}_{uid} (server-only), never from these.
       // Still, keep clients to what the app does:
