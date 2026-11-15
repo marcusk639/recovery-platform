@@ -104,6 +104,17 @@ jest.mock("../../../util/platform", () => ({
   },
 }));
 
+// The ROI card has its own tests (RentRoiCard.test.tsx); here, only what it's given.
+jest.mock("../RentRoiCard", () => {
+  const React = require("react");
+  const { Text } = require("react-native");
+  return {
+    __esModule: true,
+    default: (p: { houseId: string; startDate?: string }) =>
+      React.createElement(Text, { testID: "rent-roi-card-props" }, `${p.houseId}|${p.startDate ?? "all"}`),
+  };
+});
+
 import PaymentDashboard from "../PaymentDashboard";
 import { KeyboardToolbar } from "react-native-keyboard-controller";
 import { RatsKeyboardAvoidingView } from "../../../components/rats-keyboard";
@@ -236,6 +247,21 @@ describe("PaymentDashboard", () => {
     const { queryByTestId, findByTestId } = renderDashboard();
     await findByTestId("payment-empty-state");
     expect(queryByTestId("stale-pending-banner")).toBeNull();
+  });
+
+  it("gives the ROI card the period the pills select (#32)", async () => {
+    const { format, startOfISOWeek, startOfMonth } = require("date-fns");
+    setupStore({});
+    const { findByTestId, getByText } = renderDashboard();
+
+    const card = await findByTestId("rent-roi-card-props");
+    expect(card).toHaveTextContent(`house1|${format(startOfMonth(new Date()), "yyyy-MM-dd")}`);
+    fireEvent.press(getByText("This Week"));
+    expect(await findByTestId("rent-roi-card-props")).toHaveTextContent(
+      `house1|${format(startOfISOWeek(new Date()), "yyyy-MM-dd")}`,
+    );
+    fireEvent.press(getByText("All Time"));
+    expect(await findByTestId("rent-roi-card-props")).toHaveTextContent("house1|all");
   });
 
   describe("ManualPaymentModal", () => {
