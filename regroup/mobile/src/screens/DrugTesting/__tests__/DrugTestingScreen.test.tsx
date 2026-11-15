@@ -24,6 +24,15 @@ jest.mock(
   },
 );
 
+// #183 item 12: the screen had no title bar or back button (its modal group
+// hides the native header, so each screen renders its own).
+jest.mock('../../../components/screen-header', () => {
+  const { Text } = require('react-native');
+  return ({ header, renderBackButton }: any) => (
+    <Text testID="screen-header">{`${header}${renderBackButton ? ' [back]' : ''}`}</Text>
+  );
+});
+
 jest.mock('../../../context/DataContext', () => ({
   useData: () => ({
     currentHouse: { id: 'house-1', name: 'Test House' },
@@ -80,6 +89,18 @@ describe('DrugTestingScreen', () => {
     const negativeEls = await findAllByText('Negative');
     expect(negativeEls.length).toBeGreaterThanOrEqual(1);
     expect(await findByText('Jane Admin')).toBeTruthy();
+  });
+
+  it('renders a "Drug Testing" title bar with a back button', () => {
+    (useHouseDrugTests as jest.Mock).mockReturnValue({ data: [], isLoading: false });
+    const { getByTestId } = render(<DrugTestingScreen />, { wrapper });
+    expect(getByTestId('screen-header').props.children).toBe('Drug Testing [back]');
+  });
+
+  it('keeps the title bar while loading, so the screen can be left', () => {
+    (useHouseDrugTests as jest.Mock).mockReturnValue({ data: undefined, isLoading: true });
+    const { getByTestId } = render(<DrugTestingScreen />, { wrapper });
+    expect(getByTestId('screen-header').props.children).toBe('Drug Testing [back]');
   });
 
   it('navigates to log form on FAB press', () => {

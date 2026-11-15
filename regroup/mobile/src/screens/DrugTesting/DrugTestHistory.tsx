@@ -112,7 +112,7 @@ export default function DrugTestHistory() {
   if (isLoading) {
     return (
       <View style={styles.container}>
-        <ScreenHeader renderBackButton title="Test History" />
+        <ScreenHeader renderBackButton header="Test History" />
         <View style={styles.center} testID="loading-indicator">
           <RatsLoadingIndicator />
         </View>
@@ -124,7 +124,7 @@ export default function DrugTestHistory() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader renderBackButton title="Test History" />
+      <ScreenHeader renderBackButton header="Test History" />
 
       {/* Summary Stats */}
       <View style={styles.statsRow}>
