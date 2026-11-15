@@ -21,7 +21,7 @@ That merged code is not yet on staging or production, and a few items are still 
 - Mark Resolved doesn't work;
 - the new Storage rule isn't enforced.
 
-The rest is one open phone bug (#244), two portal follow-ups, and reinstalling the git hooks #210 changed.
+The rest is deleting a superseded branch, two portal follow-ups, and reinstalling the git hooks #210 changed. #244, the last open phone bug here, was fixed by #270.
 
 Status was checked on 2026-11-14 against `main` at `ebbff7a3`, and steps 9 and 10 against `1c87c78d`. Re-check each item before acting.
 
@@ -136,18 +136,21 @@ It now includes opening a document (§4), which needs step 1 on the project you 
 
 ### Development (Claude can do these on request)
 
-#### 8. Land #244 alone
+#### 8. Delete the superseded portal-defects branch
 
-**Where:** a new branch from `origin/main`.
+**Where:** GitHub, branch `fix/regroup-portal-visible-defects`.
 
-Main already fixes three of the four bugs on `fix/regroup-portal-visible-defects`:
+> **Warning:** deleting a remote branch can't be undone from GitHub's side.
+
+All four bugs that branch fixes are fixed on `main` by other PRs:
 
 - #257 and #249, by commits pushed to #160;
-- #238, by #267.
+- #238, by #267;
+- #244, by #270 (merged 2026-11-15).
 
-Only #244 is left: open disputes older than two weeks are counted but can't be listed. Cherry-pick its commit (`c641debf`, `regroup/mobile/src/screens/Disputes/`) onto `main`, run the Disputes and hooks suites, and open a PR that fixes #244. Then delete `fix/regroup-portal-visible-defects`.
+It has no open PR. Delete it with `git push origin --delete fix/regroup-portal-visible-defects`, and remove the local worktree `rp-portal-defects`.
 
-**Expected result:** a PR with one commit. #244 closes when it merges.
+**Expected result:** the branch no longer appears in `git ls-remote --heads origin`.
 
 ---
 
@@ -183,7 +186,7 @@ Run `scripts/e2e.sh` before opening the PR, after checking with `lsof` that port
 - [ ] On staging, a house admin opens an uploaded document: the signed link works (steps 1 to 3).
 - [ ] On staging, Mark Resolved on a failed payment clears the banner, and the record reads `resolved_offline` (step 2).
 - [ ] As a house admin, a direct Storage download of a document path is refused (step 3; covered by `documentUploads.rules.test.ts`).
-- [ ] #244 is closed (step 8).
+- [ ] `fix/regroup-portal-visible-defects` is gone from the remote (step 8).
 - [ ] The Mark Resolved journey passes in `regroup/portal — browser tests` (step 9).
 - [ ] Session start shows no hook drift warning (step 10).
 
