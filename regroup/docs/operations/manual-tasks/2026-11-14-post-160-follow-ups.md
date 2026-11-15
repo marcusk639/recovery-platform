@@ -12,7 +12,8 @@ These PRs are merged on `main`:
 - #160, the React Native 0.88 upgrade;
 - #231, launch fixes for crashes, the health score and refused queries;
 - #267, the failed-payment banner and Mark Resolved (#238);
-- #268, #160's review follow-ups.
+- #268, #160's review follow-ups;
+- #210, the operator portal.
 
 That merged code is not yet on staging or production, and a few items are still open. Until the deploy and IAM steps are done:
 
@@ -20,9 +21,9 @@ That merged code is not yet on staging or production, and a few items are still 
 - Mark Resolved doesn't work;
 - the new Storage rule isn't enforced.
 
-The rest closes out the operator portal (#210) and one open phone bug (#244).
+The rest is one open phone bug (#244), two portal follow-ups, and reinstalling the git hooks #210 changed.
 
-Status was checked on 2026-11-14 against `main` at `ebbff7a3`. Re-check each item before acting.
+Status was checked on 2026-11-14 against `main` at `ebbff7a3`, and steps 9 and 10 against `1c87c78d`. Re-check each item before acting.
 
 ## Prerequisites
 
@@ -150,19 +151,30 @@ Only #244 is left: open disputes older than two weeks are counted but can't be l
 
 ---
 
-#### 9. Bring #210 (the operator portal) up to `main`
+#### 9. Portal follow-ups after #210
 
-**Where:** `feat/regroup-operator-portal`. It is already based on `main`, but 2 commits behind.
+**Where:** a new branch from `origin/main`, in `regroup/portal`.
 
-- Bring it up to `main`. A session was rebasing it onto `main` on 2026-11-14, waiting on the owner's go for the force-push. That brings in #231, #267 and #268. Rebuild with `node tools/bundle.mjs --production` and run `npx vitest run` in `regroup/portal`.
-- The 4 browser tests that failed on 2026-11-14 should pass with #231 in: the #217 double-submit, drug-test history, and the survey's MedicationSummary and DrugTestHistory entries.
-- `e2e/reports.spec.ts:55`: change `test.fail` to `test`. #249 is fixed on `main`, so the `test.fail` would now fail the suite.
+#210 was squash-merged on 2026-11-14 (`d0411cfa`), so it no longer needs bringing up to `main`, and its `test.fail` pins are gone. Two items are still open:
+
 - Add a browser journey for Mark Resolved:
   - a manager resolves a seeded `failed` record, which `resolveFailedPaymentOffline` sets to `resolved_offline`, and the banner empties;
   - a peer leader sees no button.
 - `e2e/payments.spec.ts:10` says "only the failed-payment banner calls Stripe". That is no longer true; the banner reads payment records.
 
-**Expected result:** every #210 check is green, including `regroup/portal — browser tests`.
+Run `scripts/e2e.sh` before opening the PR, after checking with `lsof` that ports 14400, 18080 and 5199 are free.
+
+**Expected result:** a PR with the new journey and the corrected comment, and `regroup/portal — browser tests` green on it.
+
+---
+
+#### 10. Reinstall the git hooks from current `main`
+
+**Where:** any checkout of current `origin/main`, once per clone: `./scripts/install-git-hooks.sh`.
+
+#210 changed `scripts/git-hooks/pre-push`, which now runs the portal's tests when a push changes the phone app, so clones still run the old hook until this is done. A clone's worktrees share one hooks directory, so one run covers all of them. Install from `main`, not from a feature branch's worktree, or every checkout gets that branch's hooks.
+
+**Expected result:** `scripts/session-check.sh` no longer warns that an installed hook differs from `origin/main`.
 
 ---
 
@@ -171,7 +183,9 @@ Only #244 is left: open disputes older than two weeks are counted but can't be l
 - [ ] On staging, a house admin opens an uploaded document: the signed link works (steps 1 to 3).
 - [ ] On staging, Mark Resolved on a failed payment clears the banner, and the record reads `resolved_offline` (step 2).
 - [ ] As a house admin, a direct Storage download of a document path is refused (step 3; covered by `documentUploads.rules.test.ts`).
-- [ ] #244 is closed, and #210's checks are all green (steps 8 and 9).
+- [ ] #244 is closed (step 8).
+- [ ] The Mark Resolved journey passes in `regroup/portal — browser tests` (step 9).
+- [ ] Session start shows no hook drift warning (step 10).
 
 ## Rollback
 
