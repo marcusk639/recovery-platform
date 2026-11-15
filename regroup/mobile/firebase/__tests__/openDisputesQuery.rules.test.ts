@@ -81,7 +81,7 @@ describe("the house's open-dispute list with no date range", () => {
     const resident = testEnv.authenticatedContext('residentUid', { guest: { [HOUSE]: true } });
 
     const forStaff = await assertSucceeds(getDocs(openDisputes(staff)));
-    expect(forStaff.docs.map((d) => d.id)).toEqual(['old_dispute']);
+    expect(forStaff.docs.map((d: { id: string }) => d.id)).toEqual(['old_dispute']);
     await assertSucceeds(getDocs(openDisputes(resident)));
   });
 
