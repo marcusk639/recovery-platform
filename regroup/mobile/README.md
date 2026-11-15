@@ -7,7 +7,7 @@ React Native mobile application for managing sober living houses. Supports two o
 
 ## Tech Stack
 
-- React Native 0.72 (TypeScript)
+- React Native 0.88.1 (TypeScript, New Architecture, Hermes)
 - Firebase / Firestore for data and auth
 - Redux Toolkit (client state) + React Query (server state)
 - Stripe Connect Express for rent payments
@@ -17,8 +17,8 @@ React Native mobile application for managing sober living houses. Supports two o
 
 ### Prerequisites
 
-- Node 18+
-- Xcode (iOS; deployment target 15.0) or Android Studio (Android)
+- Node 22.13+ (`engines` in `package.json`)
+- Xcode (iOS; deployment target 15.1) or Android Studio (Android)
 - CocoaPods (`gem install cocoapods`)
 - Firebase CLI (`npm install -g firebase-tools`)
 
@@ -40,7 +40,7 @@ npm run android
 
 ### Podfile build fixes
 
-`ios/Podfile`'s `post_install` hook sets every pod's deployment target to 15.0 and adds `-Wno-deprecated-literal-operator` to Yoga, whose `-Werror` build fails on newer clang (seen with Xcode 27.1). After changing the Podfile, run `cd ios && pod install`.
+`ios/Podfile`'s `post_install` hook runs `react_native_post_install`, sets every pod's deployment target to 15.1, and carries per-pod workarounds, including BoringSSL-GRPC compiler flags and header search paths for `react-native-html-to-pdf` and `react-native-date-picker` under RN 0.88's prebuilt core. The comments in the hook explain each one. After changing the Podfile, run `cd ios && pod install`.
 
 ### node_modules
 
