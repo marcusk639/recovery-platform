@@ -14,9 +14,8 @@ export interface SendOneInviteParams {
  * sendInviteEmails so it can be reused by createInvitation without
  * recreating the SendGrid plumbing.
  *
- * Preserves the exact subject/text/html template and link-rewrite
- * behaviour that the existing sendInviteEmails loop uses, so live
- * email rendering does not change for existing callers.
+ * Preserves the subject/text/html template of the existing
+ * sendInviteEmails loop; the link is sent as given (no scheme rewrite).
  *
  * NOTE: `inviterDisplayName` is part of the spec signature but is
  * not yet referenced by the current template. It is accepted so
@@ -29,28 +28,15 @@ export async function sendOneInviteEmail(
 ): Promise<void> {
   const { toEmail, inviteLink, role } = params;
 
-  const decodedLink = decodeURIComponent(inviteLink);
+  // The link is an https app link: emailed as-is in both bodies. (It used to
+  // be rewritten to com.rats.dev:// behind an unrouted /redirect page.)
+  // Not decoded: the token is percent-encoded and must reach the app intact.
+  const linkToUse = inviteLink || "#";
 
   const text =
     role === "guest"
-      ? `You have been invited to join a sober living house. Click ${decodedLink} to join.`
-      : `You have been invited to manage a sober living house. Click ${decodedLink} to join.`;
-
-  // Create a web URL that redirects to the custom scheme
-  const customSchemeLink = decodedLink || inviteLink || "#";
-
-  // Use bundle ID scheme instead of custom scheme for better compatibility
-  const bundleIdSchemeLink = customSchemeLink.replace(
-    "regroup-app://",
-    "com.rats.dev://"
-  );
-
-  const linkToUse = customSchemeLink.startsWith("regroup-app://")
-    ? `https://regroup-app.com/redirect?url=${encodeURIComponent(
-        bundleIdSchemeLink
-      )}`
-    : customSchemeLink;
-
+      ? `You have been invited to join a sober living house. Click ${linkToUse} to join.`
+      : `You have been invited to manage a sober living house. Click ${linkToUse} to join.`;
 
   // Build HTML more explicitly to avoid template string issues
   const invitationMessage =

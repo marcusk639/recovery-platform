@@ -139,7 +139,7 @@ jest.mock('../../util/inviteEmails', () => ({
   sendOneInviteEmail: (...args: unknown[]) => mockSendOneInviteEmail(...args),
 }));
 
-import { createInvitation, redeemInvitation } from '../../callable/invitations';
+import { createInvitation, redeemInvitation, buildInviteLink } from '../../callable/invitations';
 
 const fakeAuth = { uid: 'inviter-uid', token: { email: 'inviter@x.com' } };
 const call = (fn: unknown, data: unknown, auth: object | null = fakeAuth) =>
@@ -186,6 +186,38 @@ describe('createInvitation — happy path', () => {
     });
     expect(doc.expiresAt).toEqual(expect.any(String));
     expect(mockSendOneInviteEmail).toHaveBeenCalledTimes(1);
+    // The emailed link is an https app link on the web origin (default prod).
+    expect(mockSendOneInviteEmail.mock.calls[0][0].inviteLink).toBe(
+      'https://regroup-app.com/invite?token=TEST_TOKEN_FIXED',
+    );
+  });
+
+  it('builds the invite link on WEB_BASE_URL when it is set (trailing slash trimmed)', async () => {
+    const prev = process.env.WEB_BASE_URL;
+    process.env.WEB_BASE_URL = 'https://regroup-e2e.web.app/';
+    try {
+      mockHouseGet.mockResolvedValue({
+        exists: true,
+        data: () => ({ ownerId: 'owner-uid' }),
+      });
+      await call(
+        createInvitation,
+        { email: 'x@x.com', houseId: 'h', role: 'admin' },
+        { uid: 'owner-uid', token: {} },
+      );
+      expect(mockSendOneInviteEmail.mock.calls[0][0].inviteLink).toBe(
+        'https://regroup-e2e.web.app/invite?token=TEST_TOKEN_FIXED',
+      );
+    } finally {
+      if (prev === undefined) delete process.env.WEB_BASE_URL;
+      else process.env.WEB_BASE_URL = prev;
+    }
+  });
+
+  it('buildInviteLink encodes the token on the given origin', () => {
+    expect(buildInviteLink('t 1', 'https://regroup-e2e.web.app')).toBe(
+      'https://regroup-e2e.web.app/invite?token=t%201',
+    );
   });
 
   it('omits initialPhase from the doc when not provided (Firestore rejects undefined values)', async () => {

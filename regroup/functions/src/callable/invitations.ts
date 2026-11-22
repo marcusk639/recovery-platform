@@ -74,12 +74,23 @@ const createInvitationSchema = z.object({
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * Build the invitation link the recipient will tap. The mobile parser at
- * src/services/native-deep-links.ts treats `?token=<...>` as the new
- * server-issued format.
+ * Origin the emailed app links point at. `WEB_BASE_URL` (plain process.env,
+ * like `CONNECT_BASE_URL`) must match the mobile build's `RATS_WEB_URL`
+ * origin, because the app only accepts `https://<its web origin>/invite`.
  */
-function buildInviteLink(token: string): string {
-  return `regroup-app://?type=invitation&token=${encodeURIComponent(token)}`;
+const DEFAULT_WEB_BASE_URL = 'https://regroup-app.com';
+function webBaseUrl(): string {
+  const v = process.env.WEB_BASE_URL?.trim();
+  return (v || DEFAULT_WEB_BASE_URL).replace(/\/+$/, '');
+}
+
+/**
+ * Build the invitation link the recipient will tap: an https app link on the
+ * web origin. The mobile parser (src/services/appLinks/parseAppLink.ts)
+ * accepts `https://<web origin>/invite?token=<...>`.
+ */
+export function buildInviteLink(token: string, webOrigin: string): string {
+  return `${webOrigin}/invite?token=${encodeURIComponent(token)}`;
 }
 
 // The invitation email (util/email) reads SENDGRID_API_KEY from process.env,
@@ -166,7 +177,7 @@ export const createInvitation = onCall({ secrets: [SENDGRID_API_KEY] }, async (r
   await admin.firestore().collection('invitations').doc(token).set(invitation);
 
   // ── Send the email via the extracted helper ──────────────────────────
-  const link = buildInviteLink(token);
+  const link = buildInviteLink(token, webBaseUrl());
   // role string for the email template: 'admin' | 'guest' (senior-peer
   // is templated as 'guest' for the recipient — they see the same email).
   const emailRole = input.role === 'senior-peer' ? 'guest' : input.role;

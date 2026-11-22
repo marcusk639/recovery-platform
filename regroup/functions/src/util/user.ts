@@ -40,10 +40,8 @@ export function createConfirmationEmail(
    Thanks,\n\n
    Your Regroup: Sober Living App team`;
 
-  // Wrap custom-scheme deep links in a web redirect so email clients can open them.
-  const linkToUse = decodedLink.startsWith("regroup-app://")
-    ? `https://regroup-app.com/redirect?url=${encodeURIComponent(decodedLink)}`
-    : decodedLink;
+  // App links (https) go out as given; no /redirect wrapper.
+  const linkToUse = decodedLink;
 
   const html = [
     '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">',

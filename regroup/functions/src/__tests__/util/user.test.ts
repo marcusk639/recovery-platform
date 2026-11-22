@@ -143,11 +143,18 @@ describe('createConfirmationEmail', () => {
     expect(email.text).toContain('Hello Alice,');
   });
 
-  it('wraps a regroup-app:// custom scheme link in a web redirect URL', () => {
+  it('passes an app link through unwrapped (no /redirect, no scheme rewrite)', () => {
+    const appLink = 'https://regroup-app.com/verify?token=abc';
+    const email = createConfirmationEmail('test@example.com', appLink);
+    expect(email.html).toContain(`href="${appLink}"`);
+    expect(email.text).toContain(appLink);
+    expect(email.html).not.toContain('/redirect');
+    expect(email.html).not.toContain('com.rats.dev');
+    // A custom-scheme link is no longer wrapped either.
     const deepLink = 'regroup-app://verify?token=abc';
-    const email = createConfirmationEmail('test@example.com', deepLink);
-    expect(email.html).toContain('https://regroup-app.com/redirect?url=');
-    expect(email.html).not.toContain('regroup-app://verify');
+    const raw = createConfirmationEmail('test@example.com', deepLink);
+    expect(raw.html).toContain(`href="${deepLink}"`);
+    expect(raw.html).not.toContain('/redirect');
   });
 
   it('uses a regular https link directly without wrapping', () => {
