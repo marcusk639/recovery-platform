@@ -85,6 +85,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = (props) => {
   const [peekingInvitation, setPeekingInvitation] = useState(false);
 
   const userSubscriptionRef = useRef<any>(null);
+  const signedInWhenInvited = useRef<boolean | null>(null);
   const linkSubscriptionRef = useRef<(() => void) | undefined>(undefined);
 
   const setError = useCallback((message: string) => {
@@ -233,7 +234,14 @@ const SignUpScreen: React.FC<SignUpScreenProps> = (props) => {
   }
   // Already signed in with an invitation (an invitation link opened while
   // signed in): accept it as this account or continue, never a new sign-up.
-  if (invitation && isSignedInUser(user)) {
+  // Decided when the invitation first reaches this screen, so an account
+  // that this sign-up just created keeps the form (and its errors).
+  if (!invitation) {
+    signedInWhenInvited.current = null;
+  } else if (signedInWhenInvited.current === null) {
+    signedInWhenInvited.current = isSignedInUser(user);
+  }
+  if (invitation && signedInWhenInvited.current) {
     return (
       <SafeAreaView style={{ flex: 1 }} testID="signup-screen">
         <RatsScrollView keyboardShouldPersistTaps="handled">

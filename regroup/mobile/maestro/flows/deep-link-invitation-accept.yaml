@@ -6,8 +6,8 @@
 #   2. accept:   e2e-invite-token-accept, tap accept-invitation-button
 #      (redeemInvitation grants resident B a manager role in test-house-123).
 # Needs the seeded invitations to test-guest-b@rats-e2e.com
-# (maestro/scripts/seed/index.js). Check the redeem afterwards with:
-#   node maestro/scripts/assert-firestore.js invitations/e2e-invite-token-accept redeemedByUid=e2e-guest-b
+# (maestro/scripts/seed/index.js). The accept case reads the emulator
+# (maestro-js/read-invitation-membership.js) to prove the membership records.
 # Re-seed before a re-run: the accepted invitation is used up.
 # Run: maestro --device <serial> test -e APP_ID=… -e E2E_TEST_PASSWORD=… maestro/flows/deep-link-invitation-accept.yaml
 appId: ${APP_ID}
@@ -58,3 +58,13 @@ tags:
     timeout: 60000
 - assertNotVisible:
     id: "accept-invitation-error"
+# The role took effect, not only the claim: the users doc points at a new
+# admins record for the invited house, and the invitation is redeemed by B.
+- runScript:
+    file: ../scripts/maestro-js/read-invitation-membership.js
+    env:
+      UID: "e2e-guest-b"
+      TOKEN: "e2e-invite-token-accept"
+- assertTrue:
+    condition: ${output.userIsAdmin === true && output.userIsGuest === true && output.adminUserId === 'e2e-guest-b' && output.adminHouseIds === 'test-house-123' && output.invitationRedeemedBy === 'e2e-guest-b'}
+    label: resident B is now a manager of test-house-123 (users flags, admins record, redeemed invitation)

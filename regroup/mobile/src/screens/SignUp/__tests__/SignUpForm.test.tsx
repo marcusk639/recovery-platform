@@ -17,7 +17,7 @@ jest.mock("../SignUpFormView", () => (props: any) => {
 });
 
 let mockInvitation: any = null;
-const mockUnwrap = jest.fn(() => Promise.resolve({ id: "user-1" }));
+const mockUnwrap = jest.fn((): Promise<any> => Promise.resolve({ id: "user-1" }));
 const mockDispatch = jest.fn(() => ({ unwrap: mockUnwrap }));
 jest.mock("../../../state/store", () => ({
   useAppDispatch: () => mockDispatch,
@@ -103,6 +103,14 @@ describe("SignUpFormWrapper", () => {
     ).rejects.toThrow("update failed");
   });
 
+  it("unwraps the createUser thunk dispatch, so the created user (not the action envelope) is used", async () => {
+    mockUnwrap.mockResolvedValueOnce({ id: "user-1", uid: "uid-1" });
+    render(<SignUpFormWrapper navigation={{} as any} />);
+    const created = await capturedProps.createUser({ email: "r@x.com" } as any);
+    expect(mockCreateUserThunkCreator).toHaveBeenCalledWith({ email: "r@x.com" });
+    expect(created).toEqual({ id: "user-1", uid: "uid-1" });
+  });
+
   describe("token invitation signup", () => {
     const mockNavigate = jest.fn();
     const mockSetError = jest.fn();
@@ -152,6 +160,21 @@ describe("SignUpFormWrapper", () => {
       expect(mockCreateGuest).toHaveBeenCalled();
       expect(mockNavigate).toHaveBeenCalledWith(Routes.NewAccount);
       expect(mockSetError).not.toHaveBeenCalled();
+    });
+
+    it("builds the resident record from the created user's uid", async () => {
+      mockInvitation = {
+        type: "guest",
+        token: "t1",
+        houseId: "h1",
+        ownerId: "",
+        email: "r@x.com",
+      };
+      mockUnwrap.mockResolvedValue({ id: "user-1", uid: "uid-1", email: "r@x.com" });
+      await submit();
+      expect(mockCreateGuest).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: "uid-1", houseId: "h1", createdBy: "uid-1" })
+      );
     });
 
     it("senior-peer token signup completes", async () => {

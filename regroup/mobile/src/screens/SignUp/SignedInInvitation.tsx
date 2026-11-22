@@ -9,6 +9,10 @@ import { ActivityIndicator, View } from 'react-native';
 import { RatsText } from '../../components/rats-text';
 import RatsButton from '../../components/rats-button/rats-button';
 import { useAppDispatch, useAppSelector } from '../../state/store';
+import { updateUser as updateUserRTK } from '../../state/slices/userSlice';
+import { useCreateGuest } from '../../state/queries/guestQueries';
+import { useCreateAdmin } from '../../state/queries/adminQueries';
+import { User } from '../../entities/User';
 import {
   acceptInvitationAsCurrentUser,
   leaveInvitation,
@@ -26,17 +30,33 @@ const SignedInInvitation: React.FC<Props> = ({ notice }) => {
   const user = useAppSelector((state) => state.user.user);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { mutateAsync: createGuest } = useCreateGuest();
+  const { mutateAsync: createAdmin } = useCreateAdmin();
 
   if (!invitation) return null;
   const token = invitation.token;
-  const isAdmin = invitation.type === 'admin' || invitation.type === 'senior-peer';
+  const roleLabel =
+    invitation.type === 'senior-peer'
+      ? 'Peer leader'
+      : invitation.type === 'admin'
+      ? 'Manager'
+      : 'Guest';
   const message = error ?? notice ?? null;
 
   const accept = async () => {
     if (!token) return;
     setBusy(true);
     setError(null);
-    const result = await acceptInvitationAsCurrentUser(token, dispatch);
+    const result = await acceptInvitationAsCurrentUser(invitation, {
+      dispatch,
+      user,
+      writers: {
+        createGuest,
+        createAdmin,
+        updateUser: (u: User, updates: Partial<User>) =>
+          dispatch(updateUserRTK({ user: u, updates })).unwrap(),
+      },
+    });
     if (!result.ok) {
       setError(result.message);
       setBusy(false);
@@ -61,7 +81,7 @@ const SignedInInvitation: React.FC<Props> = ({ notice }) => {
         {(invitation as { houseName?: string }).houseName ? (
           <RatsText text={`House: ${(invitation as { houseName?: string }).houseName}`} />
         ) : null}
-        <RatsText testID="invited-as-role" text={`Role: ${isAdmin ? 'Manager' : 'Guest'}`} />
+        <RatsText testID="invited-as-role" text={`Role: ${roleLabel}`} />
       </View>
       {message ? (
         <RatsText

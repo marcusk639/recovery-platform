@@ -389,6 +389,25 @@ describe('SignUpScreen', () => {
       expect(queryByTestId('signup-form')).toBeNull();
     });
 
+    it('keeps the sign-up form, with its error, for a user created by this sign-up', async () => {
+      const store = buildStore({ invitation, user: { uid: 'anon', isAnonymous: true } });
+      const { getByTestId, queryByTestId } = render(
+        <Provider store={store}>
+          <SignUpScreen navigation={mockNavigation} route={mockRoute} />
+        </Provider>,
+      );
+      // createUser converts the anonymous account; a later step (redeem or
+      // createGuest) then fails and the form shows the error.
+      await act(async () => {
+        store.dispatch({
+          type: 'user/createUser/fulfilled',
+          payload: { uid: 'anon', email: 'g@rats-e2e.com', isAnonymous: false },
+        });
+      });
+      expect(getByTestId('signup-form')).toBeTruthy();
+      expect(queryByTestId('signed-in-invitation')).toBeNull();
+    });
+
     it('shows the sign-up form to an anonymous user with an invitation', () => {
       const { getByTestId, queryByTestId } = renderScreen({
         invitation,

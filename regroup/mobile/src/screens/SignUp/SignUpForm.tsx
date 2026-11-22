@@ -19,10 +19,8 @@ import {
 import { navigateAuthStackRoute } from "../../navigation/authNavigation";
 import { Invitation } from "../../entities/Invite";
 import { Guest } from "../../entities/Guest";
-import { buildSelfCreateGuest } from "./selfCreateGuest";
 import { Role } from "../../entities/Roles";
 import { mapValuesToUser } from "../../util/user";
-import { mapUserToAdmin } from "../../util/admin";
 import Admin from "../../entities/Admin";
 import { checkPasswordReqs } from "../../services/password";
 import { logException } from "../../util/logging";
@@ -31,6 +29,11 @@ import {
   addGuestAuthorization,
 } from "../../services/setup-wizard";
 import { redeemInvitation } from "../../services/invitations";
+import {
+  buildInvitationMembership,
+  refreshInvitationClaims,
+  writeInvitationMembership,
+} from "../../services/invitationMembership";
 
 export interface SignUpFormProps {
   createUser: (user: User) => any;
@@ -108,116 +111,54 @@ const SignUpForm = withFormik<SignUpFormProps, SignUpFormValues>({
       setSubmittingForm(false);
       return;
     }
-    if (
-      invitation &&
-      (invitation.type === "guest" || invitation.type === "senior-peer")
-    ) {
-      const newGuest = buildSelfCreateGuest(createdUser, invitation);
+    // An invitation's role: grant it, then write the records that make the
+    // account a member (services/invitationMembership, shared with "Accept as
+    // this account").
+    const membership = invitation
+      ? buildInvitationMembership(createdUser, invitation)
+      : null;
+    if (membership) {
+      const label = membership.kind === "guest" ? "guest" : "admin";
       try {
         if (invitation.token) {
           // New token-based flow — redeemInvitation grants the claim
           // server-side after validating the email match.
           await redeemInvitation(invitation.token);
-        } else {
+        } else if (membership.kind === "guest") {
           // Legacy URL-payload flow — kept until Phase F.
-          await addGuestAuthorization(newGuest);
+          await addGuestAuthorization(membership.guest);
+        } else {
+          await addAdminAuthorization(membership.admin);
         }
-
-        // Add a small delay to ensure custom claims are propagated
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        // Refresh the auth token to ensure we have the latest claims
-        const { getAuthUser } = require("../../services/users");
-        await getAuthUser(true);
+        await refreshInvitationClaims();
       } catch (error: any) {
         logException(error);
         props.setError(
           error?.message ||
             error?.nativeErrorMessage ||
-            "Failed to add guest authorization"
+            `Failed to add ${label} authorization`
         );
         setSubmittingForm(false);
-        return; // Don't proceed with guest creation if authorization failed
+        return; // Don't create the records if authorization failed
       }
 
       try {
         // Occupancy is recorded server-side by redeemInvitation.
-        await Promise.all([
-          createGuest(newGuest),
-          updateUser(createdUser, {
-            isGuest: true,
-            guestId: newGuest.id,
-            email: createdUser.email,
-          }),
-        ]);
-        props.navigation.navigate(Routes.NewAccount);
+        await writeInvitationMembership(membership, createdUser, {
+          createGuest,
+          createAdmin,
+          updateUser,
+        });
         setSubmitting(false);
-        setSubmittingForm(false);
-        return;
-      } catch (error: any) {
-        logException(error);
-        props.setError(
-          error?.message ||
-            error?.nativeErrorMessage ||
-            "Failed to create guest account"
-        );
-        setSubmittingForm(false);
-        return;
-      }
-    }
-    if (invitation && invitation.type === "admin") {
-      const mappedAdmin = mapUserToAdmin(
-        createdUser,
-        new Admin(createdUser.email)
-      );
-      // Immutable add — avoid mutating the object returned by mapUserToAdmin
-      // in case that result is ever memoized / cached.
-      const newAdmin = {
-        ...mappedAdmin,
-        houseIds: [...mappedAdmin.houseIds, invitation.houseId],
-      };
-      try {
-        if (invitation.token) {
-          // New token-based flow — redeemInvitation grants the admin
-          // claim server-side after validating the email match.
-          await redeemInvitation(invitation.token);
-        } else {
-          // Legacy URL-payload flow — kept until Phase F.
-          await addAdminAuthorization(newAdmin);
-        }
-
-        // Add a small delay to ensure custom claims are propagated
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-
-        // Refresh the auth token to ensure we have the latest claims
-        const { getAuthUser } = require("../../services/users");
-        await getAuthUser(true);
-      } catch (error: any) {
-        logException(error);
-        props.setError(
-          error?.message ||
-            error?.nativeErrorMessage ||
-            "Failed to add admin authorization"
-        );
-        setSubmittingForm(false);
-        return; // Don't proceed with admin creation if authorization failed
-      }
-
-      try {
-        await Promise.all([
-          createAdmin(newAdmin),
-          updateUser(createdUser, { isAdmin: true, adminId: newAdmin.id }),
-        ]);
-        setSubmitting(false);
-        setSubmittingForm(false);
         props.navigation.navigate(Routes.NewAccount);
+        setSubmittingForm(false);
         return;
       } catch (error: any) {
         logException(error);
         props.setError(
           error?.message ||
             error?.nativeErrorMessage ||
-            "Failed to create admin account"
+            `Failed to create ${label} account`
         );
         setSubmittingForm(false);
         return;
@@ -283,7 +224,10 @@ const SignUpFormWrapper: React.FC<any> = (props) => {
       user={user}
       invitation={invitation}
       signUpRole={signUpRole}
-      createUser={(user: User) => dispatch(createUserRTK(user))}
+      // .unwrap(): dispatch(thunk) resolves to the action envelope, not the
+      // User, and never rejects, so the uid was undefined downstream and a
+      // failed create looked like a success.
+      createUser={(user: User) => dispatch(createUserRTK(user)).unwrap()}
       createGuest={(guest: Guest) => createGuest(guest)}
       updateUser={(user: User, values: Partial<User>) =>
         // Hardened 2026-07-05: without .unwrap(), dispatch(thunk) always

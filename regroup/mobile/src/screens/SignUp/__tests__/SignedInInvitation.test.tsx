@@ -8,6 +8,14 @@ jest.mock('../../../services/appLinks/signedInInvitation', () => ({
   leaveInvitation: jest.fn(),
 }));
 jest.mock('../../../services/users', () => ({}));
+const mockCreateGuest = jest.fn();
+const mockCreateAdmin = jest.fn();
+jest.mock('../../../state/queries/guestQueries', () => ({
+  useCreateGuest: () => ({ mutateAsync: mockCreateGuest }),
+}));
+jest.mock('../../../state/queries/adminQueries', () => ({
+  useCreateAdmin: () => ({ mutateAsync: mockCreateAdmin }),
+}));
 jest.mock('../../../components/rats-text', () => ({
   RatsText: ({ text, testID }: any) => {
     const { Text } = require('react-native');
@@ -69,13 +77,33 @@ describe('SignedInInvitation', () => {
     expect(getByTestId('continue-to-app-button')).toBeTruthy();
   });
 
+  it.each([
+    ['guest', 'Role: Guest'],
+    ['admin', 'Role: Manager'],
+    ['senior-peer', 'Role: Peer leader'],
+  ])('labels a %s invitation "%s"', (type, label) => {
+    const { getByText } = renderWith({ ...tokenInvitation, type });
+    expect(getByText(label)).toBeTruthy();
+  });
+
   it('accepts with the token', async () => {
     accept.mockResolvedValue({ ok: true });
     const { getByTestId, queryByTestId } = renderWith(tokenInvitation);
     await act(async () => {
       fireEvent.press(getByTestId('accept-invitation-button'));
     });
-    expect(accept).toHaveBeenCalledWith('tok-1', expect.any(Function));
+    expect(accept).toHaveBeenCalledWith(
+      expect.objectContaining({ token: 'tok-1', type: 'admin', houseId: 'h1' }),
+      expect.objectContaining({
+        dispatch: expect.any(Function),
+        user: expect.objectContaining({ uid: 'e2e-guest-b' }),
+        writers: expect.objectContaining({
+          createGuest: mockCreateGuest,
+          createAdmin: mockCreateAdmin,
+          updateUser: expect.any(Function),
+        }),
+      }),
+    );
     expect(queryByTestId('accept-invitation-error')).toBeNull();
   });
 

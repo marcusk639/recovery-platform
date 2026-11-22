@@ -2,11 +2,13 @@
  * What a signed-in (non-anonymous) user can do with an invitation link
  * (screens/SignUp/SignedInInvitation.tsx):
  *
- * - Accept as this account (token invitations): redeemInvitation grants the
- *   house role server-side when the account's email matches the invitation.
- *   Then the ID token is force-refreshed so the new house claims apply, the
- *   user doc is reloaded (autoLogin), the invitation is cleared and the app
- *   resets to the user's start route.
+ * - Accept as this account (token invitations): first acceptRefusal checks the
+ *   account can take the role (no invitation or slot is spent on a refusal).
+ *   redeemInvitation then grants the house role server-side when the
+ *   account's email matches. The ID token is force-refreshed so the new house
+ *   claims apply, the membership records are written (invitationMembership,
+ *   the same as sign-up), the user doc is reloaded (autoLogin), the
+ *   invitation is cleared and the app resets to the user's start route.
  * - Continue to the app (any invitation): clear it and reset, nothing redeemed.
  */
 import { getAuth } from '@react-native-firebase/auth';
@@ -14,8 +16,15 @@ import type { AppDispatch } from '../../state/store';
 import type { User } from '../../entities/User';
 import { autoLogin, clearInvitation } from '../../state/slices/userSlice';
 import improvedNavigationService from '../../navigation/improved-navigation-service';
-import { redeemInvitation } from '../invitations';
-import { getAuthUser } from '../users';
+import type { Invitation } from '../../entities/Invite';
+import { peekInvitation, redeemInvitation } from '../invitations';
+import {
+  buildInvitationMembership,
+  MembershipInvitation,
+  MembershipWriters,
+  refreshInvitationClaims,
+  writeInvitationMembership,
+} from '../invitationMembership';
 import { logException } from '../../util/logging';
 
 export type AcceptResult = { ok: true } | { ok: false; message: string };
@@ -52,34 +61,86 @@ export function leaveInvitation(dispatch: AppDispatch, user: Partial<User> | nul
   improvedNavigationService.resetToStartRoute(user);
 }
 
+/** The account must be able to take this role; checked before any redeem. */
+export function acceptRefusal(
+  user: Partial<User> | null,
+  invitation: MembershipInvitation,
+): string | null {
+  const { type, houseId } = invitation;
+  if (type === 'admin') {
+    // The rules let a client create an admins record for one house only.
+    return user?.adminId
+      ? "You're already a manager with this account, and one account can manage one house in the app. Ask the house admin to invite another email address."
+      : null;
+  }
+  if (type === 'guest' || type === 'senior-peer') {
+    // Moving houses is not something an invitation does.
+    return user?.isGuest && user.houseId && user.houseId !== houseId
+      ? "You're a resident of another house with this account, so this invitation can't be accepted with it. Ask the house admin to invite another email address."
+      : null;
+  }
+  return "This invitation can't be accepted in the app.";
+}
+
+export interface AcceptContext {
+  dispatch: AppDispatch;
+  /** The signed-in user (state.user.user). */
+  user: Partial<User> | null;
+  writers: MembershipWriters;
+  /** Wait before the token refresh (refreshInvitationClaims); tests pass 0. */
+  claimsDelayMs?: number;
+}
+
+const SETUP_UNFINISHED =
+  "Your invitation was accepted, but setting up your account didn't finish. Check your connection and tap Accept again.";
+
+/** The role and house: SignUp has usually filled them in with peekInvitation. */
+async function invitationRole(invitation: Invitation): Promise<MembershipInvitation> {
+  if (invitation.houseId) return invitation;
+  const meta = await peekInvitation(invitation.token!);
+  return { type: meta.role, houseId: meta.houseId, initialPhase: meta.initialPhase };
+}
+
 export async function acceptInvitationAsCurrentUser(
-  token: string,
-  dispatch: AppDispatch,
+  invitation: Invitation,
+  { dispatch, user, writers, claimsDelayMs }: AcceptContext,
 ): Promise<AcceptResult> {
+  let role: MembershipInvitation;
   try {
-    await redeemInvitation(token);
+    role = await invitationRole(invitation);
+  } catch (error) {
+    logException(error, 'acceptInvitationAsCurrentUser: peek refused');
+    return { ok: false, message: invitationErrorMessage(error) };
+  }
+  const refusal = acceptRefusal(user, role);
+  if (refusal) return { ok: false, message: refusal };
+
+  try {
+    await redeemInvitation(invitation.token!);
   } catch (error) {
     logException(error, 'acceptInvitationAsCurrentUser: redeem refused');
     return { ok: false, message: invitationErrorMessage(error) };
   }
 
-  // The grant succeeded; from here a failure must not report it as refused.
-  const firebaseUser = getAuth().currentUser;
-  let user: Partial<User> | null = null;
+  // Granted. Refresh the token so the records' writes see the new role, then
+  // write them. A retry is safe: a second redeem by this account grants
+  // nothing and succeeds (functions/src/callable/invitations.ts).
   try {
-    await getAuthUser(true);
-    if (firebaseUser) {
-      user = (await dispatch(autoLogin(firebaseUser)).unwrap()).user;
-    }
+    await refreshInvitationClaims(claimsDelayMs);
+    const membership = buildInvitationMembership(user ?? {}, role);
+    if (membership) await writeInvitationMembership(membership, user ?? {}, writers);
   } catch (error) {
-    logException(error, 'acceptInvitationAsCurrentUser: reload after redeem failed');
+    logException(error, 'acceptInvitationAsCurrentUser: membership write failed');
+    return { ok: false, message: SETUP_UNFINISHED };
   }
-  leaveInvitation(dispatch, user ?? currentUserOf(dispatch));
+
+  let reloaded: Partial<User> | null = null;
+  const firebaseUser = getAuth().currentUser;
+  try {
+    if (firebaseUser) reloaded = (await dispatch(autoLogin(firebaseUser)).unwrap()).user;
+  } catch (error) {
+    logException(error, 'acceptInvitationAsCurrentUser: reload after accept failed');
+  }
+  leaveInvitation(dispatch, reloaded ?? user);
   return { ok: true };
 }
-
-// The user in the store when the reload failed (thunk-style getState).
-const currentUserOf = (dispatch: AppDispatch): Partial<User> | null =>
-  (dispatch as unknown as (thunk: (d: unknown, getState: () => any) => any) => any)(
-    (_d, getState) => getState().user.user ?? null,
-  );
