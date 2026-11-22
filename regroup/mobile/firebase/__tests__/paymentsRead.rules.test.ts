@@ -75,3 +75,17 @@ describe("payments: listing a house's payments", () => {
   it('a resident cannot list them', () => assertFails(houseQuery(RESIDENT)));
   it('a resident lists their own payment history', () => assertSucceeds(ownQuery(RESIDENT)));
 });
+
+// getGuestPayments also lists a linked intake record's payments by linkedTo.
+describe("payments: listing a record's linked payments", () => {
+  const linkedQuery = (uid: string) =>
+    getDocs(
+      query(
+        collection(as(uid), 'payments'),
+        where('houseId', '==', HOUSE),
+        where('linkedTo', '==', 'gResident'),
+      ),
+    );
+  it('a manager lists them', () => assertSucceeds(linkedQuery(ADMIN)));
+  it('a peer leader cannot list them', () => assertFails(linkedQuery(PEER)));
+});
