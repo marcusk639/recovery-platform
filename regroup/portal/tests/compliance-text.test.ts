@@ -1,23 +1,30 @@
+import { buildWeeklyReportHtml } from '@mobile/services/weeklyReportHtml';
 import { reportGuest, reportRules, reportStats } from '../src/app/residents/compliance-text';
 
-test('resident text reaches the report as text, not markup', () => {
-  const guest = { id: 'guest-a', firstName: '<img src=x onerror=alert(1)>', lastName: 'O\'Brien & Sons', phase: '<b>1</b>', rentOwed: 5 };
-  expect(reportGuest(guest)).toEqual({
-    id: 'guest-a',
-    firstName: '&lt;img src=x onerror=alert(1)&gt;',
-    lastName: 'O&#39;Brien &amp; Sons',
-    phase: '&lt;b&gt;1&lt;/b&gt;',
-    rentOwed: 5,
-  });
+// The phone's report builder escapes the resident's text itself, so the portal
+// hands it plain text: escaping here as well would print "&amp;" for "&".
+// ComplianceExport passes reportGuest(guest), so these go through it too.
+const reportFor = (guest: Record<string, unknown>) =>
+  buildWeeklyReportHtml(reportGuest(guest) as any, {} as any, '2026-10-05', {} as any);
+
+test('resident text reaches the report as text, not markup, escaped once', () => {
+  const html = reportFor({ id: 'guest-a', firstName: '<img src=x onerror=alert(1)>', lastName: 'O\'Brien & Sons', phase: '<b>1</b>' });
+  expect(html).toContain('<strong>Resident:</strong> &lt;img src=x onerror=alert(1)&gt; O&#39;Brien &amp; Sons</p>');
+  expect(html).toContain('<strong>Phase:</strong> &lt;b&gt;1&lt;/b&gt;</p>');
+  expect(html).not.toContain('&amp;#39;');
+  expect(html).not.toContain('<img');
 });
 
 test('an ordinary name is unchanged', () => {
-  const guest = { id: 'g', firstName: 'Test', lastName: 'GuestA', phase: 'Default' };
-  expect(reportGuest(guest)).toEqual(guest);
+  const html = reportFor({ id: 'g', firstName: 'Test', lastName: 'GuestA', phase: 'Default' });
+  expect(html).toContain('<strong>Resident:</strong> Test GuestA</p>');
+  expect(html).toContain('<strong>Phase:</strong> Default</p>');
 });
 
-test('a missing name or phase stays missing', () => {
-  expect(reportGuest({ id: 'g' })).toEqual({ id: 'g' });
+test('a missing name or phase prints nothing', () => {
+  const html = reportFor({ id: 'g' });
+  expect(html).toContain('<strong>Resident:</strong> </p>');
+  expect(html).not.toContain('undefined');
 });
 
 // Not a number stays not a number, so the phone's comparisons still say FAIL.
