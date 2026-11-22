@@ -239,34 +239,36 @@ export class AuthService extends BaseFirestoreService<User> {
       );
     } catch (error) {
       // The Auth user + Firestore doc were already created above. A failed
-      // subscription (declined card, backend validation, etc.) must not
-      // leave an orphaned account behind — delete both before surfacing the
-      // error so the same email can be retried.
-      await this.cleanupOrphanedAccount(user.id);
+      // subscription (declined card, backend validation, a timeout) must not
+      // leave an orphaned account, or a subscription billing one, behind:
+      // the server removes both before the error surfaces, so the same email
+      // can be retried.
+      await this.cleanupOrphanedAccount();
       throw error;
     }
     return user;
   }
 
   /**
-   * Removes the Auth user and Firestore user doc created for a signup whose
-   * subscription failed to initialize. Best-effort: cleanup failures are
-   * logged but never mask the original subscription error.
+   * Removes the account created for a signup whose subscription failed to
+   * initialize. Best-effort: cleanup failures are logged but never mask the
+   * original subscription error.
+   *
+   * The server does it, never the client. A checkout error doesn't prove no
+   * subscription exists (a timeout or dropped response can follow a
+   * successful checkout), and deleteAccount cancels any subscription the
+   * account records before removing it. If deleteAccount fails, the account
+   * is kept and the user signed out: deleting the user doc here would remove
+   * the only record of a subscription that may still be live.
    */
-  private async cleanupOrphanedAccount(userId: string): Promise<void> {
+  private async cleanupOrphanedAccount(): Promise<void> {
     try {
-      await this.delete(userId);
-    } catch (cleanupError) {
-      console.error('Failed to remove orphaned user document', cleanupError);
+      await this.functions.deleteAccount();
+    } catch (serverError) {
+      const code = (serverError as { code?: unknown })?.code;
+      console.error('Failed signup kept: the server could not remove the account', code);
     }
-    try {
-      const currentUser = await this.auth.currentUser;
-      if (currentUser && currentUser.uid === userId) {
-        await currentUser.delete();
-      }
-    } catch (cleanupError) {
-      console.error('Failed to remove orphaned auth account', cleanupError);
-    }
+    await this.auth.signOut().catch(() => undefined);
   }
 
   async setPersistence() {
