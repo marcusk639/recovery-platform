@@ -107,7 +107,7 @@ jest.mock("stripe", () => {
 // Import after mocks are established
 // ---------------------------------------------------------------------------
 import * as functions from "firebase-functions";
-import { stripeWebhook } from "../webhooks/stripeWebhook";
+import { handleStripeConnectWebhook, stripeWebhook } from "../webhooks/stripeWebhook";
 import Stripe from "stripe";
 
 // ---------------------------------------------------------------------------
@@ -2671,6 +2671,30 @@ describe("payout.failed", () => {
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(functions.logger.warn).toHaveBeenCalled();
+  });
+
+  // Stripe sends a connected account's payout.failed only to endpoints that
+  // listen to connected accounts, so this is the delivery that matters.
+  test("Connect endpoint: a connected account's failed payout notifies the house admins", async () => {
+    const payout = makePayout({ amount: 150000 }); // $1500
+    const event = makeStripeEvent("payout.failed", payout, {
+      account: "acct_test_123",
+    });
+    mockConstructEvent.mockReturnValue(event);
+    setupForPayoutFailed(true);
+
+    const res = makeResponse();
+    await handleStripeConnectWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(mockMessagingSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        notification: expect.objectContaining({
+          title: "Payout Failed",
+          body: expect.stringContaining("$1500.00"),
+        }),
+      }),
+    );
   });
 
   test("unknown destination (house not found): no crash", async () => {

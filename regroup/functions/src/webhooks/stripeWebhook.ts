@@ -2041,6 +2041,16 @@ export const handleStripeConnectWebhook = onRequest(
           await handleAccountDeauthorized(event.account ?? "");
           break;
 
+        // A house's failed bank payout. Only Connect events carry
+        // event.account, so the platform endpoint's case below can only see
+        // the platform's own payouts, which belong to no house.
+        case "payout.failed":
+          await handlePayoutFailed(
+            event.data.object,
+            event.account ?? undefined,
+          );
+          break;
+
         default:
           logger.info(
             "handleStripeConnectWebhook: unhandled Connect event type (ignored)",
