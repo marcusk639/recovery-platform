@@ -286,6 +286,40 @@ gcloud iam service-accounts add-iam-policy-binding "$SA" \
 
 Now run A4 step 2.
 
+#### C9. Alerts on the money paths (M10, the ops half)
+
+Production has one alert policy (account deletion). Nothing tells you when rent charging, rent
+collection or a Stripe webhook fails. The app side (render crashes to Sentry) is #287.
+
+1. Console → Monitoring → Alerting → **Edit notification channels** (project `phoenix-cleanhouse`): add
+   an Email channel to an inbox you read. Skip this if the account-deletion policy's channel already is one.
+2. Console → Logging → **Logs Explorer**, project `phoenix-cleanhouse`. Paste this query. Gen2 functions
+   log under Cloud Run, with the service name in lowercase:
+
+   ```
+   resource.type="cloud_run_revision"
+   resource.labels.service_name=("rentcharges" OR "scheduledrentcollection" OR "stripeevents" OR "handlestripeconnectwebhook" OR "weeklytransfers")
+   severity>=ERROR
+   ```
+
+   **Run query.** On a quiet day it should return nothing, or only errors you already know about.
+
+3. **Actions → Create log alert.** Name it `regroup money-path errors`. Keep the query. Set
+   "Time between notifications" to 5 minutes and "Incident autoclose" to 1 day, then pick the C9.1
+   channel and **Save**.
+4. Add a second alert for a job that stops running, which errors alone don't show. Monitoring →
+   Alerting → **Create policy** → metric **Cloud Scheduler Job → Job attempts** (`scheduler.googleapis.com/job/attempt_count`). Filter
+   `job_id` to the `rentCharges` job (`firebase-schedule-rentCharges-us-central1`) and set
+   **Metric absence** to 3 hours, since it runs hourly at :05. Use the same channel and **Save**.
+
+**Expected result:** Monitoring → Alerting lists three policies. To check the first one, Logs Explorer →
+the query → **Create log alert** → **Preview** shows matches over the last 7 days. If it shows none,
+widen the window rather than writing a test error to production.
+
+**If it fails:** if the query returns nothing at all over 30 days, even without `severity`, check the
+service names with
+`gcloud run services list --project phoenix-cleanhouse --region us-central1 --format="value(metadata.name)"`.
+
 ### Part D — Open sales (B4)
 
 After C3, checkout refuses unless `config/sales.open` is true. Open it only when you're ready to take
