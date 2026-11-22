@@ -377,8 +377,9 @@ After C1–C8 and D:
 
 - **Never `gcloud secrets versions add` with `read -p` in zsh.** It stores an empty value; that is what
   created the empty versions 4–6. Use `read -rs "var?prompt"` as above.
-- **`npm run deploy:batched` is for deploy quotas only.** It deploys production with whatever `lib/`
-  holds, with no `--project` and no build.
+- **`npm run deploy:batched` is for deploy quotas only.** Before #285 it deploys production with
+  whatever `lib/` holds, with no `--project` and no build. From #285 it needs
+  `-- --project <id>` and builds first. Run `env:write` before it, as for C3.
 - **Staging (`regroup-e2e`) already matches `main`** (2026-11-22). Rehearse C3–C6 there first with
   `--project regroup-e2e`. `env:write` refuses `regroup-e2e` (only production has a committed source), so
   keep staging's own `functions/.env.regroup-e2e` with its sandbox price IDs; the preflight refuses the
