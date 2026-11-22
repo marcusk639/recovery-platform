@@ -113,8 +113,12 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
   const requestingAdmin = useAppSelector(
     (state: any) => state.admin.requestingAdmin,
   ) as boolean;
-  // Auto-advance chore rotation if a new week has started
-  useAutoAdvanceRotation(house?.id ?? '');
+  const token = useRoleToken();
+  const isHouseStaff = !!house?.id && isAdmin(token, house.id);
+
+  // Auto-advance chore rotation if a new week has started. Only staff may
+  // update it; a resident's attempt is refused by the rules.
+  useAutoAdvanceRotation(house?.id ?? '', isHouseStaff);
 
   // React Query is the sole source of truth for guests; the Redux
   // state.guests.guests slot was a dead fallback (cacheGuests was never
@@ -123,11 +127,7 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
 
   // Fetch pending application count for operator badge
   // Only admins may read applications; a resident's query is refused (#197).
-  const token = useRoleToken();
-  const { data: appList } = useHouseApplications(
-    house?.id || '',
-    !!house?.id && isAdmin(token, house.id),
-  );
+  const { data: appList } = useHouseApplications(house?.id || '', isHouseStaff);
   const pendingCount = (appList ?? []).filter(
     (a: { status: string }) => a.status === 'pending',
   ).length;
