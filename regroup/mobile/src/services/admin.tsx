@@ -9,6 +9,7 @@ import { House } from '../entities/House';
 import { Admins } from '../types';
 import map from 'lodash/map';
 import { createInvitation } from './invitations';
+import { logException } from '../util/logging';
 
 export const adminCollection = collection(firestore, 'admins');
 
@@ -59,6 +60,27 @@ export async function sendAdminInvite(
 export async function getHouseAdmins(house: House): Promise<Admin[]> {
   const admins = await getAdmins('houseIds', 'array-contains', house.id);
   return map(admins, (admin) => admin);
+}
+
+/**
+ * The admins of one house, keyed by id, read one by one from house.adminIds
+ * (#183 item 4). The rules let a house's residents and admins read an admins
+ * doc listing that house, but refuse a list query (it can't prove the
+ * per-house check), so getHouseAdmins' query returns nothing to a resident.
+ * A missing or unreadable admin is skipped so the others still show.
+ */
+export async function getAdminsForHouse(house: House): Promise<Admins> {
+  const adminIds = house?.adminIds ?? [];
+  const results = await Promise.allSettled(adminIds.map((id) => getAdmin(id)));
+  const admins: Admins = {};
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      logException(result.reason, 'getAdminsForHouse: admin read failed');
+    } else if (result.value) {
+      admins[adminIds[index]] = { ...result.value, id: adminIds[index] } as Admin;
+    }
+  });
+  return admins;
 }
 
 /**

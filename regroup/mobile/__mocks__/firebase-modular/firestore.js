@@ -165,6 +165,9 @@ const constraintFactory =
   (kind) =>
   (...args) => ({ __isConstraint: true, tuple: constraint(kind, args) });
 
+// or(where(...), where(...)) is logged as ['or', ['where', ...], ['where', ...]].
+const or = (...filters) => ({ __isConstraint: true, tuple: ['or', ...filters.map((f) => f.tuple)] });
+
 async function getDoc(ref) {
   record({ op: 'get', path: ref.path });
   maybeFail('get', ref.path);
@@ -239,6 +242,7 @@ module.exports = {
   doc,
   query,
   where: constraintFactory('where'),
+  or,
   orderBy: constraintFactory('orderBy'),
   limit: constraintFactory('limit'),
   limitToLast: constraintFactory('limitToLast'),

@@ -78,7 +78,10 @@ class RatsDatePicker extends Component<Props & FieldProps, State> {
         <TouchableOpacity onPress={() => this.setOpen(true)}>
           <View pointerEvents="none">
             <RatsTextInput
-              placeholder={value ? undefined : format(new Date(), DATE_FORMAT)}
+              // Today's date here read as a stored value for an unset field,
+              // e.g. Date of Birth on My Profile (#183 item 13). The picker
+              // still opens on today.
+              placeholder={value ? undefined : 'Select a date'}
               styleType="secondary"
               field={{
                 name,

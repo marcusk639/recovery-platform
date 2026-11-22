@@ -35,6 +35,8 @@ jest.mock('../../../firebase-setup', () => {
 
   // The innermost collection (e.g. .doc(houseId).collection('chat'))
   const innerCollection = {
+    // Direct chats filter to the signed-in user's messages (#183 item 2).
+    where: jest.fn(function () { return this; }),
     orderBy: jest.fn(function () { return this; }),
     limit: jest.fn(function () { return this; }),
     onSnapshot,
@@ -72,6 +74,7 @@ jest.mock('../../../firebase-setup', () => {
 
   return {
     firestore: mockFirestore,
+    auth: { currentUser: { uid: 'user-a' } },
   };
 });
 

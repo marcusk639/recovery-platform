@@ -29,6 +29,11 @@ module.exports = {
   collectionGroup,
   query,
   where: constraint('where'),
+  // Namespaced RNFirebase took a composite filter as where(Filter.or(...)).
+  or:
+    (...filters) =>
+    (ref) =>
+      ref.where({ operator: 'OR', queries: filters }),
   orderBy: constraint('orderBy'),
   limit: constraint('limit'),
   startAfter: constraint('startAfter'),
