@@ -343,10 +343,14 @@ export const withSplash = <P extends object>(
 
     // A link held while signed out is delivered once a user signs in.
     const signedIn = isSignedInUser(userState.user);
-    const pendingAppLink = userState.pendingAppLink;
+    const pendingAppLink = userState.pendingAppLink ?? null;
+    const pendingAppLinkReceivedAt = userState.pendingAppLinkReceivedAt ?? null;
     useEffect(() => {
-      deliverPendingAppLink(pendingAppLink ?? null, { signedIn, dispatch });
-    }, [signedIn, pendingAppLink, dispatch]);
+      deliverPendingAppLink(
+        { pendingAppLink, pendingAppLinkReceivedAt },
+        { signedIn, dispatch },
+      );
+    }, [signedIn, pendingAppLink, pendingAppLinkReceivedAt, dispatch]);
 
     useEffect(() => {
       const checkResult = appIsReadyCheck();

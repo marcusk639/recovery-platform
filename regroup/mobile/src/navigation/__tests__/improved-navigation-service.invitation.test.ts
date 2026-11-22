@@ -76,3 +76,53 @@ describe('navigateToInvitation', () => {
     expect(() => improvedNavigationService.navigateToInvitation()).not.toThrow();
   });
 });
+
+describe('resetToStartRoute (leaving the invitation screen)', () => {
+  const dispatch = jest.fn();
+  const setRef = (ready: boolean) => {
+    (navigationRef as { current: unknown }).current = { isReady: () => ready, dispatch };
+  };
+  afterEach(() => {
+    (navigationRef as { current: unknown }).current = null;
+    dispatch.mockClear();
+  });
+  const resetRoutes = () => dispatch.mock.calls[0][0].payload.routes;
+
+  it('resets a guest to Main on the Guest tab', () => {
+    setRef(true);
+    improvedNavigationService.resetToStartRoute(createMockUser({ isGuest: true }));
+    expect(resetRoutes()).toEqual([
+      { name: Routes.Main, state: { index: 0, routes: [{ name: Routes.Guest }] } },
+    ]);
+  });
+
+  it('resets an admin to Main on the House tab', () => {
+    setRef(true);
+    improvedNavigationService.resetToStartRoute(createMockUser({ isAdmin: true }));
+    expect(resetRoutes()).toEqual([
+      { name: Routes.Main, state: { index: 0, routes: [{ name: Routes.House }] } },
+    ]);
+  });
+
+  it('resets an operator who has not finished setup to Setup', () => {
+    setRef(true);
+    improvedNavigationService.resetToStartRoute(
+      createMockUser({ isSuperAdmin: true, orgSetupCompleted: false }),
+    );
+    expect(resetRoutes()).toEqual([{ name: Routes.Setup }]);
+  });
+
+  it('resets nobody signed in to the landing screen', () => {
+    setRef(true);
+    improvedNavigationService.resetToStartRoute(null);
+    expect(resetRoutes()).toEqual([
+      { name: Routes.PriorAuth, state: { index: 0, routes: [{ name: Routes.InitialLanding }] } },
+    ]);
+  });
+
+  it('does nothing before the navigator is ready', () => {
+    setRef(false);
+    improvedNavigationService.resetToStartRoute(createMockUser({ isGuest: true }));
+    expect(dispatch).not.toHaveBeenCalled();
+  });
+});

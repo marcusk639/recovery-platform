@@ -147,31 +147,97 @@ describe('linkingConfig allowlist', () => {
   });
 });
 
-describe('isHandledElsewhere (parseAppLink is the guard)', () => {
+describe('isHandledElsewhere (parseAppLink decides, per prefix, on the full URL)', () => {
   it.each([
-    '?type=invitation&token=t1',
-    '?token=t1&type=invitation',
-    '?type=other&type=invitation&token=t1',
-    '?type=invitation&house=h1&email=a@rats-e2e.com',
-    'invite?token=t1',
-    '/invite?token=t1&utm_source=email',
-    'checkout-return?result=success',
-    '/checkout-return?result=portal',
-    'app/checkout-return?result=canceled',
-  ])('declines %s', (p) => {
-    expect(isHandledElsewhere(p)).toBe(true);
+    'regroup-app://?type=invitation&token=t1',
+    'regroup-app://?token=t1&type=invitation',
+    'regroup-app://?type=other&type=invitation&token=t1',
+    'com.rats.dev://?type=invitation&house=h1&email=a@rats-e2e.com',
+    'regroup-app://invite?token=t1',
+    'https://regroup-app.com/invite?token=t1&utm_source=email',
+    'regroup-app://checkout-return?result=success',
+    'https://regroup-app.com/checkout-return?result=portal',
+    'regroup-app://app/checkout-return?result=canceled',
+  ])('declines %s', (url) => {
+    expect(isHandledElsewhere(url)).toBe(true);
   });
 
   it('reads the whole query after the first ?, so a second ? hides nothing', () => {
-    expect(isHandledElsewhere('?utm=a?b&type=invitation&token=t1')).toBe(true);
+    expect(isHandledElsewhere('regroup-app://?utm=a?b&type=invitation&token=t1')).toBe(true);
   });
 
-  it.each(['app/house', 'auth/login', 'app/house?type=invitation', 'pricing'])(
-    'leaves %s to navigation',
-    (p) => {
-      expect(isHandledElsewhere(p)).toBe(false);
-    },
-  );
+  it.each([
+    'regroup-app://app/house',
+    'regroup-app://auth/login',
+    'regroup-app://app/house?type=invitation',
+    'https://regroup-app.com/pricing',
+    // The parser accepts these only on the custom schemes, so the guard
+    // does not claim them on the web origin either (no silent drop).
+    'https://regroup-app.com/?type=invitation&token=t1',
+    'https://regroup-app.com/app/checkout-return?result=success',
+  ])('leaves %s to navigation', (url) => {
+    expect(isHandledElsewhere(url)).toBe(false);
+  });
+});
+
+describe('linking getInitialURL and subscribe filter with the same parser', () => {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { Linking } = require('react-native');
+  let listeners: Array<(e: { url: string }) => void>;
+  const remove = jest.fn();
+  beforeEach(() => {
+    listeners = [];
+    jest.spyOn(Linking, 'addEventListener').mockImplementation((...args: unknown[]) => {
+      listeners.push(args[1] as (e: { url: string }) => void);
+      return { remove };
+    });
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  it.each([
+    ['an invitation (Splash delivers it)', 'regroup-app://?type=invitation&token=t1', null],
+    ['a checkout return', 'https://regroup-app.com/checkout-return?result=success', null],
+    ['a tab route', 'regroup-app://app/house', 'regroup-app://app/house'],
+    [
+      'an https root invitation the parser rejects',
+      'https://regroup-app.com/?type=invitation&token=t1',
+      'https://regroup-app.com/?type=invitation&token=t1',
+    ],
+  ])('initial URL: %s', async (_label, url, expected) => {
+    jest.spyOn(Linking, 'getInitialURL').mockResolvedValue(url);
+    await expect(linkingConfig.getInitialURL!()).resolves.toBe(expected);
+  });
+
+  it('initial URL: none', async () => {
+    jest.spyOn(Linking, 'getInitialURL').mockResolvedValue(null);
+    await expect(linkingConfig.getInitialURL!()).resolves.toBeNull();
+  });
+
+  it('forwards only URLs the parser does not claim, and unsubscribes', () => {
+    const seen: string[] = [];
+    const unsubscribe = linkingConfig.subscribe!((url) => seen.push(url)) as () => void;
+    for (const url of [
+      'regroup-app://?type=invitation&token=t1',
+      'regroup-app://app/activities',
+      'regroup-app://app/checkout-return?result=portal',
+      'https://regroup-app.com/app/checkout-return?result=success',
+    ]) {
+      listeners.forEach((l) => l({ url }));
+    }
+    expect(seen).toEqual([
+      'regroup-app://app/activities',
+      'https://regroup-app.com/app/checkout-return?result=success',
+    ]);
+    unsubscribe();
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('an unclaimed https checkout-return path resolves to no screen', () => {
+    signInAs({ uid: 'u1', isAnonymous: false });
+    expect(
+      linkingConfig.getStateFromPath!('/app/checkout-return?result=success', linkingConfig.config),
+    ).toBeUndefined();
+  });
 });
 
 describe('app/* links need a signed-in user', () => {

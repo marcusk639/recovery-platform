@@ -5,9 +5,10 @@
  * Only an allowlist of routes resolves here: the six Main tabs and the two
  * auth screens. Nothing that opens outside SubscriptionGate, nothing
  * operator-only and nothing paywalled is listed. Invitation and checkout-return
- * links are not navigation: parseAppLink / deliverAppLink handle them, so this
- * config declines every URL parseAppLink claims (getStateFromPath returns
- * undefined).
+ * links are not navigation: parseAppLink / deliverAppLink handle them (Splash),
+ * so getInitialURL and subscribe hold back every URL parseAppLink claims. They
+ * see the full URL, so the guard follows the parser's per-prefix rules exactly
+ * (getStateFromPath only sees the path, which loses the prefix).
  *
  * An `app/*` (Main tab) link opens only for a signed-in, non-anonymous user.
  * Signed out or anonymous, it is dropped and the app stays where it is (the
@@ -25,6 +26,7 @@ import {
   getStateFromPath as defaultGetStateFromPath,
   LinkingOptions,
 } from '@react-navigation/native';
+import { Linking } from 'react-native';
 import { getAuth } from '@react-native-firebase/auth';
 import { appLinkPrefixes } from './appLinkPrefixes';
 import { parseAppLink } from '../services/appLinks/parseAppLink';
@@ -32,13 +34,8 @@ import { RootStackParamList, Routes } from './types';
 
 const stripLeadingSlashes = (path: string): string => path.replace(/^\/+/, '');
 
-/**
- * URLs handled by parseAppLink/deliverAppLink, never by navigation state.
- * React Navigation passes the path after the prefix (query included), so it is
- * re-read on the canonical scheme: every accepted prefix shares these paths.
- */
-export const isHandledElsewhere = (path: string): boolean =>
-  parseAppLink(`regroup-app://${stripLeadingSlashes(path)}`) !== null;
+/** Full URLs handled by parseAppLink/deliverAppLink, never by navigation state. */
+export const isHandledElsewhere = (url: string): boolean => parseAppLink(url) !== null;
 
 const isMainRoute = (path: string): boolean =>
   /^app(\/|\?|#|$)/.test(stripLeadingSlashes(path));
@@ -77,8 +74,19 @@ export const linkingConfig: LinkingOptions<RootStackParamList> = {
     },
   },
 
+  async getInitialURL() {
+    const url = await Linking.getInitialURL();
+    return url && !isHandledElsewhere(url) ? url : null;
+  },
+
+  subscribe(listener) {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      if (!isHandledElsewhere(url)) listener(url);
+    });
+    return () => subscription.remove();
+  },
+
   getStateFromPath: (path, options) => {
-    if (isHandledElsewhere(path)) return undefined;
     if (isMainRoute(path) && !isSignedIn()) return undefined;
     return defaultGetStateFromPath(path, options);
   },

@@ -144,7 +144,27 @@ describe('parseQuery', () => {
     );
   });
 
-  it('returns null on malformed percent-encoding', () => {
-    expect(parseQuery('a=%ZZ')).toBeNull();
+  it('returns null on malformed percent-encoding in a key the parser reads', () => {
+    expect(parseQuery('token=%ZZ')).toBeNull();
+    expect(parseQuery('type=%E0%A4%A')).toBeNull();
+    expect(parseQuery('result=%')).toBeNull();
+    expect(parseQuery('email=a%G0@x.com')).toBeNull();
+  });
+
+  it('skips a malformed pair in any other key', () => {
+    expect(parseQuery('utm_source=%ZZ&token=abc')).toEqual(new Map([['token', ['abc']]]));
+    expect(parseQuery('%ZZ=1&a=2')).toEqual(new Map([['a', ['2']]]));
+  });
+});
+
+describe('parseAppLink with a malformed tracking parameter', () => {
+  it('still parses the invitation', () => {
+    expect(
+      parseAppLink('https://regroup-app.com/invite?token=abc&utm_campaign=50%off'),
+    ).toEqual({ kind: 'invitation', token: 'abc' });
+  });
+
+  it('still rejects a malformed token', () => {
+    expect(parseAppLink('regroup-app://invite?token=ab%ZZ&utm_source=x')).toBeNull();
   });
 });

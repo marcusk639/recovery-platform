@@ -1,7 +1,10 @@
 import React from "react";
 import { FormikProps, withFormik } from "formik";
 import { useAppSelector, useAppDispatch } from "../../state/store";
-import { updateUser as updateUserRTK } from "../../state/slices/userSlice";
+import {
+  clearInvitation,
+  updateUser as updateUserRTK,
+} from "../../state/slices/userSlice";
 import { useUpdateGuest } from "../../state/queries/guestQueries";
 import { useQueryClient } from "@tanstack/react-query";
 import { guestKeys } from "../../state/queries/guestQueries";
@@ -42,6 +45,8 @@ export interface NewAccountFormProps {
   invitation: Invitation;
   guest: Guest;
   navigation: AuthScreenNavigationProp;
+  /** Clears state.user.invitation once the account is complete. */
+  clearInvitation?: () => void;
 }
 
 const NewAccountForm = withFormik<NewAccountFormProps, Partial<User>>({
@@ -97,6 +102,10 @@ const NewAccountForm = withFormik<NewAccountFormProps, Partial<User>>({
         infoEntered: updatedUser!.infoEntered,
       });
 
+      // Sign-up is finished: the invitation it used is spent (App.tsx routes
+      // with it, so a stale one would send this user back to SignUp).
+      props.clearInvitation?.();
+
       // Navigate to the main app - this should happen after state updates
       // to prevent App.tsx from remounting the navigator and resetting navigation
       navigateToMainTab(
@@ -140,6 +149,7 @@ const NewAccountFormWrapper: React.FC<any> = (props) => {
       user={user}
       invitation={invitation}
       guest={guest}
+      clearInvitation={() => dispatch(clearInvitation())}
       updateUser={(user: User, values: Partial<User>) =>
         // Hardened 2026-07-05: without .unwrap(), this resolved to the raw
         // action envelope ({type, payload, meta}), not the User — so every

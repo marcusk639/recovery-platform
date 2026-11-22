@@ -252,6 +252,31 @@ class ImprovedNavigationService {
     }
   }
 
+  /**
+   * Leaves the invitation screen: resets to the start route the user would
+   * get with no invitation (getInitialNavigation), e.g. Main on the user's
+   * tab. Used after "Accept as this account" and "Continue to the app".
+   */
+  resetToStartRoute(user: Partial<User> | User | null) {
+    if (!navigationRef.current?.isReady()) return;
+    const { initialRoute, authInitialRoute, initialMainRoute } = this.getInitialNavigation(user);
+    let route: { name: keyof RootStackParamList; state?: any };
+    if (initialRoute === Routes.Main) {
+      route = {
+        name: Routes.Main,
+        state: { index: 0, routes: [{ name: initialMainRoute ?? Routes.House }] },
+      };
+    } else if (initialRoute === Routes.PriorAuth) {
+      route = {
+        name: Routes.PriorAuth,
+        state: { index: 0, routes: [{ name: authInitialRoute ?? Routes.InitialLanding }] },
+      };
+    } else {
+      route = { name: initialRoute as keyof RootStackParamList };
+    }
+    navigationRef.current.dispatch(CommonActions.reset({ index: 0, routes: [route] }));
+  }
+
   goBack() {
     if (navigationRef.current) {
       navigationRef.current.goBack();

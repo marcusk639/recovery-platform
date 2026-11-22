@@ -1,0 +1,60 @@
+# Deep link: a token invitation link that cold-starts the app for a user who is
+# already signed in (launch P5 Task 3, fix round 1). The invitation screen
+# (testID invitation-info) offers "Accept as this account" and "Continue to the
+# app"; both end on the house tab.
+#   1. continue: e2e-invite-token-continue, tap continue-to-app-button.
+#   2. accept:   e2e-invite-token-accept, tap accept-invitation-button
+#      (redeemInvitation grants resident B a manager role in test-house-123).
+# Needs the seeded invitations to test-guest-b@rats-e2e.com
+# (maestro/scripts/seed/index.js). Check the redeem afterwards with:
+#   node maestro/scripts/assert-firestore.js invitations/e2e-invite-token-accept redeemedByUid=e2e-guest-b
+# Re-seed before a re-run: the accepted invitation is used up.
+# Run: maestro --device <serial> test -e APP_ID=… -e E2E_TEST_PASSWORD=… maestro/flows/deep-link-invitation-accept.yaml
+appId: ${APP_ID}
+tags:
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-b@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+# Case 1: continue to the app, cold.
+- stopApp
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: "regroup-app://?type=invitation&token=e2e-invite-token-continue"
+- extendedWaitUntil:
+    visible:
+      id: "invitation-info"
+    timeout: 30000
+- assertVisible:
+    id: "accept-invitation-button"
+- tapOn:
+    id: "continue-to-app-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 30000
+- assertNotVisible:
+    id: "invitation-info"
+# Case 2: accept as this account, cold.
+- stopApp
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: "regroup-app://?type=invitation&token=e2e-invite-token-accept"
+- extendedWaitUntil:
+    visible:
+      id: "invitation-info"
+    timeout: 30000
+- tapOn:
+    id: "accept-invitation-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 60000
+- assertNotVisible:
+    id: "accept-invitation-error"

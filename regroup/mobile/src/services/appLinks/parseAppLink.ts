@@ -37,10 +37,34 @@ const URL_PARTS = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(?:\?([^#]*))?(?:#.
 
 type Query = Map<string, string[]>;
 
+// The keys parseAppLink reads. Malformed percent-encoding in one of them
+// makes the whole link invalid; in any other key (utm_* and the like) the pair
+// is skipped.
+const STRICT_KEYS = new Set([
+  'token',
+  'type',
+  'result',
+  'invitationType',
+  'house',
+  'inviter',
+  'email',
+  'owner',
+  'initialPhase',
+]);
+
+const decode = (raw: string): string | null => {
+  try {
+    return decodeURIComponent(raw.replace(/\+/g, ' '));
+  } catch {
+    return null;
+  }
+};
+
 /**
  * Parses a query string (no leading `?`). Everything after the first `?` is
- * query, so a second `?` stays inside a value. Returns null when any part has
- * malformed percent-encoding.
+ * query, so a second `?` stays inside a value. Returns null when a key the
+ * parser reads has malformed percent-encoding; other malformed pairs are
+ * skipped.
  */
 export const parseQuery = (query: string): Query | null => {
   const params: Query = new Map();
@@ -49,13 +73,12 @@ export const parseQuery = (query: string): Query | null => {
     const eq = pair.indexOf('=');
     const rawKey = eq === -1 ? pair : pair.slice(0, eq);
     const rawValue = eq === -1 ? '' : pair.slice(eq + 1);
-    let key: string;
-    let value: string;
-    try {
-      key = decodeURIComponent(rawKey.replace(/\+/g, ' '));
-      value = decodeURIComponent(rawValue.replace(/\+/g, ' '));
-    } catch {
-      return null;
+    const key = decode(rawKey);
+    const value = decode(rawValue);
+    if (key === null || value === null) {
+      if (key !== null && STRICT_KEYS.has(key)) return null;
+      if (key === null && STRICT_KEYS.has(rawKey)) return null;
+      continue;
     }
     params.set(key, [...(params.get(key) ?? []), value]);
   }

@@ -163,6 +163,22 @@ async function main() {
     createdAt: d.iso(now),
   });
 
+  // Two unredeemed manager invitations to resident B's own email, for the
+  // signed-in cold-start flow (deep-link-invitation-accept.yaml): one is
+  // accepted as that account, the other is left with "Continue to the app".
+  // A manager invitation needs no resident slot and is allowed to a resident.
+  for (const token of ['e2e-invite-token-accept', 'e2e-invite-token-continue']) {
+    await db.doc(`invitations/${token}`).set({
+      token,
+      inviterUid: manager.uid,
+      houseId: d.HOUSE,
+      role: 'admin',
+      invitedEmail: guestB.email,
+      expiresAt: d.iso(now + 7 * 24 * 60 * 60 * 1000),
+      createdAt: d.iso(now),
+    });
+  }
+
   // 6. After the dispute-mirror trigger runs, pin the entry the operator flow looks for.
   await sleep(4000);
   await db.doc(`house-disputes/${d.HOUSE}`).set({

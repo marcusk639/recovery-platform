@@ -34,6 +34,7 @@ const mockUpdateUserThunkCreator = jest.fn((arg: any) => ({
 }));
 jest.mock("../../../state/slices/userSlice", () => ({
   updateUser: (arg: any) => mockUpdateUserThunkCreator(arg),
+  clearInvitation: () => ({ type: "user/clearInvitation" }),
 }));
 
 jest.mock("../../../hooks/useSelectedGuest", () => ({
@@ -47,11 +48,14 @@ jest.mock("../../../state/queries/guestQueries", () => ({
 }));
 
 jest.mock("@tanstack/react-query", () => ({
-  useQueryClient: () => ({ fetchQuery: jest.fn() }),
+  // getGuest reads the resident record through the query client.
+  useQueryClient: () => ({
+    fetchQuery: jest.fn(() => Promise.resolve({ id: "guest-1", houseId: "h1" })),
+  }),
 }));
 
 import React from "react";
-import { render } from "@testing-library/react-native";
+import { act, render } from "@testing-library/react-native";
 import NewAccountFormWrapper from "../NewAccountForm";
 
 describe("NewAccountFormWrapper", () => {
@@ -73,5 +77,28 @@ describe("NewAccountFormWrapper", () => {
     expect(mockUnwrap).toHaveBeenCalled();
     // Resolves to the real User (from .unwrap()), not the {type, payload} envelope.
     expect(result).toEqual({ id: "user-1", isGuest: true });
+  });
+
+  describe("finishing sign-up clears the invitation", () => {
+    it("clears state.user.invitation once the account is complete, then opens Main", async () => {
+      const navigation = { navigate: jest.fn() };
+      render(<NewAccountFormWrapper navigation={navigation as any} />);
+      await act(async () => {
+        await capturedProps.handleSubmit();
+      });
+      expect(mockDispatch).toHaveBeenCalledWith({ type: "user/clearInvitation" });
+      expect(navigation.navigate).toHaveBeenCalledWith("main", expect.anything());
+    });
+
+    it("keeps the invitation when saving the account fails", async () => {
+      mockUnwrap.mockImplementationOnce(() => Promise.reject(new Error("offline")));
+      const navigation = { navigate: jest.fn() };
+      render(<NewAccountFormWrapper navigation={navigation as any} />);
+      await act(async () => {
+        await capturedProps.handleSubmit();
+      });
+      expect(mockDispatch).not.toHaveBeenCalledWith({ type: "user/clearInvitation" });
+      expect(navigation.navigate).not.toHaveBeenCalled();
+    });
   });
 });

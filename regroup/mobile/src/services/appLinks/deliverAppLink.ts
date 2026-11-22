@@ -5,9 +5,10 @@
  *   Signed out, that is the hold: the initial route decision opens signup with
  *   the invitation, and signup consumes it. Signed in, the invitation screen
  *   opens now (improvedNavigationService.navigateToInvitation).
- * - Checkout return: signed out, held in state.user.pendingAppLink; Splash
- *   hands it to deliverPendingAppLink once a user signs in. Signed in, it is
- *   delivered now (Task 10 refreshes the plan state here).
+ * - Checkout return: signed out, held in state.user.pendingAppLink (with the
+ *   time it arrived); Splash hands it to deliverPendingAppLink once a user
+ *   signs in, which delivers it if it is under 15 minutes old. Logout clears
+ *   it. Signed in, it is delivered now (Task 10 refreshes the plan state here).
  *
  * "Signed in" means a user who is not anonymous (isSignedInUser).
  */
@@ -46,13 +47,33 @@ export function deliverAppLink(link: AppLink, { signedIn, dispatch }: DeliveryCo
   }
 }
 
+/** A held link older than this is dropped at sign-in instead of delivered. */
+export const PENDING_APP_LINK_TTL_MS = 15 * 60 * 1000;
+
+export interface HeldAppLink {
+  pendingAppLink: AppLink | null;
+  pendingAppLinkReceivedAt: number | null;
+}
+
 /**
  * Delivers the held link once a user is signed in, clearing it first so it is
- * delivered once. Returns whether a link was delivered.
+ * delivered once. A link held for more than 15 minutes (or with no receive
+ * time) is cleared and not delivered. Returns whether a link was delivered.
  */
-export function deliverPendingAppLink(pending: AppLink | null, ctx: DeliveryContext): boolean {
-  if (!pending || !ctx.signedIn) return false;
+export function deliverPendingAppLink(
+  held: HeldAppLink,
+  ctx: DeliveryContext,
+  now: number = Date.now(),
+): boolean {
+  const { pendingAppLink, pendingAppLinkReceivedAt } = held;
+  if (!pendingAppLink || !ctx.signedIn) return false;
   ctx.dispatch(clearPendingAppLink());
-  deliverAppLink(pending, ctx);
+  if (
+    pendingAppLinkReceivedAt === null ||
+    now - pendingAppLinkReceivedAt > PENDING_APP_LINK_TTL_MS
+  ) {
+    return false;
+  }
+  deliverAppLink(pendingAppLink, ctx);
   return true;
 }

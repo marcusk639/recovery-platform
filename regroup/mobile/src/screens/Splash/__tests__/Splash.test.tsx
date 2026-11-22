@@ -345,6 +345,7 @@ const baseUserState = {
   anonymous: false,
   subscriptionStatus: null,
   pendingAppLink: null as any,
+  pendingAppLinkReceivedAt: null as any,
 };
 
 // ─── Test component factory ────────────────────────────────────────────────────
@@ -901,11 +902,29 @@ describe("Splash (withSplash HOC)", () => {
 
       it("delivers a held link once a user is signed in, clearing it", async () => {
         const held = { kind: "invitation", token: "tok-2" };
-        renderSplash({ user: signedInUser, loggedIn: true, pendingAppLink: held });
+        renderSplash({
+          user: signedInUser,
+          loggedIn: true,
+          pendingAppLink: held,
+          pendingAppLinkReceivedAt: Date.now(),
+        });
         await act(async () => {});
 
         expect(mockDispatch).toHaveBeenCalledWith({ type: "user/clearPendingAppLink" });
         expect(navigateToInvitation).toHaveBeenCalledTimes(1);
+      });
+
+      it("drops a held link older than 15 minutes on sign-in", async () => {
+        renderSplash({
+          user: signedInUser,
+          loggedIn: true,
+          pendingAppLink: { kind: "invitation", token: "tok-old" },
+          pendingAppLinkReceivedAt: Date.now() - 16 * 60 * 1000,
+        });
+        await act(async () => {});
+
+        expect(mockDispatch).toHaveBeenCalledWith({ type: "user/clearPendingAppLink" });
+        expect(navigateToInvitation).not.toHaveBeenCalled();
       });
 
       it("keeps a held link while the user is anonymous", async () => {
