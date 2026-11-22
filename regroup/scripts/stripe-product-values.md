@@ -1,7 +1,21 @@
 # Stripe Product Values — Regroup Platform
 
-**Mode:** TEST  
-**Generated:** 2026-06-28 via `scripts/setup-stripe-all.js`  
+**Mode:** LIVE (account `acct_1GfryQKsstp3aqoP`), checked against Stripe 2026-11-22  
+**First generated:** 2026-06-28 via `scripts/setup-stripe-all.js` (test mode)
+
+> **Where the monthly (and annual) prices are kept.** Three places, which must agree:
+>
+> | What                                      | File                                                    | Who reads it                                                                  |
+> | ----------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
+> | Amount per tier, in cents (`amountCents`) | `regroup/functions/src/config.ts`, `SUBSCRIPTION_TIERS` | the caps and features per tier; `stripe:verify-live` checks Stripe against it |
+> | Live Stripe price IDs                     | `regroup/scripts/stripe-prices.env`                     | `npm run env:write` copies it into the production deploy config               |
+> | The human-readable table                  | this file, section 1                                    | people                                                                        |
+>
+> The app and the web show what Stripe returns for those IDs (`getTierCatalog`), not
+> `amountCents`. Changing a price means a new Stripe price (prices are immutable), its ID in
+> `stripe-prices.env`, `amountCents` in `config.ts`, and this table; then
+> `npm --prefix functions run stripe:verify-live -- --project phoenix-cleanhouse` must pass.
+
 **API Version:** `2026-01-28.clover` — matches `PINNED_API_VERSION` in `functions/src/util/stripeApiVersion.ts` [`S7`]
 
 > Non-secret values (price IDs, `STRIPE_API_VERSION`, `TIER_BILLING_ENABLED`) go in
@@ -55,14 +69,13 @@ checked against Stripe 2026-11-22 (the annual ones were created that day). The p
 
 ### Product IDs
 
-| Product                            | Stripe Product ID     |
-| ---------------------------------- | --------------------- |
-| Regroup Traditional — Starter      | `prod_UmlI5qr0ndeAdx` |
-| Regroup Traditional — Professional | `prod_UmlIecHlx0WO6w` |
-| Regroup Traditional — Enterprise   | `prod_UmlIMnr2dWkI2N` |
-| Regroup Oxford — Standard          | `prod_UmlI2YAQvlYYQY` |
-| Regroup Oxford — Plus              | `prod_UmlIcHFACN7o7g` |
-| Regroup Oxford — Network           | `prod_UmlIEjQp6WCsqu` |
+| Product                                                   | Stripe Product ID     |
+| --------------------------------------------------------- | --------------------- |
+| Regroup Traditional (all three tiers, monthly and annual) | `prod_UhV6sgrWbOgsyg` |
+| Regroup Oxford (all three tiers, monthly and annual)      | `prod_UhV71tzKC4XToy` |
+
+In live mode each catalog is one product carrying six prices. The per-tier products
+`prod_UmlI…` (Starter … Network) are the 2026-06-28 test-mode products.
 
 ---
 

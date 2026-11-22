@@ -496,7 +496,7 @@ await admin.firestore().collection('houses').doc('custom-house-id').set({
 // Add custom user
 await admin.auth().createUser({
   email: 'custom@rats-e2e.com',
-  password: 'CustomPass123!',
+  password: process.env.E2E_TEST_PASSWORD, // never a literal (mobile/e2e/SECURITY-test-credentials.md)
 });
 ```
 
