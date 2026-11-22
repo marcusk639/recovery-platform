@@ -70,6 +70,12 @@ jest.mock("../../../util/roles", () => ({
   isAdmin: (...args: any[]) => (mockIsAdmin as any)(...args),
 }));
 
+// Owners and managers may see a resident's payments; peer leaders may not.
+let mockMayViewHouseMoney = true;
+jest.mock("../../../state/queries/houseTierQueries", () => ({
+  useMayViewHouseMoney: () => mockMayViewHouseMoney,
+}));
+
 // ─── Activity hooks ────────────────────────────────────────────────────────────
 const mockUseWeekSummary = jest.fn();
 const mockUseComplianceCheck = jest.fn();
@@ -579,6 +585,29 @@ describe("GuestHome", () => {
     it("renders the payment-history card", () => {
       const { getByTestId } = renderScreen();
       expect(getByTestId("payment-history-card")).toBeTruthy();
+    });
+
+    // The store's signed-in user is "admin-1"; BASE_GUEST belongs to "user-1".
+    it("hides another resident's payment history from staff who may not see house money", () => {
+      mockMayViewHouseMoney = false;
+      try {
+        const { queryByTestId } = renderScreen();
+        expect(queryByTestId("payment-history-card")).toBeNull();
+      } finally {
+        mockMayViewHouseMoney = true;
+      }
+    });
+
+    it("shows a peer leader their own payment history", () => {
+      mockMayViewHouseMoney = false;
+      try {
+        const { getByTestId } = renderScreen({
+          selectedGuest: { ...BASE_GUEST, userId: "admin-1" },
+        });
+        expect(getByTestId("payment-history-card")).toBeTruthy();
+      } finally {
+        mockMayViewHouseMoney = true;
+      }
     });
   });
 

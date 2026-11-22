@@ -7,6 +7,7 @@ import { View, TouchableOpacity, Share, Alert } from "react-native";
 
 // Hooks
 import { useGuest, useGuests } from "../../state/queries";
+import { useMayViewHouseMoney } from "../../state/queries/houseTierQueries";
 import { useAppSelector } from "../../state/store";
 import { useModal } from "../../context";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
@@ -228,6 +229,12 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
 
   // Use the most up-to-date guest data
   const currentGuest = queryGuest || guest;
+
+  // A resident's payments: their own, or the house's owners and managers.
+  // Peer leaders see no house money, and the rules refuse their reads.
+  const mayViewHouseMoney = useMayViewHouseMoney(house?.id ?? "");
+  const mayViewPayments =
+    mayViewHouseMoney || (!!user?.id && currentGuest?.userId === user.id);
 
   // Activity system: pre-fetch week summary (hooks must be called before early returns).
   // React Query is the sole source of truth — the prior `hooks/activity/useWeekSummary`
@@ -522,16 +529,18 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
           />
         );
       })()}
-      <StatSection
-        name="Payment History"
-        description="View past payments"
-        iconName="chevron-right"
-        iconColor={color.dark_grey}
-        boxedIconName="history"
-        iconBackgroundColor={color.dark_grey}
-        onPress={() => navigation.navigate(Routes.PaymentHistory)}
-        testID="payment-history-card"
-      />
+      {mayViewPayments && (
+        <StatSection
+          name="Payment History"
+          description="View past payments"
+          iconName="chevron-right"
+          iconColor={color.dark_grey}
+          boxedIconName="history"
+          iconBackgroundColor={color.dark_grey}
+          onPress={() => navigation.navigate(Routes.PaymentHistory)}
+          testID="payment-history-card"
+        />
+      )}
 
       {/******************************* MAKE A PAYMENT (guest only) *******************************/}
       <AuthConsumer>
