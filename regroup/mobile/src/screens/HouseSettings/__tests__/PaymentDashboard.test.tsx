@@ -211,6 +211,27 @@ describe("PaymentDashboard", () => {
     expect(queryByTestId("manual-payment-fab")).toBeNull();
   });
 
+  // resolveFailedPaymentOffline refuses anyone below manager, so a peer leader
+  // sees the failed payment but no Mark Resolved that always fails.
+  it("shows a peer leader a failed payment without Mark Resolved", async () => {
+    setupStore({ g1: { id: "g1", userId: "u1", firstName: "Alice", lastName: "Smith" } });
+    mockMayEditRentMoney.mockReturnValue(false);
+    mockGetHousePaymentRecords.mockResolvedValue([
+      {
+        id: "pi_failed_1",
+        guestId: "g1",
+        houseId: "house1",
+        amount: 50000,
+        status: "failed",
+        createdAt: new Date().toISOString(),
+        description: "Rent Payment",
+      },
+    ]);
+    const { findByTestId, queryByTestId } = renderDashboard();
+    await findByTestId("failed-payment-row-pi_failed_1");
+    expect(queryByTestId("mark-resolved-pi_failed_1")).toBeNull();
+  });
+
   it("renders StalePendingBanner when there are stale pending payments", async () => {
     setupStore({
       g1: { id: "g1", userId: "u1", firstName: "Alice", lastName: "Smith" },

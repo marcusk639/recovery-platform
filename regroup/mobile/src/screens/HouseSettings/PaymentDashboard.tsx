@@ -305,6 +305,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
           houseId={house?.id ?? ""}
           guestNames={guestNames}
           loadError={failedPaymentsError}
+          canResolve={canRecordPayments}
         />
         <StalePendingBanner
           stalePendingPayments={stalePendingPayments}
