@@ -14,18 +14,18 @@ import { getRentRoiMetrics } from '../rentRoi';
 beforeEach(() => resetOpLog());
 
 describe('getRentRoiMetrics', () => {
-  it('asks rentRoiMetrics for the house from the start date', async () => {
+  it('asks rentRoiMetrics for the house from the start instant', async () => {
     seedCall('rentRoiMetrics', { available: true, hoursSavedEstimate: 1.5 });
 
-    const result = await getRentRoiMetrics('h1', '2026-11-01');
+    const result = await getRentRoiMetrics('h1', '2026-11-01T05:00:00.000Z');
 
     expect(getOpLog()).toEqual([
-      { op: 'call', path: 'rentRoiMetrics', data: { houseId: 'h1', startDate: '2026-11-01' } },
+      { op: 'call', path: 'rentRoiMetrics', data: { houseId: 'h1', startAt: '2026-11-01T05:00:00.000Z' } },
     ]);
     expect(result).toEqual({ available: true, hoursSavedEstimate: 1.5 });
   });
 
-  it('sends no dates for all time, which the callable reads as no bound', async () => {
+  it('sends no start for all time, which the callable reads as no bound', async () => {
     await getRentRoiMetrics('h1');
 
     expect(getOpLog()[0].data).toEqual({ houseId: 'h1' });

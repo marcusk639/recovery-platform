@@ -24,22 +24,21 @@ export interface RentRoiUpgradeRequired {
 export type RentRoiResult = RentRoiMetrics | RentRoiUpgradeRequired;
 
 /**
- * Rent-collection ROI for a house (#32). Dates are YYYY-MM-DD; leave them out
- * for all time. The server gates it by the plan's `analytics` capability and
- * refuses anyone but the house's owner.
+ * Rent-collection ROI for a house (#32). `startAt` is the period's start as an
+ * ISO instant (so it follows the caller's local day boundaries, not UTC dates);
+ * leave it out for all time. The server gates it by the plan's `analytics`
+ * capability and refuses anyone but the house's owner.
  */
 export async function getRentRoiMetrics(
   houseId: string,
-  startDate?: string,
-  endDate?: string,
+  startAt?: string,
 ): Promise<RentRoiResult> {
   const result = await httpsCallable(
     functions,
     'rentRoiMetrics',
   )({
     houseId,
-    ...(startDate ? { startDate } : {}),
-    ...(endDate ? { endDate } : {}),
+    ...(startAt ? { startAt } : {}),
   });
   return result.data as RentRoiResult;
 }

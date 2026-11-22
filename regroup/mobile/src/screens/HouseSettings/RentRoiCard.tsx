@@ -6,8 +6,8 @@ import { color, fontSize, normalize } from '../../styles/theme';
 
 interface Props {
   houseId: string;
-  /** YYYY-MM-DD; undefined means all time. */
-  startDate?: string;
+  /** Period start as an ISO instant; undefined means all time. */
+  startAt?: string;
 }
 
 const dollars = (cents: number) =>
@@ -26,8 +26,8 @@ const Stat = ({ label, value, testID }: { label: string; value: string; testID: 
  * nothing while loading, when the plan lacks analytics, or for staff other than
  * the owner, whom the server refuses.
  */
-const RentRoiCard: React.FC<Props> = ({ houseId, startDate }) => {
-  const { data, error } = useRentRoiMetrics(houseId, startDate);
+const RentRoiCard: React.FC<Props> = ({ houseId, startAt }) => {
+  const { data, error } = useRentRoiMetrics(houseId, startAt);
   if (error) {
     const code = String((error as { code?: string }).code ?? '');
     if (code.includes('permission-denied')) return null;

@@ -454,6 +454,25 @@ describe("rentRoiMetrics — hours saved (#32)", () => {
     expect(result).toMatchObject({ automatedCollectionCount: 1, hoursSavedEstimate: 0.2 });
   });
 
+  it("windows by the caller's instant, not the UTC date (F-795a32)", async () => {
+    // The operator's month starts at local midnight, 2026-06-01T04:00Z (UTC-4).
+    // A payment at 2026-05-31 21:00 local is 2026-06-01T01:00Z: a UTC date inside
+    // June, but before the caller's period start.
+    mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
+      stripe("pi_late_may", "2026-06-01T01:00:00.000Z"),
+      stripe("pi_june", "2026-06-01T05:00:00.000Z"),
+    ]);
+
+    const result = await call({ houseId: "house-1", startAt: "2026-06-01T04:00:00.000Z" });
+    expect(result).toMatchObject({ paymentCount: 1, automatedCollectionCount: 1 });
+  });
+
+  it("rejects a startAt that isn't an ISO instant", async () => {
+    await expect(call({ houseId: "house-1", startAt: "yesterday" })).rejects.toMatchObject({
+      code: "invalid-argument",
+    });
+  });
+
   it("saves nothing when every payment was recorded by hand", async () => {
     mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
       manual,

@@ -19,11 +19,11 @@ const wrapper = ({ children }: { children: React.ReactNode }) =>
 beforeEach(() => jest.clearAllMocks());
 
 describe('useRentRoiMetrics', () => {
-  it('fetches the house from the start date', async () => {
+  it('fetches the house from the start instant', async () => {
     (getRentRoiMetrics as jest.Mock).mockResolvedValue({ available: true });
-    const { result } = renderHook(() => useRentRoiMetrics('h1', '2026-11-01'), { wrapper });
+    const { result } = renderHook(() => useRentRoiMetrics('h1', '2026-11-01T05:00:00.000Z'), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(getRentRoiMetrics).toHaveBeenCalledWith('h1', '2026-11-01');
+    expect(getRentRoiMetrics).toHaveBeenCalledWith('h1', '2026-11-01T05:00:00.000Z');
   });
 
   it('logs a failure', async () => {

@@ -24,9 +24,9 @@ const metrics = {
 describe('RentRoiCard', () => {
   it('shows collected, on-time, outstanding and the hours-saved estimate', () => {
     mockQuery.mockReturnValue({ data: metrics, error: null });
-    const { getByTestId, getByText } = render(<RentRoiCard houseId="h1" startDate="2026-11-01" />);
+    const { getByTestId, getByText } = render(<RentRoiCard houseId="h1" startAt="2026-11-01T05:00:00.000Z" />);
 
-    expect(mockQuery).toHaveBeenCalledWith('h1', '2026-11-01');
+    expect(mockQuery).toHaveBeenCalledWith('h1', '2026-11-01T05:00:00.000Z');
     expect(getByTestId('rent-roi-collected')).toHaveTextContent('$1,250.00Collected');
     expect(getByTestId('rent-roi-on-time')).toHaveTextContent('80%On time');
     expect(getByTestId('rent-roi-outstanding')).toHaveTextContent('$300.50Outstanding');

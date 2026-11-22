@@ -5,15 +5,15 @@ import { logException } from '../../util/logging';
 
 export const rentRoiKeys = {
   all: ['rentRoi'] as const,
-  metrics: (houseId: string, startDate?: string) =>
-    [...rentRoiKeys.all, houseId, startDate ?? 'all'] as const,
+  metrics: (houseId: string, startAt?: string) =>
+    [...rentRoiKeys.all, houseId, startAt ?? 'all'] as const,
 };
 
-/** The house's rent-collection ROI from `startDate` (YYYY-MM-DD) to today, or for all time. */
-export const useRentRoiMetrics = (houseId: string, startDate?: string) => {
+/** The house's rent-collection ROI from `startAt` (an ISO instant) to now, or for all time. */
+export const useRentRoiMetrics = (houseId: string, startAt?: string) => {
   const result = useQuery<RentRoiResult>({
-    queryKey: rentRoiKeys.metrics(houseId, startDate),
-    queryFn: () => getRentRoiMetrics(houseId, startDate),
+    queryKey: rentRoiKeys.metrics(houseId, startAt),
+    queryFn: () => getRentRoiMetrics(houseId, startAt),
     enabled: !!houseId,
     staleTime: 60_000,
     retry: false,

@@ -110,8 +110,8 @@ jest.mock("../RentRoiCard", () => {
   const { Text } = require("react-native");
   return {
     __esModule: true,
-    default: (p: { houseId: string; startDate?: string }) =>
-      React.createElement(Text, { testID: "rent-roi-card-props" }, `${p.houseId}|${p.startDate ?? "all"}`),
+    default: (p: { houseId: string; startAt?: string }) =>
+      React.createElement(Text, { testID: "rent-roi-card-props" }, `${p.houseId}|${p.startAt ?? "all"}`),
   };
 });
 
@@ -250,15 +250,15 @@ describe("PaymentDashboard", () => {
   });
 
   it("gives the ROI card the period the pills select (#32)", async () => {
-    const { format, startOfISOWeek, startOfMonth } = require("date-fns");
+    const { startOfISOWeek, startOfMonth } = require("date-fns");
     setupStore({});
     const { findByTestId, getByText } = renderDashboard();
 
     const card = await findByTestId("rent-roi-card-props");
-    expect(card).toHaveTextContent(`house1|${format(startOfMonth(new Date()), "yyyy-MM-dd")}`);
+    expect(card).toHaveTextContent(`house1|${startOfMonth(new Date()).toISOString()}`);
     fireEvent.press(getByText("This Week"));
     expect(await findByTestId("rent-roi-card-props")).toHaveTextContent(
-      `house1|${format(startOfISOWeek(new Date()), "yyyy-MM-dd")}`,
+      `house1|${startOfISOWeek(new Date()).toISOString()}`,
     );
     fireEvent.press(getByText("All Time"));
     expect(await findByTestId("rent-roi-card-props")).toHaveTextContent("house1|all");

@@ -25,6 +25,11 @@ const rentRoiMetricsSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  // The start of the caller's period as an instant (ISO 8601 with an offset or
+  // Z). Windows by instant so the period matches the caller's local day
+  // boundaries instead of UTC dates; payments strictly after it count, the same
+  // as the Payment Dashboard's own list. Takes the place of startDate.
+  startAt: z.string().datetime({ offset: true }).optional(),
 });
 
 // Lowest sellable tier whose `features.analytics` is true, per house type
@@ -81,6 +86,22 @@ function toDateStr(v: unknown): string {
   return "";
 }
 
+// A payment's createdAt as epoch milliseconds, or null if unparseable.
+function toInstantMs(v: unknown): number | null {
+  if (!v) return null;
+  if (typeof (v as { toDate?: () => Date }).toDate === "function") {
+    return (v as { toDate: () => Date }).toDate().getTime();
+  }
+  const seconds = (v as { _seconds?: number })._seconds;
+  if (typeof seconds === "number") return seconds * 1000;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === "string") {
+    const ms = Date.parse(v);
+    return Number.isNaN(ms) ? null : ms;
+  }
+  return null;
+}
+
 // Inclusive [start, end] window check on a YYYY-MM-DD string. Empty bounds are
 // treated as open-ended.
 function inWindow(dateStr: string, start?: string, end?: string): boolean {
@@ -106,7 +127,7 @@ function inWindow(dateStr: string, start?: string, end?: string): boolean {
 export const rentRoiMetrics = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
-  const { houseId, startDate, endDate } = parseInput<z.infer<typeof rentRoiMetricsSchema>>(
+  const { houseId, startDate, endDate, startAt } = parseInput<z.infer<typeof rentRoiMetricsSchema>>(
     rentRoiMetricsSchema,
     request.data,
   );
@@ -171,9 +192,13 @@ export const rentRoiMetrics = onCall(async (request) => {
   const payments = (await getSuccessfulPaymentsForHouse(
     houseId,
   )) as PaymentRecord[];
-  const filteredPayments = payments.filter((p) =>
-    inWindow(toDateStr(p.createdAt), startDate, endDate),
-  );
+  const startAtMs = startAt ? Date.parse(startAt) : null;
+  const filteredPayments = payments.filter((p) => {
+    if (!inWindow(toDateStr(p.createdAt), startDate, endDate)) return false;
+    if (startAtMs === null) return true;
+    const ms = toInstantMs(p.createdAt);
+    return ms !== null && ms > startAtMs;
+  });
 
   // amount is integer CENTS, the same unit as refundedAmountCents below and as
   // guests.rentOwed. It used to be read as dollars and multiplied by 100, which
