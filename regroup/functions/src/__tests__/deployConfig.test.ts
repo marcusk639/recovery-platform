@@ -42,3 +42,33 @@ describe('preflight-billing with no deploy config', () => {
     expect(r.stderr + r.stdout).toMatch(/run env:write -- --project phoenix-cleanhouse/);
   });
 });
+
+describe('scripts/deploy-batched.sh', () => {
+  const scriptPath = path.join(REGROUP_DIR, 'scripts/deploy-batched.sh');
+  // Comments dropped, as in deployList.test.ts: the header mentions the plain deploy.
+  const script = fs.readFileSync(scriptPath, 'utf8').replace(/(^|\s)#.*$/gm, '$1');
+
+  // Launch plan S4: it ran `firebase deploy` with no --project (so the
+  // .firebaserc default, production) and no build (so whatever lib/ held).
+  it('refuses to run without --project, before building or deploying anything', () => {
+    // Stub firebase and npm first on PATH: each fails loudly if called, so
+    // this test can never deploy or build, whatever the script does.
+    const stubs = path.join(__dirname, 'fixtures/deploy-stubs');
+    const r = spawnSync('bash', [scriptPath], {
+      env: { ...process.env, PATH: `${stubs}:${process.env.PATH}` },
+      encoding: 'utf8',
+      timeout: 30000,
+    });
+    expect(r.status).toBe(1);
+    expect(r.stderr).toMatch(/--project/);
+    expect(r.stderr).not.toMatch(/must not be called/);
+  });
+
+  it('names the project on every deploy and builds before the first batch', () => {
+    const deploys = script.match(/firebase deploy[^\n]*/g) ?? [];
+    expect(deploys.length).toBeGreaterThan(0);
+    for (const line of deploys) expect(line).toMatch(/--project "\$PROJECT"/);
+    expect(script.indexOf('run build')).toBeGreaterThan(-1);
+    expect(script.indexOf('run build')).toBeLessThan(script.indexOf('firebase deploy'));
+  });
+});

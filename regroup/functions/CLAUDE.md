@@ -16,7 +16,7 @@ npm run env:write -- --project phoenix-cleanhouse    # Writes the gitignored fun
 npm run stripe:verify-live -- --project phoenix-cleanhouse   # Read-only: the latest STRIPE_SECRET_KEY is Regroup's account and every tier price is live at the right amount
 npm run stripe:listen           # Forward Stripe events to local stripeEvents + handleStripeConnectWebhook
 npm run deploy                  # Only `firebase deploy --only functions`: NO build, so it ships lib/ as it is (stale or missing). Don't use it to deploy
-npm run deploy:batched          # Batched fallback for deploy quotas only
+npm run deploy:batched -- --project <id>   # Batched fallback for deploy quotas only; builds first, refuses without --project
 ```
 
 **Deploy** from `regroup/`, building first: `npm --prefix functions ci && npm --prefix functions run env:write -- --project phoenix-cleanhouse && npm --prefix functions run stripe:verify-live -- --project phoenix-cleanhouse && npm --prefix functions run build && firebase deploy --only functions`. The deploy config lives only in the gitignored `functions/.env.<project>`, so a clean worktree has none until `env:write` writes it, and the preflight refuses the deploy without it. `regroup/firebase.json`'s `functions.ignore` keeps `*.local` and `service-key.json` out of the upload. `package.json` `main` is `lib/index.js`, and the `functions.predeploy` hook in `regroup/firebase.json` runs only `scripts/preflight-billing.js`, never the TypeScript build.
