@@ -58,6 +58,8 @@ React Navigation 7 native stack. Route names: `Routes` enum in `src/navigation/t
 - `MainTabParamList` — bottom tabs: House, Guest, Activities, Contacts, HouseChat, Personal
 - `RootStackParamList` — everything else pushed as full-screen modals from any tab
 
+**Deep links:** `linkingConfig` (`src/navigation/linking.ts`) is passed to `<NavigationContainer linking>` in `index.js`. Prefixes come from `appLinkPrefixes()` (`regroup-app://`, legacy `com.rats.dev://`, the origin of `webBaseUrl()`). It resolves only an allowlist: the six Main tabs (`app/house|guest|activities|contacts|chat|personal`), `auth/login` and `auth/signup/:invitation?`. No operator-only, paywalled or SubscriptionGate-bypassing screen is listed. Invitation (`?type=invitation`) and checkout-return URLs are not navigation: the config's `getStateFromPath` returns `undefined` for them and `parseAppLink`/`deliverAppLink` handle them. Add a route to the allowlist only with a test in `src/navigation/__tests__/linking.test.ts`.
+
 Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetings, OxfordVoting, CharterCompliance, TreasuryDashboard, ResidentPayment, PaymentHistory, PaymentDashboard, RentPayment, HouseSettings, StripeSettings, Notifications, DrugTesting, DrugTestForm, DrugTestHistory, StaffNotes, ResidentIntake, Documents, BalanceDashboard, ApplicationList, ApplicationDetail, GuestImport, AdminReport, PhaseSetup. (`ChoreRotationSetupScreen` exists in `src/screens/HouseSettings/` but is not registered as a route.)
 
 ## Service Layer
