@@ -21,9 +21,12 @@ legal access can do, in the order it has to happen.
 ## Prerequisites
 
 - **Merged to `main`:**
-  - the deploy-safety PR (functions `ignore` list, `env:write`, preflight refusal, `stripe:verify-live`);
-  - the invite-links PR (B5 code);
-  - the link-out checkout PR (B6).
+  - #285, deploy safety (functions `ignore` list, `env:write`, preflight refusal, `stripe:verify-live`).
+    Until it merges, `env:write` and `stripe:verify-live` don't exist on `main`;
+  - #286, invite links and the sign-up Privacy link (B5 code, B8 link). It overlaps P5 Tasks 3, 4
+    and 6 (#281), which replace the `/redirect` email links with https app links. Merge one of the
+    two, not both halves blindly;
+  - the link-out checkout (B6): P5 Tasks 9–11 (#281), implemented on `feat/regroup-launch-p5`.
 - **Tools:**
   - `firebase-tools` from npm (`npm i -g firebase-tools`), not Homebrew's;
   - `gcloud`, signed in as an owner of `phoenix-cleanhouse`;
@@ -343,4 +346,6 @@ After C1–C8 and D:
 - **`npm run deploy:batched` is for deploy quotas only.** It deploys production with whatever `lib/`
   holds, with no `--project` and no build.
 - **Staging (`regroup-e2e`) already matches `main`** (2026-11-22). Rehearse C3–C6 there first with
-  `--project regroup-e2e`. `env:write -- --project regroup-e2e` needs staging values; see the script's help.
+  `--project regroup-e2e`. `env:write` refuses `regroup-e2e` (only production has a committed source), so
+  keep staging's own `functions/.env.regroup-e2e` with its sandbox price IDs; the preflight refuses the
+  deploy without it.
