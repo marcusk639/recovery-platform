@@ -1,5 +1,5 @@
 import { Platform } from 'react-native';
-import { csvCell, recordAmountCsv } from '../util/paymentDisplay';
+import { csvCell, recordAmountCsv, recordNetCsv, recordRefundedCsv } from '../util/paymentDisplay';
 import { format, parseISO } from 'date-fns';
 import { toDateSafe } from '../util/firestore';
 import { generatePDF } from 'react-native-html-to-pdf';
@@ -75,14 +75,16 @@ export function exportPaymentHistoryCSV(
   payments: RentPayment[],
   guestNames: Record<string, string>,
 ): string {
-  const header = ['Date', 'Guest', 'Amount ($)', 'Status', 'Description'].join(',');
+  const header = ['Date', 'Guest', 'Amount ($)', 'Refunded ($)', 'Net ($)', 'Status', 'Description'].join(',');
   const rows = payments.map((p) => {
     const date = paymentDate(p.createdAt);
     const guest = escapeCsvField(guestNames[p.guestId] ?? p.guestId);
     const amount = recordAmountCsv(p);
+    const refunded = recordRefundedCsv(p);
+    const net = recordNetCsv(p);
     const status = escapeCsvField(paymentDisplayStatus(p).label);
     const description = escapeCsvField(p.description ?? '');
-    return [date, guest, amount, status, description].join(',');
+    return [date, guest, amount, refunded, net, status, description].join(',');
   });
   return [header, ...rows].join('\n');
 }

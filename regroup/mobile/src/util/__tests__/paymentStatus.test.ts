@@ -14,8 +14,10 @@ describe('paymentDisplayStatus', () => {
     });
   });
 
-  it('marks pending and failed as not paid', () => {
-    expect(paymentDisplayStatus({ status: 'pending', amount: 50000 }).tone).toBe('bad');
+  // Pending is not paid yet, but it hasn't failed either: yellow, as the Pay
+  // Rent badge shows it, not the red of a failed payment.
+  it('marks pending as waiting and failed as not paid', () => {
+    expect(paymentDisplayStatus({ status: 'pending', amount: 50000 }).tone).toBe('warning');
     expect(paymentDisplayStatus({ status: 'failed', amount: 50000 }).tone).toBe('bad');
   });
 

@@ -9,6 +9,7 @@ import { formatCentsAsCurrency, formatDate } from './rentPaymentHelpers';
 import { shareReceipt, ReceiptData } from '../../services/receiptService';
 import { toDateSafe } from '../../util/firestore';
 import { PAYMENT_TONE_COLOR, paymentDisplayStatus } from '../../util/paymentStatus';
+import { dollarCents } from '../../util/paymentDisplay';
 
 export interface PaymentRowProps {
   payment: RentPayment;
@@ -22,7 +23,11 @@ const PaymentRow: React.FC<PaymentRowProps> = ({
   houseName = '',
 }) => {
   const display = paymentDisplayStatus(payment);
-  const adjusted = payment.disputed || (payment.refundedAmountCents ?? 0) > 0;
+  const refundedCents = payment.refundedAmountCents ?? 0;
+  const adjusted = payment.disputed || refundedCents > 0;
+  // A record with no dollar amount (the webhook's unsupported-currency path)
+  // shows a dash and has no receipt, instead of "$NaN".
+  const cents = dollarCents(payment);
 
   const handleShare = async () => {
     const receipt: ReceiptData = {
@@ -62,9 +67,17 @@ const PaymentRow: React.FC<PaymentRowProps> = ({
       <View style={styles.paymentRight}>
         <RatsText
           translate={false}
-          text={formatCentsAsCurrency(payment.amount)}
+          text={cents === null ? '—' : formatCentsAsCurrency(cents)}
           style={styles.paymentAmount}
         />
+        {cents !== null && refundedCents > 0 && refundedCents < cents && (
+          <RatsText
+            translate={false}
+            testID="payment-row-refunded"
+            text={`${formatCentsAsCurrency(refundedCents)} refunded`}
+            style={styles.paymentDate}
+          />
+        )}
         <View style={styles.statusRow}>
           <PaymentStatusBadge
             status={payment.status}
@@ -77,7 +90,7 @@ const PaymentRow: React.FC<PaymentRowProps> = ({
                 : undefined
             }
           />
-          {payment.status === 'succeeded' && !adjusted && (
+          {payment.status === 'succeeded' && !adjusted && cents !== null && (
             <TouchableOpacity
               testID="share-receipt-button"
               onPress={handleShare}

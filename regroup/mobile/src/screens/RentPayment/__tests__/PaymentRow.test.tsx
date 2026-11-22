@@ -35,6 +35,27 @@ describe('PaymentRow', () => {
     });
   });
 
+  // The webhook's unsupported-currency path writes amountMinorUnits, not
+  // amount, and leaves status at succeeded. Such a row showed "$NaN" as Paid
+  // with a receipt to share.
+  it('shows a dash, not $NaN, and offers no receipt, for a record with no dollar amount', () => {
+    const { getByText, queryByText, queryByTestId } = render(
+      <PaymentRow
+        payment={{ ...mockPayment, amount: undefined as any, currency: 'eur', amountMinorUnits: 15000 } as any}
+      />,
+    );
+    expect(getByText('—')).toBeTruthy();
+    expect(queryByText(/NaN/)).toBeNull();
+    expect(queryByTestId('share-receipt-button')).toBeNull();
+  });
+
+  it('says how much of a part refund came back', () => {
+    const { getByText } = render(
+      <PaymentRow payment={{ ...mockPayment, refundedAmountCents: 10000 }} />,
+    );
+    expect(getByText('$100.00 refunded')).toBeTruthy();
+  });
+
   it('renders the payment-history-row testID', () => {
     const { getByTestId } = render(<PaymentRow payment={mockPayment} />);
     expect(getByTestId('payment-history-row')).toBeTruthy();
