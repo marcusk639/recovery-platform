@@ -9,6 +9,7 @@ import { getAuthUser } from '../users';
 import {
   buildInvitationMembership,
   refreshInvitationClaims,
+  resetInvitationMembershipRetryState,
   writeInvitationMembership,
 } from '../invitationMembership';
 
@@ -19,6 +20,8 @@ const user = {
   lastName: 'Resident',
   phoneNumber: '',
 };
+
+beforeEach(() => resetInvitationMembershipRetryState());
 
 describe('buildInvitationMembership', () => {
   it('builds a self-created resident record and the user flags for a guest invitation', () => {
@@ -59,6 +62,8 @@ describe('buildInvitationMembership', () => {
   it('marks a senior-peer resident record as an admin', () => {
     const m = buildInvitationMembership(user, { type: 'senior-peer', houseId: 'h1' });
     expect(m?.kind === 'guest' && m.guest.isAdmin).toBe(true);
+    // ...and the user doc too (sign-up writes it before createUser).
+    expect(m?.updates).toMatchObject({ isGuest: true, isAdmin: true });
   });
 
   it('builds an admins record for one house and the user flags for an admin invitation', () => {
@@ -89,6 +94,31 @@ describe('writeInvitationMembership', () => {
     expect(w.createGuest).toHaveBeenCalledWith(m.kind === 'guest' && m.guest);
     expect(w.updateUser).toHaveBeenCalledWith(user, m.updates);
     expect(w.createAdmin).not.toHaveBeenCalled();
+  });
+
+  it('a plain guest invitation does not set the user isAdmin', () => {
+    const m = buildInvitationMembership(user, { type: 'guest', houseId: 'h1' });
+    expect(m?.updates).not.toHaveProperty('isAdmin');
+  });
+
+  it('on retry after the user update failed, reuses the created record', async () => {
+    const w = writers();
+    w.updateUser.mockRejectedValueOnce(new Error('offline'));
+    const first = buildInvitationMembership(user, { type: 'guest', houseId: 'h1' })!;
+    await expect(writeInvitationMembership(first, user, w)).rejects.toThrow('offline');
+    const retry = buildInvitationMembership(user, { type: 'guest', houseId: 'h1' })!;
+    await writeInvitationMembership(retry, user, w);
+    expect(w.createGuest).toHaveBeenCalledTimes(1);
+    expect(w.updateUser).toHaveBeenLastCalledWith(user, first.updates);
+  });
+
+  it('a failed create is retried with a create (nothing was written)', async () => {
+    const w = writers();
+    w.createGuest.mockRejectedValueOnce(new Error('denied'));
+    const m = buildInvitationMembership(user, { type: 'guest', houseId: 'h1' })!;
+    await expect(writeInvitationMembership(m, user, w)).rejects.toThrow('denied');
+    await writeInvitationMembership(m, user, w);
+    expect(w.createGuest).toHaveBeenCalledTimes(2);
   });
 
   it('creates the admins record and updates the user', async () => {

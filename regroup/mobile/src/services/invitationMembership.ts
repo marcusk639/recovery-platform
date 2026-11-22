@@ -46,7 +46,15 @@ export function buildInvitationMembership(
     return {
       kind: 'guest',
       guest,
-      updates: { isGuest: true, houseId: invitation.houseId, guestId: guest.id, email: user.email },
+      updates: {
+        isGuest: true,
+        houseId: invitation.houseId,
+        guestId: guest.id,
+        email: user.email,
+        // Sign-up writes the user's isAdmin for a senior peer before createUser
+        // (handleUserInvitation); the accept path must too.
+        ...(invitation.type === 'senior-peer' && { isAdmin: true }),
+      },
     };
   }
   if (invitation.type === 'admin') {
@@ -58,18 +66,47 @@ export function buildInvitationMembership(
   return null;
 }
 
-/** Writes the records; rejects if either write fails. */
+/**
+ * Records already created whose user-doc update has not succeeded yet, keyed
+ * by account, role and house. The record's id is random and the rules allow no
+ * client lookup of one's own record (an admins list query is refused), so a
+ * retry in the same app session reuses this record instead of creating a
+ * second one. Lost on an app restart: see SETUP_UNFINISHED's advice.
+ */
+const createdNotLinked = new Map<string, InvitationMembership>();
+
+const retryKey = (user: Partial<User>, m: InvitationMembership): string =>
+  m.kind === 'guest'
+    ? `${user.uid}:guest:${m.guest.houseId}`
+    : `${user.uid}:admin:${m.admin.houseIds[0]}`;
+
+/** Test seam: forget records created by a failed attempt. */
+export function resetInvitationMembershipRetryState(): void {
+  createdNotLinked.clear();
+}
+
+/**
+ * Writes the record, then links the user to it. Sequential, so a failure
+ * leaves only "record exists, user not linked" (never a user pointing at a
+ * record that was not created), and a retry skips the create. Rejects if
+ * either write fails.
+ */
 export async function writeInvitationMembership(
   membership: InvitationMembership,
   user: Partial<User>,
   writers: MembershipWriters,
 ): Promise<void> {
-  await Promise.all([
-    membership.kind === 'guest'
+  const key = retryKey(user, membership);
+  let created = createdNotLinked.get(key);
+  if (!created) {
+    await (membership.kind === 'guest'
       ? writers.createGuest(membership.guest)
-      : writers.createAdmin(membership.admin),
-    writers.updateUser(user as User, membership.updates),
-  ]);
+      : writers.createAdmin(membership.admin));
+    created = membership;
+    createdNotLinked.set(key, created);
+  }
+  await writers.updateUser(user as User, created.updates);
+  createdNotLinked.delete(key);
 }
 
 /**

@@ -12,6 +12,7 @@ jest.mock('../../invitations', () => ({ redeemInvitation: jest.fn(), peekInvitat
 jest.mock('../../users', () => ({
   getAuthUser: jest.fn(),
   getUserFinishingSetup: jest.fn(),
+  getUser: jest.fn(),
   createAnonUser: jest.fn(),
   convertFirebaseUserToRatsUser: jest.fn(),
 }));
@@ -27,6 +28,7 @@ import { peekInvitation, redeemInvitation } from '../../invitations';
 import * as users from '../../users';
 import navigationService from '../../../navigation/improved-navigation-service';
 import { invitationFromAppLink } from '../invitationFromAppLink';
+import { resetInvitationMembershipRetryState } from '../../invitationMembership';
 import {
   acceptInvitationAsCurrentUser,
   acceptRefusal,
@@ -37,6 +39,7 @@ import {
 const redeem = redeemInvitation as jest.Mock;
 const peek = peekInvitation as jest.Mock;
 const getAuthUser = users.getAuthUser as jest.Mock;
+const getUser = users.getUser as jest.Mock;
 const getUserFinishingSetup = users.getUserFinishingSetup as jest.Mock;
 const resetToStartRoute = navigationService.resetToStartRoute as jest.Mock;
 const auth = getAuth() as unknown as { currentUser: unknown };
@@ -64,6 +67,7 @@ const setup = (user: Record<string, unknown>, invitation: any) => {
   store.dispatch({ type: 'user/autoLogin/fulfilled', payload: { user, token: {} } });
   store.dispatch(initializeInvitation(invitation));
   const w = writers();
+  getUser.mockResolvedValue(user);
   const accept = () =>
     acceptInvitationAsCurrentUser(store.getState().user.invitation!, {
       dispatch: store.dispatch,
@@ -79,6 +83,7 @@ const httpsError = (code: string, message: string) =>
 
 beforeEach(() => {
   jest.clearAllMocks();
+  resetInvitationMembershipRetryState();
   auth.currentUser = { uid: 'u-1', isAnonymous: false };
   getAuthUser.mockResolvedValue({ claims: {} });
   redeem.mockResolvedValue({ houseId: 'h1', role: 'guest' });
@@ -104,6 +109,7 @@ describe('acceptInvitationAsCurrentUser — supported cases', () => {
       roleless,
       expect.objectContaining({ isGuest: true, houseId: 'h1' }),
     );
+    expect((w.updateUser.mock.calls[0] as unknown[])[1]).not.toHaveProperty('isAdmin');
     expect(store.getState().user.invitation).toBeNull();
     expect(resetToStartRoute).toHaveBeenCalledWith(expect.objectContaining({ reloaded: true }));
   });
@@ -112,6 +118,11 @@ describe('acceptInvitationAsCurrentUser — supported cases', () => {
     const { w, accept } = setup(roleless, hydrated('senior-peer'));
     expect(await accept()).toEqual({ ok: true });
     expect(w.createGuest).toHaveBeenCalledWith(expect.objectContaining({ isAdmin: true }));
+    // Sign-up writes the user's isAdmin before createUser; the accept path must too.
+    expect(w.updateUser).toHaveBeenCalledWith(
+      roleless,
+      expect.objectContaining({ isGuest: true, houseId: 'h1', isAdmin: true }),
+    );
   });
 
   it('a role-less account accepting an admin invitation gets an admins record', async () => {
@@ -191,6 +202,34 @@ describe('acceptInvitationAsCurrentUser — refused before any redeem', () => {
   });
 });
 
+describe('acceptInvitationAsCurrentUser — fresh user read', () => {
+  it('refuses on a role gained on another device (fresh doc, not the Redux user)', async () => {
+    const { w, accept } = setup(roleless, hydrated('admin', 'h2'));
+    getUser.mockResolvedValue(manager);
+    const result = await accept();
+    expect(getUser).toHaveBeenCalledWith('u-1');
+    expect(result.ok === false && result.message).toMatch(/already a manager/i);
+    expect(redeem).not.toHaveBeenCalled();
+    expect(w.createAdmin).not.toHaveBeenCalled();
+  });
+
+  it('builds the membership from the fresh user doc', async () => {
+    const { w, accept } = setup(roleless, hydrated('guest'));
+    getUser.mockResolvedValue({ ...roleless, firstName: 'Fresh' });
+    expect(await accept()).toEqual({ ok: true });
+    expect(w.createGuest).toHaveBeenCalledWith(expect.objectContaining({ firstName: 'Fresh' }));
+  });
+
+  it('does not redeem when the fresh read fails', async () => {
+    const { w, accept } = setup(roleless, hydrated('guest'));
+    getUser.mockRejectedValue(new Error('offline'));
+    const result = await accept();
+    expect(result.ok).toBe(false);
+    expect(redeem).not.toHaveBeenCalled();
+    expect(w.createGuest).not.toHaveBeenCalled();
+  });
+});
+
 describe('acceptRefusal', () => {
   it('allows the supported cases', () => {
     expect(acceptRefusal(roleless, { type: 'guest', houseId: 'h1' })).toBeNull();
@@ -239,6 +278,31 @@ describe('acceptInvitationAsCurrentUser — failures', () => {
     expect(result.ok === false && result.message).toMatch(/tap accept again/i);
     expect(store.getState().user.invitation).not.toBeNull();
     expect(resetToStartRoute).not.toHaveBeenCalled();
+  });
+
+  it('a retry after a partial write reuses the record already created (no second admins record)', async () => {
+    const { store, w, accept } = setup(roleless, hydrated('admin'));
+    w.updateUser.mockRejectedValueOnce(new Error('offline'));
+    const first = await accept();
+    expect(first.ok).toBe(false);
+    expect(w.createAdmin).toHaveBeenCalledTimes(1);
+    const created = (w.createAdmin.mock.calls[0] as unknown[])[0] as { id: string };
+
+    expect(await accept()).toEqual({ ok: true });
+    expect(w.createAdmin).toHaveBeenCalledTimes(1);
+    // The user doc points at the record that was actually created.
+    expect(w.updateUser).toHaveBeenLastCalledWith(
+      roleless,
+      expect.objectContaining({ isAdmin: true, adminId: created.id }),
+    );
+    expect(store.getState().user.invitation).toBeNull();
+  });
+
+  it('tells the user what to do if the setup keeps failing, not that a retry is always safe', async () => {
+    const { w, accept } = setup(roleless, hydrated('guest'));
+    w.updateUser.mockRejectedValueOnce(new Error('offline'));
+    const result = await accept();
+    expect(result.ok === false && result.message).toMatch(/house admin/i);
   });
 
   it('still leaves the invitation when the records were written but the reload failed', async () => {

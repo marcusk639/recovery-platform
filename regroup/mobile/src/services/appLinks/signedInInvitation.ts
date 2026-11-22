@@ -18,6 +18,7 @@ import { autoLogin, clearInvitation } from '../../state/slices/userSlice';
 import improvedNavigationService from '../../navigation/improved-navigation-service';
 import type { Invitation } from '../../entities/Invite';
 import { peekInvitation, redeemInvitation } from '../invitations';
+import { getUser } from '../users';
 import {
   buildInvitationMembership,
   MembershipInvitation,
@@ -92,7 +93,7 @@ export interface AcceptContext {
 }
 
 const SETUP_UNFINISHED =
-  "Your invitation was accepted, but setting up your account didn't finish. Check your connection and tap Accept again.";
+  "Your invitation was accepted, but setting up your account didn't finish. Check your connection and tap Accept again. If it keeps failing, or after you restart the app, ask your house admin for help rather than accepting again.";
 
 /** The role and house: SignUp has usually filled them in with peekInvitation. */
 async function invitationRole(invitation: Invitation): Promise<MembershipInvitation> {
@@ -103,8 +104,17 @@ async function invitationRole(invitation: Invitation): Promise<MembershipInvitat
 
 export async function acceptInvitationAsCurrentUser(
   invitation: Invitation,
-  { dispatch, user, writers, claimsDelayMs }: AcceptContext,
+  { dispatch, user: cachedUser, writers, claimsDelayMs }: AcceptContext,
 ): Promise<AcceptResult> {
+  // A fresh read, not the Redux user: a role gained on another device must
+  // refuse here, and an accept never builds records from a stale profile.
+  let user: Partial<User> | null;
+  try {
+    user = cachedUser?.uid ? await getUser(cachedUser.uid) : cachedUser;
+  } catch (error) {
+    logException(error, 'acceptInvitationAsCurrentUser: user reload failed');
+    return { ok: false, message: GENERIC };
+  }
   let role: MembershipInvitation;
   try {
     role = await invitationRole(invitation);
@@ -123,8 +133,9 @@ export async function acceptInvitationAsCurrentUser(
   }
 
   // Granted. Refresh the token so the records' writes see the new role, then
-  // write them. A retry is safe: a second redeem by this account grants
-  // nothing and succeeds (functions/src/callable/invitations.ts).
+  // write them. A second redeem by this account grants nothing and succeeds
+  // (functions/src/callable/invitations.ts), and writeInvitationMembership
+  // reuses a record a failed attempt already created (same app session).
   try {
     await refreshInvitationClaims(claimsDelayMs);
     const membership = buildInvitationMembership(user ?? {}, role);
