@@ -1,0 +1,24 @@
+# Deep link: a route from the unused linking config (navigation/linking.ts),
+# signed out. Opens regroup-app://<ROUTE> and asserts the screen the route
+# names. Today the config is not passed to NavigationContainer, so every route
+# fails: the app stays on the landing screen.
+# ROUTE: auth/login (ASSERT_ID login-screen) or auth/signup (ASSERT_ID signup-screen)
+# Run: maestro --device <serial> test -e APP_ID=… -e ROUTE=auth/login -e ASSERT_ID=login-screen maestro/flows/deep-link-linking-auth.yaml
+appId: ${APP_ID}
+tags:
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- openLink: "regroup-app://${ROUTE}"
+- extendedWaitUntil:
+    visible:
+      id: ${ASSERT_ID}
+    timeout: 15000

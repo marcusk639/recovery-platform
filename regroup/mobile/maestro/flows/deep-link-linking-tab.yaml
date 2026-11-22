@@ -1,0 +1,29 @@
+# Deep link: a Main tab route from the unused linking config
+# (navigation/linking.ts), signed in as test-guest-a@rats-e2e.com. Starts on
+# START_TAB, opens regroup-app://<ROUTE> and asserts TARGET_TAB is selected.
+# Today the config is not passed to NavigationContainer, so every route fails:
+# the app stays on START_TAB.
+# Run: maestro --device <serial> test -e APP_ID=… -e E2E_TEST_PASSWORD=… \
+#   -e ROUTE=app/activities -e START_TAB=profile-tab -e TARGET_TAB=activities-tab \
+#   maestro/flows/deep-link-linking-tab.yaml
+appId: ${APP_ID}
+tags:
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: ${START_TAB}
+- assertVisible:
+    id: ${START_TAB}
+    selected: true
+- openLink: "regroup-app://${ROUTE}"
+- extendedWaitUntil:
+    visible:
+      id: ${TARGET_TAB}
+      selected: true
+    timeout: 15000

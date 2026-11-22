@@ -1,0 +1,29 @@
+# Deep link: the token-form invitation link (see deep-link-invitation-token),
+# opened with the app warm and signed out, reaches signup with the invitation
+# shown and the invited email filled in.
+# Needs the seeded invitation e2e-invite-token-1 (maestro/scripts/seed/index.js).
+# Run: maestro/scripts/run-flows.sh deep-link-invitation-token-warm
+appId: ${APP_ID}
+tags:
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+# Warm: send the app to the background, then open the link.
+- pressKey: Home
+- openLink: "regroup-app://?type=invitation&token=e2e-invite-token-1"
+# The app routes an invitation link straight to signup, with the invitation
+# shown and the invited email filled in.
+- extendedWaitUntil:
+    visible:
+      id: "invitation-info"
+    timeout: 30000
+- assertVisible:
+    text: "e2e-invitee@rats-e2e.com"
