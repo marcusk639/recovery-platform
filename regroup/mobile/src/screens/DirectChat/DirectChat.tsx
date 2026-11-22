@@ -112,12 +112,19 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
   useEffect(() => {
     const initChat = async () => {
       setLoadingNewConversation(true);
-      const msgs = await loadDirectChat(
-        props.conversationId,
-        receiveMessages as any,
-      );
-      markLatestMessageRead(msgs);
-      setLoadingNewConversation(false);
+      try {
+        const msgs = await loadDirectChat(
+          props.conversationId,
+          receiveMessages as any,
+        );
+        markLatestMessageRead(msgs);
+      } catch (error) {
+        // loadDirectChat has already logged it. Without this the screen
+        // spun forever on a refused read (#183 item 2).
+        Alert.alert("Couldn't load your messages. Please try again.");
+      } finally {
+        setLoadingNewConversation(false);
+      }
     };
 
     initChat();

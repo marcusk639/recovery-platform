@@ -189,7 +189,11 @@ const HouseChat: React.FC<HouseChatProps> = props => {
     user: user as any,
     admins: {},
     userAsAdmin: userAsAdmin || ({} as any),
-    recipient: {} as any,
+    // No recipient: this is the house's group chat. An empty object made
+    // BaseChat a direct chat, titled "undefined undefined" with a back arrow
+    // on a tab root (#183 item 9).
+    recipient: undefined,
+    chatType: 'group',
     messages: messages,
     conversationId: house.id,
     addChatMessage: addChatMessage,

@@ -454,6 +454,19 @@ describe("DirectChat", () => {
       const { queryByPlaceholderText } = renderScreen();
       expect(queryByPlaceholderText("Type a message")).toBeNull();
     });
+
+    // #183 item 2: a refused load left the spinner up forever.
+    it("stops loading and tells the user when the load fails", async () => {
+      const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+      mockLoadDirectChat.mockRejectedValue(new Error("Failed to load direct chat"));
+      const { getByPlaceholderText, queryByTestId } = renderScreen();
+      await waitFor(() => {
+        expect(getByPlaceholderText("Type a message")).toBeTruthy();
+      });
+      expect(queryByTestId("loading-indicator")).toBeNull();
+      expect(alertSpy).toHaveBeenCalledTimes(1);
+      alertSpy.mockRestore();
+    });
   });
 
   // ─── Chat UI render ────────────────────────────────────────────────────────

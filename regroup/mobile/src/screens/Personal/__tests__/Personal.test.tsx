@@ -511,6 +511,21 @@ describe("PersonalScreen", () => {
       expect(getByTestId("avatar-type").props.children).toBe("Guest");
     });
 
+    // #183 item 16: an operator whose admin record hasn't loaded (or has no
+    // name) saw "Admin" with a blank name. The account's own name is used.
+    it("falls back to the account's name when the admin record is missing", () => {
+      const { getByTestId } = renderScreen({ user: BASE_USER_ADMIN, admin: null });
+      expect(getByTestId("avatar-name").props.children).toBe("Alice Manager");
+    });
+
+    it("falls back to the account's name when the admin record has no name", () => {
+      const { getByTestId } = renderScreen({
+        user: BASE_USER_ADMIN,
+        admin: { ...BASE_ADMIN, firstName: "", lastName: "" },
+      });
+      expect(getByTestId("avatar-name").props.children).toBe("Alice Manager");
+    });
+
     it("displays guest full name when user is a guest (no admin entity)", () => {
       const { getByTestId } = renderScreen({
         user: BASE_USER_GUEST,
