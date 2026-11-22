@@ -276,6 +276,19 @@ function main() {
       `config source: ${files.length ? `functions/{${files.join(', ')}}` : 'NONE — no functions/.env or functions/.env.' + (projectId || '<project>') + ' found; all CONFIG vars will be UNSET in the deploy'}`,
   );
 
+  // A deploy with no config file creates new functions with no env vars at all
+  // (no price IDs, no CONNECT_BASE_URL), and a clean worktree never has one: the
+  // files are gitignored. Refuse rather than warn.
+  if (!files.length) {
+    console.error(
+      `[preflight-billing] ✗ no deploy config for ${projectId || 'this project'}. Deploy blocked. ` +
+        `Production: run \`npm --prefix functions run env:write -- --project phoenix-cleanhouse\` ` +
+        '(it writes functions/.env.phoenix-cleanhouse from scripts/stripe-prices.env). Other projects: ' +
+        "write functions/.env.<project> from that project's own values.",
+    );
+    process.exit(1);
+  }
+
   // Enforcement flips automatically at go-live. Setting TIER_BILLING_ENABLED=true
   // in the deployed config is the exact moment (runbook RG-P0-1 step 2) an operator
   // asserts tier billing is ON — from then on, incomplete billing CONFIG is a hard
