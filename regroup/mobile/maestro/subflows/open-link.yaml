@@ -1,0 +1,15 @@
+# Opens a deep link. Env: LINK (the url).
+# On iOS a custom-scheme link first shows the system dialog "Open in <app>?"
+# (Cancel / Open). It is an OS prompt, outside the app, so the tap is optional:
+# the one case where an optional step is allowed. If the dialog doesn't show,
+# the next assertion in the calling flow still has to pass.
+appId: ${APP_ID}
+---
+- openLink: ${LINK}
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          text: 'Open'
+          optional: true

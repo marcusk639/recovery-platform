@@ -21,7 +21,10 @@ tags:
 - assertVisible:
     id: ${START_TAB}
     selected: true
-- openLink: "regroup-app://${ROUTE}"
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: "regroup-app://${ROUTE}"
 - extendedWaitUntil:
     visible:
       id: ${TARGET_TAB}

@@ -17,7 +17,10 @@ tags:
     visible:
       id: "initial-landing-screen"
     timeout: 30000
-- openLink: "regroup-app://${ROUTE}"
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: "regroup-app://${ROUTE}"
 - extendedWaitUntil:
     visible:
       id: ${ASSERT_ID}

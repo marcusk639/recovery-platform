@@ -19,7 +19,10 @@ tags:
     env:
       EMAIL: test-guest-a@rats-e2e.com
       PASSWORD: ${E2E_TEST_PASSWORD}
-- openLink: ${output.link}
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: ${output.link}
 # A signed-in user should be told about the invitation. Expected today: no
 # screen shows it, so this times out.
 - extendedWaitUntil:
