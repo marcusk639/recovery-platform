@@ -5,8 +5,9 @@
  * user doc, and a user can create both (invite signup; the user doc can be
  * deleted and recreated). These pin that a client cannot seed those ids on
  * create or add them to a guest doc later. The server also checks Stripe
- * ownership (metadata.userId) before cancelling or deleting anything; house
- * admins can still set guest payment fields.
+ * ownership (metadata.userId) before cancelling or deleting anything. Guest
+ * payment fields are server-only for house admins too: scheduled rent
+ * collection charges whatever ids a guest doc carries.
  *
  * Self-create needs the guest claim for the house (see guestCreate.rules.test.ts),
  * which invite signup holds before it writes, so the self-create cases here run
@@ -95,15 +96,62 @@ describe('guests self-create payment fields', () => {
     await assertFails(setDoc(doc(ctx.firestore(), 'guests/g1'), { ...signupGuest, ...extra }));
   });
 
-  it('still lets a house admin create a guest with payment fields', async () => {
+  // The ids are server-only, for admins too: scheduled rent collection
+  // trusts them.
+  it.each([
+    ['stripeCustomerId', { stripeCustomerId: 'cus_1' }],
+    ['defaultPaymentMethodId', { defaultPaymentMethodId: 'pm_1' }],
+  ])('BLOCKS a house admin creating a guest doc carrying %s', async (_label, extra) => {
+    const ctx = testEnv.authenticatedContext(ADMIN_UID, { admin: { [HOUSE_ID]: true } });
+    await assertFails(
+      setDoc(doc(ctx.firestore(), 'guests/g1'), { ...signupGuest, userId: 'someoneElse', ...extra }),
+    );
+  });
+
+  it('lets a house admin create a guest doc without payment fields', async () => {
     const ctx = testEnv.authenticatedContext(ADMIN_UID, { admin: { [HOUSE_ID]: true } });
     await assertSucceeds(
-      setDoc(doc(ctx.firestore(), 'guests/g1'), {
-        ...signupGuest,
-        stripeCustomerId: 'cus_1',
-        defaultPaymentMethodId: 'pm_1',
-      }),
+      setDoc(doc(ctx.firestore(), 'guests/g1'), { ...signupGuest, userId: 'someoneElse' }),
     );
+  });
+});
+
+describe('guests admin update payment fields', () => {
+  const ADMIN_CLAIMS = { admin: { [HOUSE_ID]: true } };
+  const seeded = { ...signupGuest, userId: 'someoneElse' };
+
+  it.each([['stripeCustomerId'], ['defaultPaymentMethodId']])(
+    'BLOCKS a house admin adding %s to a guest doc',
+    async (field) => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'guests/g1'), seeded);
+      });
+      const ctx = testEnv.authenticatedContext(ADMIN_UID, ADMIN_CLAIMS);
+      await assertFails(updateDoc(doc(ctx.firestore(), 'guests/g1'), { [field]: 'planted' }));
+    },
+  );
+
+  it.each([['stripeCustomerId'], ['defaultPaymentMethodId']])(
+    'BLOCKS a house admin replacing a server-set %s',
+    async (field) => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'guests/g1'), { ...seeded, [field]: 'server_set' });
+      });
+      const ctx = testEnv.authenticatedContext(ADMIN_UID, ADMIN_CLAIMS);
+      await assertFails(updateDoc(doc(ctx.firestore(), 'guests/g1'), { [field]: 'planted' }));
+    },
+  );
+
+  it('lets a house admin edit other fields of a guest doc that carries server-set ids', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'guests/g1'), {
+        ...seeded,
+        stripeCustomerId: 'cus_server',
+        defaultPaymentMethodId: 'pm_server',
+      });
+    });
+    const ctx = testEnv.authenticatedContext(ADMIN_UID, ADMIN_CLAIMS);
+    await assertSucceeds(updateDoc(doc(ctx.firestore(), 'guests/g1'), { firstName: 'Edited' }));
   });
 });
 
