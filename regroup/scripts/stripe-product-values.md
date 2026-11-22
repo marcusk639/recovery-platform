@@ -23,27 +23,32 @@ Source: `functions/src/config.ts` [`S1`] — `SUBSCRIPTION_TIERS` object;
 All prices are USD. Annual = 2 months free (10× monthly). Monthly prices set
 as env vars consumed by `priceEnvVar` / `annualPriceEnvVar` fields in config.
 
+The IDs below are the **live-mode** prices on Regroup's account `acct_1GfryQKsstp3aqoP`,
+checked against Stripe 2026-11-22 (the annual ones were created that day). The products are
+`prod_UhV6sgrWbOgsyg` (Traditional) and `prod_UhV71tzKC4XToy` (Oxford). See
+`docs/launch-readiness/stripe-live-config-log-2026-11-21.md`.
+
 ### Traditional House Tiers
 
 | Env Var                                 | Price ID                         | Amount    | Interval |
 | --------------------------------------- | -------------------------------- | --------- | -------- |
-| `STRIPE_PRICE_TRAD_STARTER`             | `price_1TnBmGKsstp3aqoP5cUjb8Eo` | $69.00    | monthly  |
-| `STRIPE_PRICE_TRAD_STARTER_ANNUAL`      | `price_1TnBmGKsstp3aqoPHD06jOuG` | $690.00   | yearly   |
-| `STRIPE_PRICE_TRAD_PROFESSIONAL`        | `price_1TnBmHKsstp3aqoP6TvYRpbS` | $129.00   | monthly  |
-| `STRIPE_PRICE_TRAD_PROFESSIONAL_ANNUAL` | `price_1TnBmIKsstp3aqoPtC9eG9Oj` | $1,290.00 | yearly   |
-| `STRIPE_PRICE_TRAD_ENTERPRISE`          | `price_1TnBmIKsstp3aqoP29ZKgH3b` | $249.00   | monthly  |
-| `STRIPE_PRICE_TRAD_ENTERPRISE_ANNUAL`   | `price_1TnBmJKsstp3aqoPs87VKKSR` | $2,490.00 | yearly   |
+| `STRIPE_PRICE_TRAD_STARTER`             | `price_1TkbSgKsstp3aqoPbxh5xWSn` | $69.00    | monthly  |
+| `STRIPE_PRICE_TRAD_STARTER_ANNUAL`      | `price_1UeYjFKsstp3aqoPpBAgvcE1` | $690.00   | yearly   |
+| `STRIPE_PRICE_TRAD_PROFESSIONAL`        | `price_1TkbSgKsstp3aqoPhELFzjwr` | $129.00   | monthly  |
+| `STRIPE_PRICE_TRAD_PROFESSIONAL_ANNUAL` | `price_1UeYjGKsstp3aqoPROh0Gi5J` | $1,290.00 | yearly   |
+| `STRIPE_PRICE_TRAD_ENTERPRISE`          | `price_1TkbSgKsstp3aqoPIvsVavSw` | $249.00   | monthly  |
+| `STRIPE_PRICE_TRAD_ENTERPRISE_ANNUAL`   | `price_1UeYjGKsstp3aqoPeoGZhm1k` | $2,490.00 | yearly   |
 
 ### Oxford House Tiers
 
 | Env Var                               | Price ID                         | Amount    | Interval |
 | ------------------------------------- | -------------------------------- | --------- | -------- |
-| `STRIPE_PRICE_OXFORD_STANDARD`        | `price_1TnBmJKsstp3aqoPtoAenHYF` | $49.00    | monthly  |
-| `STRIPE_PRICE_OXFORD_STANDARD_ANNUAL` | `price_1TnBmKKsstp3aqoPJPrNQmbL` | $490.00   | yearly   |
-| `STRIPE_PRICE_OXFORD_PLUS`            | `price_1TnBmKKsstp3aqoPmcqRUm5o` | $89.00    | monthly  |
-| `STRIPE_PRICE_OXFORD_PLUS_ANNUAL`     | `price_1TnBmLKsstp3aqoPKA5okvUu` | $890.00   | yearly   |
-| `STRIPE_PRICE_OXFORD_NETWORK`         | `price_1TnBmLKsstp3aqoPFa1GLKoF` | $299.00   | monthly  |
-| `STRIPE_PRICE_OXFORD_NETWORK_ANNUAL`  | `price_1TnBmMKsstp3aqoP0LvT0Xnn` | $2,990.00 | yearly   |
+| `STRIPE_PRICE_OXFORD_STANDARD`        | `price_1TkbSeKsstp3aqoPBgJgeNkK` | $49.00    | monthly  |
+| `STRIPE_PRICE_OXFORD_STANDARD_ANNUAL` | `price_1UeYjHKsstp3aqoPaVufbFN9` | $490.00   | yearly   |
+| `STRIPE_PRICE_OXFORD_PLUS`            | `price_1TkbSfKsstp3aqoPONbJ6Oef` | $89.00    | monthly  |
+| `STRIPE_PRICE_OXFORD_PLUS_ANNUAL`     | `price_1UeYjIKsstp3aqoP9FsbGXOd` | $890.00   | yearly   |
+| `STRIPE_PRICE_OXFORD_NETWORK`         | `price_1TkbSfKsstp3aqoPRM0TYO4k` | $299.00   | monthly  |
+| `STRIPE_PRICE_OXFORD_NETWORK_ANNUAL`  | `price_1UeYjJKsstp3aqoPWvnA26Gu` | $2,990.00 | yearly   |
 
 > **Note:** Oxford Network has `availableForSale: false` in `config.ts` [`S1`] —
 > a price ID is required for internal use but the tier is blocked at checkout.
