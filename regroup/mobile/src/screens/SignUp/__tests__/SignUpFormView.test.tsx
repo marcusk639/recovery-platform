@@ -17,17 +17,17 @@
  * function`. Wrapping in a real <Formik> provider fixes it.
  */
 
-jest.mock("../../../state/hooks", () => ({
-  useAppSelector: (selector: any) =>
-    selector({ user: { invitation: null, signUpRole: null } }),
+jest.mock('../../../state/hooks', () => ({
+  useAppSelector: (selector: any) => selector({ user: { invitation: null, signUpRole: null } }),
 }));
 
-jest.mock("../../../util/platform", () => ({ IOS: false }));
+jest.mock('../../../util/platform', () => ({ IOS: false }));
 
-import React from "react";
-import { render, cleanup } from "@testing-library/react-native";
-import { Formik } from "formik";
-import SignUpFormView from "../SignUpFormView";
+import React from 'react';
+import { Linking } from 'react-native';
+import { render, cleanup, fireEvent } from '@testing-library/react-native';
+import { Formik } from 'formik';
+import SignUpFormView from '../SignUpFormView';
 
 // Hardened 2026-07-07: without an explicit unmount between tests, a
 // component in this tree (react-native's Animated, per the stack trace)
@@ -40,20 +40,17 @@ afterEach(() => {
 });
 
 const baseValues = {
-  email: "",
-  password: "",
-  confirmPassword: "",
+  email: '',
+  password: '',
+  confirmPassword: '',
   termsOfService: false,
-  firstName: "",
-  lastName: "",
+  firstName: '',
+  lastName: '',
 };
 
 function renderForm(initialValues: Partial<typeof baseValues> = {}) {
   return render(
-    <Formik
-      initialValues={{ ...baseValues, ...initialValues }}
-      onSubmit={jest.fn()}
-    >
+    <Formik initialValues={{ ...baseValues, ...initialValues }} onSubmit={jest.fn()}>
       {(formikProps) => (
         <SignUpFormView
           {...(formikProps as any)}
@@ -61,34 +58,43 @@ function renderForm(initialValues: Partial<typeof baseValues> = {}) {
           navigation={{ navigate: jest.fn() } as any}
         />
       )}
-    </Formik>
+    </Formik>,
   );
 }
 
-describe("SignUpFormView", () => {
-  it("renders a confirm-password field", () => {
+describe('SignUpFormView', () => {
+  it('renders a confirm-password field', () => {
     const { getByTestId } = renderForm();
-    expect(getByTestId("signup-confirm-password-input")).toBeTruthy();
+    expect(getByTestId('signup-confirm-password-input')).toBeTruthy();
   });
 
-  it("renders a Terms of Service checkbox", () => {
+  it('renders a Terms of Service checkbox', () => {
     const { getByTestId } = renderForm();
-    expect(getByTestId("terms-of-service-checkbox")).toBeTruthy();
+    expect(getByTestId('terms-of-service-checkbox')).toBeTruthy();
   });
 
-  it("reflects values.termsOfService in the checkbox value", () => {
+  it('reflects values.termsOfService in the checkbox value', () => {
     // RatsCheckBox reports its value as accessibilityState.checked on the
     // testID'd control (the JS checkbox since the RN 0.88 upgrade).
     const { getByTestId } = renderForm({ termsOfService: true });
-    expect(
-      getByTestId("terms-of-service-checkbox").props.accessibilityState.checked
-    ).toBe(true);
+    expect(getByTestId('terms-of-service-checkbox').props.accessibilityState.checked).toBe(true);
   });
 
-  it("the confirm-password field is a secure text entry, matching the password field", () => {
+  // The web app routes /terms and /privacy-policy (web app-routing.module.ts);
+  // /privacy is its 404 page, which an App Store reviewer opens from here.
+  it.each([
+    ['Terms of Service', 'https://regroup-app.com/terms'],
+    ['Privacy Policy', 'https://regroup-app.com/privacy-policy'],
+  ])('the %s link opens the routed web page', (label, url) => {
+    const openURL = jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    const { getByText } = renderForm();
+    fireEvent.press(getByText(label));
+    expect(openURL).toHaveBeenCalledWith(url);
+    openURL.mockRestore();
+  });
+
+  it('the confirm-password field is a secure text entry, matching the password field', () => {
     const { getByTestId } = renderForm();
-    expect(
-      getByTestId("signup-confirm-password-input").props.secureTextEntry
-    ).toBe(true);
+    expect(getByTestId('signup-confirm-password-input').props.secureTextEntry).toBe(true);
   });
 });
