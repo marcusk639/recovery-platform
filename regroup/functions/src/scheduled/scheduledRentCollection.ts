@@ -13,6 +13,14 @@
  * document) is written by the webhook, not here, which is exactly why in-flight
  * charges have to be tracked separately from the balance.
  *
+ * Whose card: this charges whatever stripeCustomerId / defaultPaymentMethodId
+ * the guest doc carries, into that guest's house, so those two fields are
+ * server-only in firestore.rules (no client, admins included, may set or
+ * change them). Nothing writes
+ * stripeCustomerId on a guest doc today, so this job charges no one. Whoever
+ * builds autopay must create the resident's Stripe customer with
+ * metadata.userId and check it equals guest.userId here before charging.
+ *
  * Firestore note: equality on one field (autoPayEnabled) combined with a range
  * on another (rentOwed) is permitted, but that pair still needs a composite
  * index — see regroup/mobile/firebase/firestore.indexes.json. Range
