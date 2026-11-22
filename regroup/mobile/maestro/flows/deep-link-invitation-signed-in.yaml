@@ -1,9 +1,8 @@
 # Deep link: an invitation link opened while signed in. Logs in as
-# test-guest-a@rats-e2e.com, then opens the link. Today nothing handles a link
-# for a signed-in user (Splash only queues the invitation), so the app is
-# expected to stay on the house tab and never show invitation-info; the
-# assertion below records the behaviour the app has now, so this flow's
-# result is the baseline: it FAILS while no signed-in route exists.
+# test-guest-a@rats-e2e.com, then opens the link. deliverAppLink stores the
+# invitation and opens the invitation screen (signup, testID invitation-info)
+# through improvedNavigationService.navigateToInvitation (launch P5 Task 3).
+# Before Task 3 nothing handled a link for a signed-in user and this failed.
 # LINK: the url to open, default is the token form. Override with
 #   -e LINK='regroup-app://?type=invitation&invitationType=guest&house=…&email=…'
 #   -e LINK='com.rats.dev://?type=invitation&token=e2e-invite-token-1'
@@ -23,8 +22,7 @@ tags:
     file: ../subflows/open-link.yaml
     env:
       LINK: ${output.link}
-# A signed-in user should be told about the invitation. Expected today: no
-# screen shows it, so this times out.
+# A signed-in user is shown the invitation.
 - extendedWaitUntil:
     visible:
       id: "invitation-info"

@@ -10,6 +10,7 @@ import { navigationRef } from "../../navigation/service";
 import { CommonActions } from "@react-navigation/native";
 import { Routes } from "../../navigation/types";
 import { retrySetupRecovery } from "./setupRecoveryThunk";
+import type { AppLink } from "../../services/appLinks/parseAppLink";
 
 /**
  * User State Interface
@@ -34,6 +35,9 @@ interface UserState {
   anonUser: Partial<User> | null;
   anonymous: boolean;
   invitation: Invitation | null;
+  // An app link that arrived while signed out (or anonymous), held until a
+  // user signs in; services/appLinks/deliverAppLink.ts delivers it once.
+  pendingAppLink: AppLink | null;
   loginFailed: boolean;
   loggingOutSuccessful: boolean;
   token: any;
@@ -61,6 +65,7 @@ const initialState: UserState = {
   anonUser: null,
   anonymous: false,
   invitation: null,
+  pendingAppLink: null,
   loginFailed: false,
   loggingOutSuccessful: false,
   token: { claims: {} },
@@ -210,6 +215,12 @@ const userSlice = createSlice({
     },
     initializeInvitation: (state, action: PayloadAction<Invitation>) => {
       state.invitation = action.payload;
+    },
+    setPendingAppLink: (state, action: PayloadAction<AppLink>) => {
+      state.pendingAppLink = action.payload;
+    },
+    clearPendingAppLink: (state) => {
+      state.pendingAppLink = null;
     },
     setSignUpRole: (state, action: PayloadAction<Role>) => {
       state.signUpRole = action.payload;
@@ -383,6 +394,8 @@ const userSlice = createSlice({
 export const {
   loginFailed: loginFailedAction,
   initializeInvitation,
+  setPendingAppLink,
+  clearPendingAppLink,
   setSignUpRole,
   setSubscriptionStatus,
   clearError,

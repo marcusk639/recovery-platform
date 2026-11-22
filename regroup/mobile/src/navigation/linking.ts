@@ -6,7 +6,15 @@
  * auth screens. Nothing that opens outside SubscriptionGate, nothing
  * operator-only and nothing paywalled is listed. Invitation and checkout-return
  * links are not navigation: parseAppLink / deliverAppLink handle them, so this
- * config declines those URLs (getStateFromPath returns undefined).
+ * config declines every URL parseAppLink claims (getStateFromPath returns
+ * undefined).
+ *
+ * An `app/*` (Main tab) link opens only for a signed-in, non-anonymous user.
+ * Signed out or anonymous, it is dropped and the app stays where it is (the
+ * landing screen): it is not held for after sign-in, because sign-in itself
+ * resets navigation to the user's own start route (LoginForm, signup).
+ * Firebase Auth's currentUser is read, not the store: at cold start the store
+ * has no user yet, while the native session is restored synchronously.
  *
  * Test a link:
  *   iOS:     xcrun simctl openurl booted "regroup-app://app/house"
@@ -17,18 +25,27 @@ import {
   getStateFromPath as defaultGetStateFromPath,
   LinkingOptions,
 } from '@react-navigation/native';
+import { getAuth } from '@react-native-firebase/auth';
 import { appLinkPrefixes } from './appLinkPrefixes';
+import { parseAppLink } from '../services/appLinks/parseAppLink';
 import { RootStackParamList, Routes } from './types';
 
-/** URLs handled by parseAppLink/deliverAppLink, never by navigation state. */
-const isHandledElsewhere = (path: string): boolean => {
-  const query = path.split('?')[1] ?? '';
-  const type = new URLSearchParams(query).get('type');
-  return (
-    type === 'invitation' ||
-    type === 'checkout-return' ||
-    /(^|\/)checkout-return(\/|$|\?)/.test(path)
-  );
+const stripLeadingSlashes = (path: string): string => path.replace(/^\/+/, '');
+
+/**
+ * URLs handled by parseAppLink/deliverAppLink, never by navigation state.
+ * React Navigation passes the path after the prefix (query included), so it is
+ * re-read on the canonical scheme: every accepted prefix shares these paths.
+ */
+export const isHandledElsewhere = (path: string): boolean =>
+  parseAppLink(`regroup-app://${stripLeadingSlashes(path)}`) !== null;
+
+const isMainRoute = (path: string): boolean =>
+  /^app(\/|\?|#|$)/.test(stripLeadingSlashes(path));
+
+const isSignedIn = (): boolean => {
+  const user = getAuth().currentUser;
+  return !!user && !user.isAnonymous;
 };
 
 export const linkingConfig: LinkingOptions<RootStackParamList> = {
@@ -40,6 +57,8 @@ export const linkingConfig: LinkingOptions<RootStackParamList> = {
         path: 'auth',
         screens: {
           [Routes.Login]: 'login',
+          // The :invitation param is never consumed: invitations arrive only
+          // through parseAppLink -> deliverAppLink -> initializeInvitation.
           [Routes.Signup]: 'signup/:invitation?',
         },
       } as any,
@@ -58,8 +77,11 @@ export const linkingConfig: LinkingOptions<RootStackParamList> = {
     },
   },
 
-  getStateFromPath: (path, options) =>
-    isHandledElsewhere(path) ? undefined : defaultGetStateFromPath(path, options),
+  getStateFromPath: (path, options) => {
+    if (isHandledElsewhere(path)) return undefined;
+    if (isMainRoute(path) && !isSignedIn()) return undefined;
+    return defaultGetStateFromPath(path, options);
+  },
 };
 
 export default linkingConfig;

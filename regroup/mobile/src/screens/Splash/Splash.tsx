@@ -12,14 +12,14 @@ import {
 import { getAuth, onAuthStateChanged } from "@react-native-firebase/auth";
 import { normalize } from "../../styles/theme";
 import { RatsLogo } from "../../components/rats-logo";
+import { getInitialLink, onLink } from "../../services/native-deep-links";
+import { parseAppLink } from "../../services/appLinks/parseAppLink";
 import {
-  getInitialLink,
-  onLink,
-  getLinkType,
-  createInvitationFromLink,
-} from "../../services/native-deep-links";
+  deliverAppLink,
+  deliverPendingAppLink,
+  isSignedInUser,
+} from "../../services/appLinks/deliverAppLink";
 import {
-  initializeInvitation,
   anonymouslyLogin,
   autoLogin,
   loginFailedAction,
@@ -156,18 +156,23 @@ export const withSplash = <P extends object>(
       }
     }, [updateTokenIfNecessary]);
 
+    // Parses and delivers an app link (services/appLinks). The listener reads
+    // the signed-in state from `latest`: it is registered once, at mount.
+    const handleLink = useCallback((link: NativeDeepLink) => {
+      const appLink = parseAppLink(link.url);
+      logDebug("Splash - Link kind:", appLink?.kind ?? null);
+      if (appLink) {
+        deliverAppLink(appLink, {
+          signedIn: isSignedInUser(latest.current.userState.user),
+          dispatch: latest.current.dispatch,
+        });
+      }
+      return appLink;
+    }, []);
+
     const listenToLink = useCallback(() => {
-      linkSubscriptionRef.current = onLink((link: NativeDeepLink) => {
-        logDebug("Splash - Deep link received:", link);
-        const type = getLinkType(link);
-        logDebug("Splash - Link type:", type);
-        if (type === "invitation") {
-          logDebug("Splash - Initializing invitation from link");
-          const invitation = createInvitationFromLink(link);
-          dispatch(initializeInvitation(invitation));
-        }
-      });
-    }, [dispatch]);
+      linkSubscriptionRef.current = onLink(handleLink);
+    }, [handleLink]);
 
     const authUser = useCallback((): Promise<any> => {
       return new Promise((resolve, reject) => {
@@ -269,20 +274,15 @@ export const withSplash = <P extends object>(
           logDebug(
             "Splash - No invitation in state, checking for initial deep link",
           );
+          // Auth has not resolved yet, so this delivers as signed out: an
+          // invitation is stored for the initial route decision (signup, or
+          // the invitation screen for a signed-in user), anything else is held
+          // until sign-in.
           const initialLink = await getInitialLink();
-          if (initialLink) {
-            logDebug(
-              "Splash - Found initial link, initializing invitation:",
-              initialLink,
-            );
-            const linkType = getLinkType(initialLink);
-            if (linkType === "invitation") {
-              logDebug("Splash - Initializing invitation from initial link");
-              const invitation = createInvitationFromLink(initialLink);
-              dispatch(initializeInvitation(invitation));
-              // Wait a moment for Redux state to update
-              await wait(100);
-            }
+          const appLink = initialLink ? handleLink(initialLink) : null;
+          if (appLink?.kind === "invitation" || appLink?.kind === "invitation-legacy") {
+            // Wait a moment for Redux state to update
+            await wait(100);
           }
         }
 
@@ -340,6 +340,13 @@ export const withSplash = <P extends object>(
         handleMessagingToken();
       }
     }, [userState.user, handleMessagingToken]);
+
+    // A link held while signed out is delivered once a user signs in.
+    const signedIn = isSignedInUser(userState.user);
+    const pendingAppLink = userState.pendingAppLink;
+    useEffect(() => {
+      deliverPendingAppLink(pendingAppLink ?? null, { signedIn, dispatch });
+    }, [signedIn, pendingAppLink, dispatch]);
 
     useEffect(() => {
       const checkResult = appIsReadyCheck();

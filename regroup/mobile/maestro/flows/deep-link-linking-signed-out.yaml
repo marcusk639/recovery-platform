@@ -1,0 +1,43 @@
+# Deep link: a Main tab route (regroup-app://app/house) opened while signed out
+# (anonymous) must not open the Main shell. The app stays on the landing
+# screen, warm and cold. navigation/linking.ts declines app/* routes unless a
+# non-anonymous user is signed in (launch P5 Task 3, security review of Task 2).
+# Run: maestro --device <serial> test -e APP_ID=… maestro/flows/deep-link-linking-signed-out.yaml
+appId: ${APP_ID}
+tags:
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+# Warm: the app is running on the landing screen.
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: "regroup-app://app/house"
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertNotVisible:
+    id: "house-tab"
+- assertVisible:
+    id: "initial-landing-screen"
+# Cold: stop the app so the link starts it.
+- stopApp
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: "regroup-app://app/house"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertNotVisible:
+    id: "house-tab"
