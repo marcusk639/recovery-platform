@@ -25,6 +25,27 @@ The rest is deleting a superseded branch, two portal follow-ups, and reinstallin
 
 Status was checked on 2026-11-14 against `main` at `ebbff7a3`, and steps 9 and 10 against `1c87c78d`. Re-check each item before acting.
 
+## Status, 2026-11-21
+
+| Step                    | State                                                                                                                                                                                                                                         |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Signing grant        | **Done on `regroup-e2e`.** **Still open on `phoenix-cleanhouse`:** its functions run as `155667333239-compute@developer.gserviceaccount.com`, which has the API but no grant. The owner runs the step 1 commands with `P=phoenix-cleanhouse`. |
+| 2. Functions on staging | **Done** from `main` at `2de821e5`: 65 functions, including `getDocumentLink` and `resolveFailedPaymentOffline`.                                                                                                                              |
+| 3. Rules on staging     | **Done**: Firestore and Storage rules plus the indexes. Five committed indexes were missing on staging (two `chat`, two house-scoped `drug-tests`, one `guests`), and no index existed only on staging.                                       |
+| 4. Production           | **Open.** These are launch-runbook deploys (P8, after the P7 staging release candidate), so they wait for that sequence.                                                                                                                      |
+| 5. F-a97437 sign-off    | **Done**: the owner's `review: F-a97437 👍` is on #160.                                                                                                                                                                                       |
+| 6. Simulator checks     | **Done** on an iOS 26 simulator, with the E2EEmulator build of `main` at `2de821e5`. **The chore flow passes:** it sees "1 of 1", logs the chore, then sees "2 of 1". The first attempt failed because the cold-start tap on SIGN IN didn't register; the rerun passed. **The Keychain reset works:** after signing in and reinstalling, the app opened still signed in without the reset and signed out with it. The script as a whole couldn't pass here: the only older E2EEmulator build (2026-10-30, before #160 merged) can't sign in against today's seed. |
+| 7. Device pass          | **Open**, pre-launch, on real phones.                                                                                                                                                                                                         |
+| 8. Superseded branch    | **Open**: `fix/regroup-portal-visible-defects` is still on the remote. Deleting it was refused by the session's permission rules, so the owner runs the step 8 command.                                                                       |
+| 9. Portal follow-ups    | **In PR #282**: the Mark Resolved journey and the corrected comment. The journey also found that `resolveFailedPaymentOffline` failed on the emulator, and that peer leaders saw a Mark Resolved that always fails; #282 fixes both.          |
+| 10. Git hooks           | **Done**: installed from `main`, and all three match `scripts/git-hooks/`.                                                                                                                                                                    |
+
+A staging smoke test on 2026-11-21 checked steps 1 to 3 end to end, with a temporary house admin, house, document and failed payment, all deleted afterwards:
+
+- `getDocumentLink` returned 200, and its signed link downloads.
+- A direct Storage read of the document path got 403.
+- `resolveFailedPaymentOffline` set the record to `resolved_offline`.
+
 ## Prerequisites
 
 - [ ] `gcloud` and `firebase` are signed in as the owner (`gcloud auth list`, `firebase login:list`).
@@ -183,12 +204,12 @@ Run `scripts/e2e.sh` before opening the PR, after checking with `lsof` that port
 
 ## Verification
 
-- [ ] On staging, a house admin opens an uploaded document: the signed link works (steps 1 to 3).
-- [ ] On staging, Mark Resolved on a failed payment clears the banner, and the record reads `resolved_offline` (step 2).
-- [ ] As a house admin, a direct Storage download of a document path is refused (step 3; covered by `documentUploads.rules.test.ts`).
+- [x] On staging, a house admin opens an uploaded document: the signed link works (steps 1 to 3). Smoke test, 2026-11-21.
+- [x] On staging, Mark Resolved on a failed payment clears the banner, and the record reads `resolved_offline` (step 2). Smoke test through the callable, 2026-11-21.
+- [x] As a house admin, a direct Storage download of a document path is refused (step 3; covered by `documentUploads.rules.test.ts`). It got 403 on staging, 2026-11-21.
 - [ ] `fix/regroup-portal-visible-defects` is gone from the remote (step 8).
 - [ ] The Mark Resolved journey passes in `regroup/portal — browser tests` (step 9).
-- [ ] Session start shows no hook drift warning (step 10).
+- [x] Session start shows no hook drift warning (step 10).
 
 ## Rollback
 
