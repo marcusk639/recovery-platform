@@ -500,7 +500,9 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
         )}
 
       {/******************************* PAY RENT *******************************/}
-      {(() => {
+      {/* Shows the resident's balance and opens their payment history: the same
+          people as Payment History below. */}
+      {mayViewPayments && (() => {
         const totalDue =
           (currentGuest!.rentOwed ?? 0) + (currentGuest!.choreFees ?? 0);
         const stripeConnected =
