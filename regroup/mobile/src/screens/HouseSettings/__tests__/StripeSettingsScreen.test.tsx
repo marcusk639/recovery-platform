@@ -26,20 +26,19 @@ jest.mock("../../../hooks/useSelectedHouse", () => ({
 // state synchronously before its first await, like fetchStatus does. It also
 // records the latest callback so tests can invoke it again to simulate the
 // screen regaining focus (e.g. after the Stripe Connect onboarding redirect
-// returns the user to this screen).
-let latestFocusCallback: (() => void) | undefined;
-const mockUseFocusEffect = jest.fn((cb: () => void) => {
+// returns the user to this screen). The callback's cleanup runs on blur
+// (unmount here), as in the real hook.
+let latestFocusCallback: (() => void | (() => void)) | undefined;
+const mockUseFocusEffect = jest.fn((cb: () => void | (() => void)) => {
   latestFocusCallback = cb;
-  cb();
+  return cb();
 });
 
 jest.mock("@react-navigation/native", () => {
   const ReactLib = require("react");
   return {
     useFocusEffect: (cb: any) => {
-      ReactLib.useEffect(() => {
-        mockUseFocusEffect(cb);
-      }, [cb]);
+      ReactLib.useEffect(() => mockUseFocusEffect(cb), [cb]);
     },
     useNavigation: () => ({ navigate: jest.fn(), goBack: jest.fn() }),
   };
@@ -47,7 +46,7 @@ jest.mock("@react-navigation/native", () => {
 
 import React from "react";
 import { render, fireEvent, waitFor, act } from "@testing-library/react-native";
-import { Alert } from "react-native";
+import { Alert, AppState, AppStateStatus } from "react-native";
 
 // Mock the context module to avoid theme provider setup
 // useTranslation is needed by RatsText
@@ -122,6 +121,13 @@ jest.mock("react-native/Libraries/Linking/Linking", () => ({
   },
 }));
 
+// One client for every render, as the real hook returns.
+const mockInvalidateQueries = jest.fn();
+const mockQueryClient = { invalidateQueries: mockInvalidateQueries };
+jest.mock("@tanstack/react-query", () => ({
+  useQueryClient: () => mockQueryClient,
+}));
+
 // Mock useAppSelector to inject house state
 const mockUseAppSelector = jest.fn();
 jest.mock("../../../state/store", () => ({
@@ -165,10 +171,34 @@ const setupHouse = (stripeAccountId?: string) => {
 const renderScreen = () =>
   render(<StripeSettingsScreen navigation={mockNavigation} />);
 
+// The screen's AppState listeners, so tests can play app transitions.
+let appStateListeners: Array<(state: AppStateStatus) => void> = [];
+const mockRemoveAppStateListener = jest.fn();
+
+const moveApp = async (...states: AppStateStatus[]) => {
+  for (const state of states) {
+    await act(async () => {
+      appStateListeners.forEach((listener) => listener(state));
+    });
+  }
+};
+
 describe("StripeSettingsScreen", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (Alert.alert as jest.Mock).mockClear();
+    appStateListeners = [];
+    jest
+      .spyOn(AppState, "addEventListener")
+      .mockImplementation((_type: any, listener: any) => {
+        appStateListeners.push(listener);
+        return {
+          remove: () => {
+            mockRemoveAppStateListener();
+            appStateListeners = appStateListeners.filter((l) => l !== listener);
+          },
+        } as any;
+      });
   });
 
   // -----------------------------------------------------------------------
@@ -650,6 +680,114 @@ describe("StripeSettingsScreen", () => {
       await waitFor(() => {
         expect(getByText("Active")).toBeTruthy();
       });
+    });
+  });
+
+  // AU-22: Stripe Connect onboarding runs in the system browser, so the
+  // operator comes back to this screen without it ever losing focus.
+  describe("returning to the app", () => {
+    const statusResponse = (status: string, enabled: boolean) => ({
+      data: {
+        status,
+        chargesEnabled: enabled,
+        payoutsEnabled: enabled,
+        requirements: { currentlyDue: [], pastDue: [] },
+      },
+    });
+
+    it("refetches the status when the app comes back from the browser", async () => {
+      setupHouse("acct_123");
+      mockGetStatus
+        .mockResolvedValueOnce(statusResponse(StripeAccountStatus.PENDING, false))
+        .mockResolvedValueOnce(statusResponse(StripeAccountStatus.ACTIVE, true));
+
+      const { getByText } = renderScreen();
+      await waitFor(() => {
+        expect(getByText("Setup In Progress")).toBeTruthy();
+      });
+
+      await moveApp("inactive", "background", "active");
+
+      await waitFor(() => {
+        expect(getByText("Active")).toBeTruthy();
+      });
+      expect(mockGetStatus).toHaveBeenCalledTimes(2);
+    });
+
+    it("re-reads the house, so an account made during onboarding shows up", async () => {
+      // The cached house has no stripeAccountId yet: connectStripeAccount
+      // writes it just before opening the browser.
+      setupHouse();
+
+      const { getByTestId } = renderScreen();
+      await waitFor(() => {
+        expect(getByTestId("stripe-connect-button")).toBeTruthy();
+      });
+      expect(mockInvalidateQueries).not.toHaveBeenCalled();
+
+      await moveApp("background", "active");
+
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["houses", "detail", "house123"],
+      });
+    });
+
+    it("still refreshes when the house changes while the app is away", async () => {
+      setupHouse();
+      mockGetStatus.mockResolvedValue(
+        statusResponse(StripeAccountStatus.PENDING, false),
+      );
+
+      const { rerender, getByText } = renderScreen();
+      await moveApp("background");
+
+      // A house refetch already in flight lands while the browser is open.
+      setupHouse("acct_new");
+      rerender(<StripeSettingsScreen navigation={mockNavigation} />);
+      await waitFor(() => {
+        expect(getByText("Setup In Progress")).toBeTruthy();
+      });
+      const callsBeforeReturn = mockGetStatus.mock.calls.length;
+
+      await moveApp("active");
+
+      expect(mockInvalidateQueries).toHaveBeenCalledWith({
+        queryKey: ["houses", "detail", "house123"],
+      });
+      expect(mockGetStatus.mock.calls.length).toBe(callsBeforeReturn + 1);
+    });
+
+    it("does not refetch when a system sheet only covered the app", async () => {
+      setupHouse("acct_123");
+      mockGetStatus.mockResolvedValue(
+        statusResponse(StripeAccountStatus.PENDING, false),
+      );
+
+      renderScreen();
+      await waitFor(() => {
+        expect(mockGetStatus).toHaveBeenCalledTimes(1);
+      });
+
+      await moveApp("inactive", "active");
+
+      expect(mockGetStatus).toHaveBeenCalledTimes(1);
+      expect(mockInvalidateQueries).not.toHaveBeenCalled();
+    });
+
+    it("stops listening when the screen is left", async () => {
+      setupHouse("acct_123");
+      mockGetStatus.mockResolvedValue(
+        statusResponse(StripeAccountStatus.ACTIVE, true),
+      );
+
+      const { unmount } = renderScreen();
+      await waitFor(() => {
+        expect(mockGetStatus).toHaveBeenCalledTimes(1);
+      });
+
+      unmount();
+      expect(mockRemoveAppStateListener).toHaveBeenCalled();
+      expect(appStateListeners).toHaveLength(0);
     });
   });
 });
