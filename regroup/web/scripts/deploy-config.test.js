@@ -48,8 +48,12 @@ test('hosting and functions deploys both run the bundle check on everything they
     ['hosting', fb.hosting.predeploy],
     ['functions', fb.functions[0].predeploy],
   ]) {
-    assert.strictEqual((hooks || []).length, 1, `${name} needs exactly one predeploy command`);
-    const cmd = hooks[0];
+    // The bundle check is the one verify-ssr-target command; hosting also runs verify-app-links
+    // (scripts/__tests__/app-links.test.mjs holds that one).
+    const checks = (hooks || []).filter((c) => !c.includes('verify-app-links.mjs'));
+    assert.strictEqual(checks.length, 1, `${name} needs exactly one bundle-check predeploy command`);
+    assert.strictEqual((hooks || []).length, name === 'hosting' ? 2 : 1, `${name} predeploy commands`);
+    const cmd = checks[0];
     assert.doesNotMatch(cmd, /[;&|<>`]|\$\(/, `${name} predeploy must be a single plain command`);
     const t = tokens(cmd);
     assert.deepStrictEqual(t.slice(0, 2), ['node', '$PROJECT_DIR/scripts/verify-ssr-target.js']);

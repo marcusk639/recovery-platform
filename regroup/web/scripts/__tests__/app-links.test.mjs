@@ -9,7 +9,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { generate, loadSource, NEVER_CLAIMED, WELL_KNOWN } from '../generate-app-links.mjs';
-import { check } from '../check-app-links.mjs';
+import { check, validateOrigin } from '../check-app-links.mjs';
+import { verifyRoot, parseArgs } from '../verify-app-links.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const GEN = path.resolve(HERE, '../generate-app-links.mjs');
@@ -150,8 +151,8 @@ test('--root writes real files at the three exact well-known paths', () => {
 
 test('package.json build scripts run the generator for the matching project', () => {
   const s = JSON.parse(fs.readFileSync(path.resolve(HERE, '../../package.json'), 'utf8')).scripts;
-  assert.match(s['build:ssr'], /generate-app-links\.mjs --project phoenix-cleanhouse --out dist\/sapp\/browser\/app-links/);
-  assert.match(s['build:ssr:e2e-staging'], /generate-app-links\.mjs --project regroup-e2e --out dist\/sapp\/browser\/app-links/);
+  assert.match(s['build:ssr'], /generate-app-links\.mjs --project phoenix-cleanhouse --out dist\/sapp\/browser\/app-links --root dist\/sapp\/browser(?!\/)/);
+  assert.match(s['build:ssr:e2e-staging'], /generate-app-links\.mjs --project regroup-e2e --out dist\/sapp\/browser\/app-links --root dist\/sapp\/browser(?!\/)/);
   assert.match(s['test:scripts'], /app-links\.test\.mjs/);
 });
 
@@ -174,7 +175,7 @@ const good = () => {
 };
 
 test('checker passes when all three URLs serve the generated content as JSON', async () => {
-  const res = await check('https://x.test', 'regroup-e2e', fakeFetch(good()));
+  const res = await check('https://regroup-e2e.web.app', 'regroup-e2e', fakeFetch(good()));
   assert.strictEqual(res.length, 3);
   assert.ok(res.every((r) => r.ok), JSON.stringify(res));
 });
@@ -184,16 +185,115 @@ test('checker fails on redirect, wrong content type, 404 and content drift', asy
   m['/apple-app-site-association'] = { status: 301, body: '', headers: { location: '/x' } };
   m['/.well-known/assetlinks.json'] = { body: m['/.well-known/assetlinks.json'].body, headers: { 'content-type': 'text/html' } };
   delete m['/.well-known/apple-app-site-association'];
-  let res = await check('https://x.test', 'regroup-e2e', fakeFetch(m));
+  let res = await check('https://regroup-e2e.web.app', 'regroup-e2e', fakeFetch(m));
   assert.deepStrictEqual(res.map((r) => r.ok), [false, false, false]);
   const drift = good();
   drift['/.well-known/assetlinks.json'] = { body: '[]' };
-  res = await check('https://x.test', 'regroup-e2e', fakeFetch(drift));
+  res = await check('https://regroup-e2e.web.app', 'regroup-e2e', fakeFetch(drift));
   assert.deepStrictEqual(res.map((r) => r.ok), [true, true, false]);
   assert.match(res[2].problems.join(), /differs/);
 });
 
 test('checker reports a network failure instead of throwing', async () => {
-  const res = await check('https://x.test', 'regroup-e2e', async () => { throw new Error('boom'); });
+  const res = await check('https://regroup-e2e.web.app', 'regroup-e2e', async () => { throw new Error('boom'); });
   assert.ok(res.every((r) => !r.ok && /boom/.test(r.problems[0])));
+});
+
+// ---- --root exact paths (e2e project) ----
+test('generator --root for regroup-e2e writes exactly the three exact paths plus app-links', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'app-links-root2-'));
+  const r = spawnSync(process.execPath, [GEN, '--project', 'regroup-e2e', '--out', path.join(root, 'app-links'), '--root', root], { encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  for (const rel of ['.well-known/apple-app-site-association', 'apple-app-site-association', '.well-known/assetlinks.json', 'app-links/assetlinks.json', 'app-links/apple-app-site-association.json']) {
+    assert.ok(fs.existsSync(path.join(root, rel)), rel);
+  }
+  assert.deepStrictEqual(Object.keys(WELL_KNOWN).sort(), ['.well-known/apple-app-site-association', '.well-known/assetlinks.json', 'apple-app-site-association']);
+});
+
+// ---- predeploy check ----
+const memFs = (files) => (p) => {
+  if (!(p in files)) throw new Error('ENOENT');
+  return files[p];
+};
+const treeFor = (project, root, src) => {
+  const f = generate(project, src);
+  const t = (b) => JSON.stringify(b, null, 2) + '\n';
+  const a = t(f['apple-app-site-association.json']);
+  const l = t(f['assetlinks.json']);
+  return {
+    [`${root}/.well-known/apple-app-site-association`]: a,
+    [`${root}/apple-app-site-association`]: a,
+    [`${root}/.well-known/assetlinks.json`]: l,
+    [`${root}/app-links/apple-app-site-association.json`]: a,
+    [`${root}/app-links/assetlinks.json`]: l,
+  };
+};
+
+test('verifyRoot accepts a complete tree for the deploy project', () => {
+  assert.deepStrictEqual(verifyRoot('/r', 'regroup-e2e', undefined, memFs(treeFor('regroup-e2e', '/r'))), []);
+});
+
+test('verifyRoot fails a tree built for another project', () => {
+  const src = loadSource();
+  src.environments['phoenix-cleanhouse'].android[0].sha256 = [FP];
+  const prodTree = treeFor('phoenix-cleanhouse', '/r', src);
+  const problems = verifyRoot('/r', 'regroup-e2e', src, memFs(prodTree));
+  assert.strictEqual(problems.length, 5);
+  assert.ok(problems.every((p) => /differs/.test(p)));
+});
+
+test('verifyRoot reports each missing file', () => {
+  const tree = treeFor('regroup-e2e', '/r');
+  delete tree['/r/.well-known/assetlinks.json'];
+  delete tree['/r/apple-app-site-association'];
+  const problems = verifyRoot('/r', 'regroup-e2e', undefined, memFs(tree));
+  assert.strictEqual(problems.length, 2);
+  assert.ok(problems.every((p) => /missing/.test(p)));
+});
+
+test('verifyRoot fails on an unknown deploy project', () => {
+  assert.throws(() => verifyRoot('/r', 'some-other-project', undefined, memFs({})), /unknown project/);
+});
+
+test('verify-app-links parseArgs needs a project and a root', () => {
+  assert.deepStrictEqual(parseArgs(['--project', 'p', '--root', 'a', '--root', 'b']), { project: 'p', roots: ['a', 'b'] });
+  assert.throws(() => parseArgs(['--project', 'p']));
+  assert.throws(() => parseArgs(['--root', 'a']));
+  assert.throws(() => parseArgs(['--bogus', 'x']));
+});
+
+test('verify-app-links CLI passes on a generated tree and fails on another project', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'app-links-pre-'));
+  spawnSync(process.execPath, [GEN, '--project', 'regroup-e2e', '--out', path.join(root, 'app-links'), '--root', root]);
+  const V = path.resolve(HERE, '../verify-app-links.mjs');
+  assert.strictEqual(spawnSync(process.execPath, [V, '--project', 'regroup-e2e', '--root', root]).status, 0);
+  assert.notStrictEqual(spawnSync(process.execPath, [V, '--project', 'phoenix-cleanhouse', '--root', root]).status, 0);
+});
+
+test('firebase.json hosting predeploy runs verify-app-links with GCLOUD_PROJECT on both roots', () => {
+  const cmd = firebase.hosting.predeploy.find((c) => c.includes('verify-app-links.mjs'));
+  assert.ok(cmd);
+  assert.match(cmd, /--project "\$GCLOUD_PROJECT"/);
+  assert.match(cmd, /--root "\$PROJECT_DIR\/dist\/sapp\/browser"/);
+  assert.match(cmd, /--root "\$PROJECT_DIR\/functions\/dist\/sapp\/browser"/);
+});
+
+// ---- checker origin validation ----
+test('checker requires https on the project domain', () => {
+  assert.doesNotThrow(() => validateOrigin('https://regroup-e2e.web.app', 'regroup-e2e.web.app'));
+  assert.throws(() => validateOrigin('http://regroup-e2e.web.app', 'regroup-e2e.web.app'), /https/);
+  assert.throws(() => validateOrigin('https://evil.example', 'regroup-e2e.web.app'), /not regroup-e2e/);
+  assert.throws(() => validateOrigin('https://regroup-e2e.web.app.evil.example', 'regroup-e2e.web.app'), /not/);
+});
+
+test('--allow-host permits localhost only', () => {
+  assert.doesNotThrow(() => validateOrigin('http://localhost:5000', 'regroup-e2e.web.app', 'localhost'));
+  assert.throws(() => validateOrigin('https://evil.example', 'regroup-e2e.web.app', 'evil.example'), /only permits/);
+  assert.throws(() => validateOrigin('http://localhost:5000', 'regroup-e2e.web.app', '127.0.0.1'), /only permits/);
+});
+
+test('check() refuses a foreign origin before fetching anything', async () => {
+  let called = false;
+  await assert.rejects(check('https://evil.example', 'regroup-e2e', async () => { called = true; }), /not regroup-e2e/);
+  assert.strictEqual(called, false);
 });
