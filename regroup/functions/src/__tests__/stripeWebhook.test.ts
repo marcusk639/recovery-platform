@@ -2697,6 +2697,33 @@ describe("payout.failed", () => {
     );
   });
 
+  // A failed house lookup must not read as "no house": the event would be
+  // marked done and the only alert lost. It answers 500 so Stripe retries.
+  test("Connect endpoint: a house lookup error releases the event for retry", async () => {
+    const event = makeStripeEvent("payout.failed", makePayout(), {
+      account: "acct_test_123",
+    });
+    mockConstructEvent.mockReturnValue(event);
+    setupForPayoutFailed(true);
+    const base = mockCollection.getMockImplementation() as (n: string) => unknown;
+    mockCollection.mockImplementation((name: string) =>
+      name === "houses"
+        ? {
+            where: jest.fn().mockReturnThis(),
+            limit: jest.fn().mockReturnValue({
+              get: jest.fn().mockRejectedValue(new Error("unavailable")),
+            }),
+          }
+        : base(name),
+    );
+
+    const res = makeResponse();
+    await handleStripeConnectWebhook(makeRequest({}) as never, res as never);
+
+    expect(res.status).toHaveBeenCalledWith(500);
+    expect(mockMessagingSend).not.toHaveBeenCalled();
+  });
+
   test("unknown destination (house not found): no crash", async () => {
     const payout = makePayout({ destination: "ba_unknown" });
     const event = makeStripeEvent("payout.failed", payout, {

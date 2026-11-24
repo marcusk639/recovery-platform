@@ -149,15 +149,12 @@ Since #254 the handler also acts on `customer.subscription.created`,
 which the list above (the endpoint's recorded subscriptions) does not include.
 Add them to the live endpoint, then update this list.
 
-> **Caution — `payout.failed` may never reach its handler [unverified].** The
-> handler (`handlePayoutFailed`) needs `event.account`, the connected account the
-> payout belongs to. Per Stripe's Connect model, events that happen on a connected
-> account (its payouts included) are delivered to **Connect** endpoints ("events on
-> connected accounts"), not to a platform endpoint like this one. The Connect
-> handler (§4b, `handleStripeConnectWebhook`) currently has no `payout.failed`
-> case: it acts only on `account.updated` and `account.application.deauthorized`.
-> So the "Payout failures" alert in §7 may not fire. Confirm with a test-mode
-> payout failure before relying on it.
+> **`payout.failed` here only sees the platform's own payouts.** The handler
+> (`handlePayoutFailed`) needs `event.account`, the connected account the payout
+> belongs to, and Stripe delivers events on connected accounts (a house's payouts)
+> only to **Connect** endpoints. A house's failed payout therefore arrives on the
+> Connect endpoint (§4b), which must subscribe to `payout.failed` for the "Payout
+> failures" alert in §7 to fire. This endpoint's case logs and returns 200.
 
 ### 4b. Stripe Connect Webhook
 
@@ -171,6 +168,7 @@ Add them to the live endpoint, then update this list.
 
 - `account.updated`
 - `account.application.deauthorized`
+- `payout.failed` — pushes the house admins. **The live endpoint does not have it yet (owner step, #292):** add it in the Dashboard, then drop this note. The e2e sandbox endpoint already subscribes (`CONNECT_EVENTS`).
 
 ### 4c. Rotating a webhook signing secret
 

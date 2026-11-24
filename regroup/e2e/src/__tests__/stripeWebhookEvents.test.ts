@@ -29,6 +29,10 @@ describe('webhook event lists', () => {
     expect(new Set([...PLATFORM_EVENTS, ...CONNECT_EVENTS])).toEqual(handled);
   });
 
+  it('deliver a house payout.failed through the Connect endpoint, which alone receives connected-account events', () => {
+    expect(CONNECT_EVENTS).toContain('payout.failed');
+  });
+
   it('send account.updated through the Connect endpoint only, as in production', () => {
     expect(PLATFORM_EVENTS).not.toContain('account.updated');
     expect(CONNECT_EVENTS).toContain('account.updated');

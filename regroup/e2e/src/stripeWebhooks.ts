@@ -16,12 +16,15 @@ export const PLATFORM_EVENTS = [
   'customer.subscription.deleted',
   'customer.subscription.updated',
   'customer.subscription.trial_will_end',
+  // The platform's own payouts only; a house's arrive on the Connect endpoint.
   'payout.failed',
 ] as Stripe.WebhookEndpointCreateParams.EnabledEvent[];
 
 export const CONNECT_EVENTS = [
   'account.updated',
   'account.application.deauthorized',
+  // A house's own payout: Stripe delivers it only to Connect endpoints.
+  'payout.failed',
 ] as Stripe.WebhookEndpointCreateParams.EnabledEvent[];
 
 const FORBIDDEN_HOST_PARTS = ['phoenix-cleanhouse', 'regroup-app.com', 'recovery-connect'];
