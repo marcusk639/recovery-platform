@@ -76,6 +76,14 @@ firebase deploy --project regroup-e2e --only hosting,functions:web:ssr --non-int
 
 The staging builds use the production build settings (optimized, hashed, no source maps) and production mode; only the environment file differs. `scripts/deploy-config.test.js` holds that parity, the predeploy wiring, and a param value per project.
 
+### Universal-link files (`apple-app-site-association`, `assetlinks.json`)
+
+One source, `../app-links.json` (claimed paths `/invite`, `/app/*`, `/checkout-return`; per project: domain, iOS app IDs, Android package + SHA-256). `scripts/generate-app-links.mjs --project <id> --out <dir> [--root <public dir>]` writes the AASA and assetlinks files; `build:ssr` (project `phoenix-cleanhouse`) and `build:ssr:e2e-staging` (`regroup-e2e`) run it after the browser build. It refuses an unknown project, and any fingerprint that isn't a real SHA-256. Marketing and account pages (`/`, `/pricing`, `/signup`, `/my-account`, `/login`) are never claimed; Android path filtering lives in the mobile manifest.
+
+- Firebase Hosting answers `/.well-known/apple-app-site-association`, `/apple-app-site-association` and `/.well-known/assetlinks.json` itself (empty AASA, `[]`), ahead of rewrites, so the build writes real files at those exact paths (`--root`), and `firebase.json`'s ignore keeps `.well-known` (`**/.!(well-known)`). The `/app-links/*.json` copies and the rewrites to them are kept as a fallback; headers set `Content-Type: application/json`.
+- **Production fingerprint is an owner input.** `phoenix-cleanhouse`'s Play app-signing SHA-256 is still `<OWNER: Play app-signing SHA-256>` in `app-links.json`, so a production web build fails loudly until the owner adds it. Staging uses the standard Android debug keystore fingerprint (the e2eStaging build is debug-signed).
+- Check a deploy: `node scripts/check-app-links.mjs https://regroup-e2e.web.app --project regroup-e2e` (all three URLs: 200, `application/json`, no redirect, body equal to the generated files). Tests: `npm run test:scripts` (`scripts/__tests__/app-links.test.mjs`).
+
 ### Cloud Functions (`cd functions`)
 
 ```bash
