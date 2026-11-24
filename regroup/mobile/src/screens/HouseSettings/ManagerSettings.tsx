@@ -46,7 +46,9 @@ import { useAppSelector, useAppDispatch } from "../../state/store";
 interface Props {
   initializeHouseSetup: () => void;
   handleSubmit: (house: House) => void;
-  navigation: NativeStackNavigationProp<RootStackParamList>;
+  // House Settings opens this screen in its form modal with setupProps(),
+  // which passes no navigation. The screen does not use it.
+  navigation?: NativeStackNavigationProp<RootStackParamList>;
   onPrevPress?: () => void;
 }
 
@@ -60,7 +62,7 @@ interface Props {
  */
 const ManagerSettings: React.FC<Props> = (props) => {
   const { showFormModal, dismissFormModal } = useModal();
-  const { initializeHouseSetup, handleSubmit, navigation, onPrevPress } = props;
+  const { initializeHouseSetup, handleSubmit, onPrevPress } = props;
 
   const dispatch = useAppDispatch();
   const allGuests = useAppSelector((state) => state.setup?.guests || {});
