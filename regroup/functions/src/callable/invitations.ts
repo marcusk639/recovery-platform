@@ -79,9 +79,45 @@ const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
  * origin, because the app only accepts `https://<its web origin>/invite`.
  */
 const DEFAULT_WEB_BASE_URL = 'https://regroup-app.com';
-function webBaseUrl(): string {
+const PRODUCTION_PROJECT = 'phoenix-cleanhouse';
+let warnedDefaultOrigin = false;
+
+/** Test seam: the unset-WEB_BASE_URL warning is logged once per instance. */
+export function resetWebBaseUrlWarning(): void {
+  warnedDefaultOrigin = false;
+}
+
+/**
+ * The validated web origin: https (http only for localhost / 127.0.0.1, the
+ * emulators), no path or query. An invalid value is a config error and falls
+ * back to the default. Unset outside production warns once, because staging
+ * invitations would then carry production links the staging app rejects.
+ */
+export function webBaseUrl(): string {
   const v = process.env.WEB_BASE_URL?.trim();
-  return (v || DEFAULT_WEB_BASE_URL).replace(/\/+$/, '');
+  if (!v) {
+    if (!warnedDefaultOrigin && process.env.GCLOUD_PROJECT !== PRODUCTION_PROJECT) {
+      warnedDefaultOrigin = true;
+      logger.warn(
+        'createInvitation: WEB_BASE_URL is not set; invitation links use the production origin',
+        { project: process.env.GCLOUD_PROJECT ?? null },
+      );
+    }
+    return DEFAULT_WEB_BASE_URL;
+  }
+  try {
+    const u = new URL(v);
+    const localHttp =
+      u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
+    const bare = (u.pathname === '/' || u.pathname === '') && !u.search && !u.hash && !u.username;
+    if ((u.protocol === 'https:' || localHttp) && bare) return u.origin;
+  } catch {
+    // fall through to the config error
+  }
+  logger.error(
+    'createInvitation: WEB_BASE_URL is invalid (need an https origin, no path); using the production origin',
+  );
+  return DEFAULT_WEB_BASE_URL;
 }
 
 /**

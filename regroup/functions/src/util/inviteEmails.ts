@@ -1,4 +1,5 @@
 import { sendEmail, regroupEmail } from "./email";
+import { escapeHtml } from "./escapeHtml";
 
 export type InviteEmailType = "admin" | "guest" | "superAdmin" | "supporter";
 
@@ -32,6 +33,8 @@ export async function sendOneInviteEmail(
   // be rewritten to com.rats.dev:// behind an unrouted /redirect page.)
   // Not decoded: the token is percent-encoded and must reach the app intact.
   const linkToUse = inviteLink || "#";
+  // The html bodies take the escaped form; the plain text keeps the raw link.
+  const linkHtml = escapeHtml(linkToUse);
 
   const text =
     role === "guest"
@@ -54,7 +57,7 @@ export async function sendOneInviteEmail(
     "</p>",
     '<div style="text-align: center; margin: 30px 0;">',
     '<a href="' +
-      linkToUse +
+      linkHtml +
       '" style="background-color: #007bff; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-size: 16px; font-weight: bold; display: inline-block;">',
     buttonText,
     "</a>",
@@ -62,9 +65,9 @@ export async function sendOneInviteEmail(
     '<p style="font-size: 14px; color: #666; text-align: center;">',
     "If the button doesn't work, you can copy and paste this link into your browser:<br>",
     '<a href="' +
-      linkToUse +
+      linkHtml +
       '" style="color: #007bff; word-break: break-all;">' +
-      linkToUse +
+      linkHtml +
       "</a>",
     "</p>",
     '<hr style="border: none; border-top: 1px solid #eee; margin: 30px 0;">',

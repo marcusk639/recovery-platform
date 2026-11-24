@@ -157,6 +157,19 @@ describe('createConfirmationEmail', () => {
     expect(raw.html).not.toContain('/redirect');
   });
 
+  it('does not decode the link and escapes it in html', () => {
+    const link = 'https://regroup-app.com/verify?a=1%26b=2&c="d"';
+    const email = createConfirmationEmail('test@example.com', link);
+    expect(email.html).toContain('href="https://regroup-app.com/verify?a=1%26b=2&amp;c=&quot;d&quot;"');
+    expect(email.text).toContain('a=1%26b=2');
+  });
+
+  it('a stray % in the link does not throw', () => {
+    expect(() =>
+      createConfirmationEmail('test@example.com', 'https://regroup-app.com/v?t=50%'),
+    ).not.toThrow();
+  });
+
   it('uses a regular https link directly without wrapping', () => {
     const link = 'https://example.com/verify?token=xyz';
     const email = createConfirmationEmail('test@example.com', link);

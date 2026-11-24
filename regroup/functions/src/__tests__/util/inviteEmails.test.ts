@@ -40,4 +40,20 @@ describe('sendOneInviteEmail', () => {
     expect(mockSendEmail.mock.calls[1][0].text).toContain('manage a sober living house');
     expect(mockSendEmail.mock.calls[1][0].html).toContain('Accept Invitation');
   });
+
+  it('escapes the href and anchor text in html but not the plain text', async () => {
+    const link = 'https://x.example/invite?token=a&b="c"<d>';
+    await sendOneInviteEmail({ toEmail: 'a@rats-e2e.com', inviteLink: link, role: 'guest' });
+    const email = mockSendEmail.mock.calls[0][0];
+    const esc = 'https://x.example/invite?token=a&amp;b=&quot;c&quot;&lt;d&gt;';
+    expect(email.html).toContain(`href="${esc}"`);
+    expect(email.html).toContain(`>${esc}</a>`);
+    expect(email.html).not.toContain('"c"<d>');
+    expect(email.text).toContain(link);
+  });
+
+  it('uses # for an empty link', async () => {
+    await sendOneInviteEmail({ toEmail: 'a@rats-e2e.com', inviteLink: '', role: 'guest' });
+    expect(mockSendEmail.mock.calls[0][0].html).toContain('href="#"');
+  });
 });

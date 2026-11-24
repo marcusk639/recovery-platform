@@ -3,6 +3,7 @@ import { Guest } from "../entities/Guest";
 import { User } from "../entities/User";
 import { auth } from "firebase-admin";
 import { regroupEmail } from "./email";
+import { escapeHtml } from "./escapeHtml";
 import { Email } from "../entities/Email";
 
 export async function getUsersByEmail(email: string): Promise<FirebaseFirestore.QuerySnapshot> {
@@ -31,17 +32,16 @@ export function createConfirmationEmail(
   dynamicLink: string,
   name?: string
 ): Email {
-  const decodedLink = decodeURIComponent(dynamicLink);
   const greeting = name ? `Hello ${name},` : "Hello,";
   const header = name ? `Hello ${name},\n\n` : "Hello,\n\n";
   const body = `Follow this link to verify your email address.\n\n
-   ${decodedLink}\n\n
+   ${dynamicLink}\n\n
    If you didn't create an account with this address, you can ignore this email.\n\n
    Thanks,\n\n
    Your Regroup: Sober Living App team`;
 
   // App links (https) go out as given; no /redirect wrapper.
-  const linkToUse = decodedLink;
+  const linkToUse = escapeHtml(dynamicLink);
 
   const html = [
     '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">',

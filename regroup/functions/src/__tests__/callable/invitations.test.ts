@@ -139,7 +139,7 @@ jest.mock('../../util/inviteEmails', () => ({
   sendOneInviteEmail: (...args: unknown[]) => mockSendOneInviteEmail(...args),
 }));
 
-import { createInvitation, redeemInvitation, buildInviteLink } from '../../callable/invitations';
+import { createInvitation, redeemInvitation, buildInviteLink, webBaseUrl, resetWebBaseUrlWarning } from '../../callable/invitations';
 
 const fakeAuth = { uid: 'inviter-uid', token: { email: 'inviter@x.com' } };
 const call = (fn: unknown, data: unknown, auth: object | null = fakeAuth) =>
@@ -212,6 +212,59 @@ describe('createInvitation — happy path', () => {
       if (prev === undefined) delete process.env.WEB_BASE_URL;
       else process.env.WEB_BASE_URL = prev;
     }
+  });
+
+  describe('webBaseUrl', () => {
+    const OLD = { ...process.env };
+    const { logger } = require('firebase-functions');
+    beforeEach(() => {
+      jest.clearAllMocks();
+      resetWebBaseUrlWarning();
+      delete process.env.WEB_BASE_URL;
+      process.env.GCLOUD_PROJECT = 'phoenix-cleanhouse';
+    });
+    afterAll(() => {
+      process.env = { ...OLD };
+    });
+
+    it('missing: default origin, silent in production', () => {
+      expect(webBaseUrl()).toBe('https://regroup-app.com');
+      expect(logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('missing outside production: default origin and one warning (no PII)', () => {
+      process.env.GCLOUD_PROJECT = 'regroup-e2e';
+      expect(webBaseUrl()).toBe('https://regroup-app.com');
+      expect(webBaseUrl()).toBe('https://regroup-app.com');
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(logger.warn.mock.calls[0])).toMatch(/WEB_BASE_URL/);
+    });
+
+    it.each([
+      ['scheme-less', 'regroup-e2e.web.app'],
+      ['http on a real host', 'http://regroup-e2e.web.app'],
+      ['with a path', 'https://regroup-e2e.web.app/app'],
+      ['with a query', 'https://regroup-e2e.web.app?x=1'],
+      ['garbage', 'not a url'],
+    ])('invalid (%s): falls back to the default and logs a config error', (_n, v) => {
+      process.env.WEB_BASE_URL = v;
+      expect(webBaseUrl()).toBe('https://regroup-app.com');
+      expect(logger.error).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(logger.error.mock.calls[0])).not.toContain(v);
+    });
+
+    it('valid staging origin (trailing slash ok)', () => {
+      process.env.WEB_BASE_URL = 'https://regroup-e2e.web.app/';
+      expect(webBaseUrl()).toBe('https://regroup-e2e.web.app');
+      expect(logger.error).not.toHaveBeenCalled();
+    });
+
+    it('allows http only for localhost and 127.0.0.1', () => {
+      process.env.WEB_BASE_URL = 'http://localhost:5000';
+      expect(webBaseUrl()).toBe('http://localhost:5000');
+      process.env.WEB_BASE_URL = 'http://127.0.0.1:5000';
+      expect(webBaseUrl()).toBe('http://127.0.0.1:5000');
+    });
   });
 
   it('buildInviteLink encodes the token on the given origin', () => {
