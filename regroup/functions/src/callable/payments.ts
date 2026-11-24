@@ -1,27 +1,19 @@
-import { onCall, HttpsError } from "firebase-functions/v2/https";
-import { logger } from "firebase-functions";
-import * as admin from "firebase-admin";
-import Stripe from "stripe";
-import { z } from "zod";
-import {
-  STRIPE_SECRET_KEY,
-  STRIPE_CLIENT_ID,
-  connectAccountsApi,
-} from "../config";
-import { computeApplicationFee } from "../util/rentFee";
-import { transferStats } from "../util/guest";
-import { getUser } from "../api/firestore";
-import {
-  createStripeClient,
-  mapStripeError,
-  isResourceMissing,
-} from "../util/stripe";
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
+import { logger } from 'firebase-functions';
+import * as admin from 'firebase-admin';
+import Stripe from 'stripe';
+import { z } from 'zod';
+import { STRIPE_SECRET_KEY, STRIPE_CLIENT_ID, connectAccountsApi } from '../config';
+import { computeApplicationFee } from '../util/rentFee';
+import { transferStats } from '../util/guest';
+import { getUser } from '../api/firestore';
+import { createStripeClient, mapStripeError, isResourceMissing } from '../util/stripe';
 import {
   closeHouseAccount,
   closeOrphanedAccount,
   createHouseAccount,
   isRecipientAccountClosed,
-} from "../util/connectAccountLifecycle";
+} from '../util/connectAccountLifecycle';
 import {
   assertHouseAdmin,
   assertHouseMoneyStaff,
@@ -29,14 +21,14 @@ import {
   checkIsMember,
   isHouseMoneyStaff,
   HouseAdminFields,
-} from "../util/houseAuth";
-import { parseInput, safeReturnUrlSchema } from "../validation";
-import { connectRefreshUrl, connectReturnUrl } from "../util/connectUrls";
+} from '../util/houseAuth';
+import { parseInput, safeReturnUrlSchema } from '../validation';
+import { connectRefreshUrl, connectReturnUrl } from '../util/connectUrls';
 import {
   fetchConnectAccountStatus,
   houseAccountApi,
   type ConnectAccountStatus,
-} from "../util/connectAccountStatus";
+} from '../util/connectAccountStatus';
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 /**
@@ -47,7 +39,7 @@ import {
  * rather than defaulted, so a non-USD request is refused instead of silently
  * rewritten.
  */
-const SUPPORTED_CURRENCY = "usd" as const;
+const SUPPORTED_CURRENCY = 'usd' as const;
 
 /** Mirrors MAX_PAYMENT_CENTS in the mobile client, which was the only bound. */
 const MAX_PAYMENT_CENTS = 10_000_000;
@@ -61,7 +53,7 @@ const createPaymentIntentSchema = z.object({
   idempotencyKey: z.string().optional(),
   // Method the resident is paying with — drives the method-aware platform fee
   // and restricts the PaymentIntent to that method. Defaults to card.
-  paymentMethodType: z.enum(["card", "us_bank_account"]).optional(),
+  paymentMethodType: z.enum(['card', 'us_bank_account']).optional(),
 });
 
 const listPaymentsSchema = z.object({
@@ -114,192 +106,183 @@ const db = admin.firestore();
 //   Card errors and rate-limit errors are surfaced with appropriate Firebase
 //   HttpsError codes so clients can show meaningful messages.
 // ─────────────────────────────────────────────────────────────────────────────
-export const createPaymentIntent = onCall(
-  { secrets: [STRIPE_SECRET_KEY] },
-  async (request) => {
-    // ── 1. Auth guard ─────────────────────────────────────────────────────────
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Login required");
-    }
+export const createPaymentIntent = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (request) => {
+  // ── 1. Auth guard ─────────────────────────────────────────────────────────
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Login required');
+  }
 
-    // ── 2. Input validation ───────────────────────────────────────────────────
-    const {
-      amount,
-      currency = SUPPORTED_CURRENCY,
-      guestId,
-      houseId,
-      description,
-      idempotencyKey: clientKey,
-      paymentMethodType = "card",
-    } = parseInput(createPaymentIntentSchema, request.data);
+  // ── 2. Input validation ───────────────────────────────────────────────────
+  const {
+    amount,
+    currency = SUPPORTED_CURRENCY,
+    guestId,
+    houseId,
+    description,
+    idempotencyKey: clientKey,
+    paymentMethodType = 'card',
+  } = parseInput(createPaymentIntentSchema, request.data);
 
-    // ── 3. Fetch and validate house ───────────────────────────────────────────
-    const houseSnap = await db.collection("houses").doc(houseId).get();
+  // ── 3. Fetch and validate house ───────────────────────────────────────────
+  const houseSnap = await db.collection('houses').doc(houseId).get();
 
-    if (!houseSnap.exists) {
-      throw new HttpsError("not-found", "House not found");
-    }
+  if (!houseSnap.exists) {
+    throw new HttpsError('not-found', 'House not found');
+  }
 
-    const house = houseSnap.data() as HouseAdminFields & {
-      stripeAccountId?: string;
-      stripeStatus?: string;
-      legacyRentFee?: boolean;
-    };
+  const house = houseSnap.data() as HouseAdminFields & {
+    stripeAccountId?: string;
+    stripeStatus?: string;
+    legacyRentFee?: boolean;
+  };
 
-    if (!house.stripeAccountId || house.stripeStatus !== "active") {
-      throw new HttpsError(
-        "failed-precondition",
-        "House has no active Stripe account",
-      );
-    }
+  if (!house.stripeAccountId || house.stripeStatus !== 'active') {
+    throw new HttpsError('failed-precondition', 'House has no active Stripe account');
+  }
 
-    // ── 3b. Authorization ─────────────────────────────────────────────────────
-    // The guest doc is the authority on which house a resident belongs to, so it
-    // is read for admins as well as residents. `guests` is a TOP-LEVEL
-    // collection, so guestId alone says nothing about the client-supplied
-    // houseId. Without binding the two, a resident of house A could pass house
-    // B's id: transfer_data.destination below would send the money to house B's
-    // Stripe account, while the payment_intent.succeeded handler decrements
-    // rentOwed on guests/{guestId} — the resident's own doc at house A. House A
-    // would show the rent as collected without ever receiving it.
-    const guestSnap = await db.collection("guests").doc(guestId).get();
-    if (!guestSnap.exists) {
-      throw new HttpsError("not-found", "Guest record not found");
-    }
-    const guestData = guestSnap.data() as {
-      userId?: string;
-      houseId?: string;
-      rentOwed?: number;
-      choreFees?: number;
-    };
-    if (guestData.houseId !== houseId) {
-      throw new HttpsError(
-        "permission-denied",
-        "Guest does not belong to this house",
-      );
-    }
-    if (
-      guestData.userId !== request.auth.uid &&
-      !(await isHouseMoneyStaff(request.auth.uid, houseId, house))
-    ) {
-      throw new HttpsError(
-        "permission-denied",
-        "Only the resident or a house admin can initiate this payment",
-      );
-    }
+  // ── 3b. Authorization ─────────────────────────────────────────────────────
+  // The guest doc is the authority on which house a resident belongs to, so it
+  // is read for admins as well as residents. `guests` is a TOP-LEVEL
+  // collection, so guestId alone says nothing about the client-supplied
+  // houseId. Without binding the two, a resident of house A could pass house
+  // B's id: transfer_data.destination below would send the money to house B's
+  // Stripe account, while the payment_intent.succeeded handler decrements
+  // rentOwed on guests/{guestId} — the resident's own doc at house A. House A
+  // would show the rent as collected without ever receiving it.
+  const guestSnap = await db.collection('guests').doc(guestId).get();
+  if (!guestSnap.exists) {
+    throw new HttpsError('not-found', 'Guest record not found');
+  }
+  const guestData = guestSnap.data() as {
+    userId?: string;
+    houseId?: string;
+    rentOwed?: number;
+    choreFees?: number;
+  };
+  if (guestData.houseId !== houseId) {
+    throw new HttpsError('permission-denied', 'Guest does not belong to this house');
+  }
+  if (
+    guestData.userId !== request.auth.uid &&
+    !(await isHouseMoneyStaff(request.auth.uid, houseId, house))
+  ) {
+    throw new HttpsError(
+      'permission-denied',
+      'Only the resident or a house admin can initiate this payment',
+    );
+  }
 
-    // ── 3c. Amount against the balance ────────────────────────────────────────
-    // Refuse overpayment here, before any charge: the webhook subtracts whatever
-    // was paid, so it would leave a credit the ledger never asked for. Checked
-    // after authorization so only someone entitled to see the balance is told it.
-    // Nothing guarantees these types on old documents, and a bad value must not
-    // widen the cap (amount > NaN is false; "5000" + 0 is "50000"), so it refuses.
-    const owedParts = [guestData.rentOwed ?? 0, guestData.choreFees ?? 0];
-    if (!owedParts.every((part) => Number.isFinite(part) && typeof part === "number")) {
-      logger.error("createPaymentIntent: malformed balance", { guestId });
-      throw new HttpsError(
-        "failed-precondition",
-        "This balance can't be paid online right now. Please contact your house manager.",
-      );
-    }
-    // Rounded up because the app rounds a fractional legacy balance up to charge it.
-    const owedCents = Math.max(Math.ceil(owedParts[0] + owedParts[1]), 0);
-    if (owedCents === 0) {
-      throw new HttpsError(
-        "failed-precondition",
-        "Nothing is owed right now, so there is nothing to pay.",
-      );
-    }
-    if (amount > owedCents) {
-      throw new HttpsError(
-        "failed-precondition",
-        `This payment is more than the $${(owedCents / 100).toFixed(2)} owed. Please enter a smaller amount.`,
-      );
-    }
+  // ── 3c. Amount against the balance ────────────────────────────────────────
+  // Refuse overpayment here, before any charge: the webhook subtracts whatever
+  // was paid, so it would leave a credit the ledger never asked for. Checked
+  // after authorization so only someone entitled to see the balance is told it.
+  // Nothing guarantees these types on old documents, and a bad value must not
+  // widen the cap (amount > NaN is false; "5000" + 0 is "50000"), so it refuses.
+  const owedParts = [guestData.rentOwed ?? 0, guestData.choreFees ?? 0];
+  if (!owedParts.every((part) => Number.isFinite(part) && typeof part === 'number')) {
+    logger.error('createPaymentIntent: malformed balance', { guestId });
+    throw new HttpsError(
+      'failed-precondition',
+      "This balance can't be paid online right now. Please contact your house manager.",
+    );
+  }
+  // Rounded up because the app rounds a fractional legacy balance up to charge it.
+  const owedCents = Math.max(Math.ceil(owedParts[0] + owedParts[1]), 0);
+  if (owedCents === 0) {
+    throw new HttpsError(
+      'failed-precondition',
+      'Nothing is owed right now, so there is nothing to pay.',
+    );
+  }
+  if (amount > owedCents) {
+    throw new HttpsError(
+      'failed-precondition',
+      `This payment is more than the $${(owedCents / 100).toFixed(2)} owed. Please enter a smaller amount.`,
+    );
+  }
 
-    // ── 4. Build idempotency key ──────────────────────────────────────────────
-    const dayKey = new Date().toISOString().slice(0, 10); // e.g. "2026-01-28"
-    const idempotencyKey = clientKey ?? `${guestId}-${houseId}-${dayKey}`;
+  // ── 4. Build idempotency key ──────────────────────────────────────────────
+  const dayKey = new Date().toISOString().slice(0, 10); // e.g. "2026-01-28"
+  const idempotencyKey = clientKey ?? `${guestId}-${houseId}-${dayKey}`;
 
-    // ── 5. Create PaymentIntent ───────────────────────────────────────────────
-    // amount is already integer cents (validated above).
-    // Deliberately NOT gated on house entitlement. Residents must be able to
-    // pay rent even while the operator's subscription has lapsed: the money is
-    // owed to the house, blocking it harms the resident and removes the
-    // operator's means of recovering. Do not add enforceHouseEntitlement here.
-    //
-    // Method-aware platform fee (P-1/P-2).
-    const applicationFeeAmount = computeApplicationFee({
-      amountCents: amount,
-      paymentMethodType,
-    });
+  // ── 5. Create PaymentIntent ───────────────────────────────────────────────
+  // amount is already integer cents (validated above).
+  // Deliberately NOT gated on house entitlement. Residents must be able to
+  // pay rent even while the operator's subscription has lapsed: the money is
+  // owed to the house, blocking it harms the resident and removes the
+  // operator's means of recovering. Do not add enforceHouseEntitlement here.
+  //
+  // Method-aware platform fee (P-1/P-2).
+  const applicationFeeAmount = computeApplicationFee({
+    amountCents: amount,
+    paymentMethodType,
+  });
 
-    const stripe = createStripeClient();
-    let paymentIntent: Stripe.PaymentIntent;
-    try {
-      paymentIntent = await stripe.paymentIntents.create(
-        {
-          amount,
-          currency,
-          description: description || `Rent payment for ${houseId}`,
-          // guestUserId (the resident's uid) is copied onto payments/{id} by
-          // the webhook: the payments read rule and the resident's history
-          // query key on it. Omitted for a guest doc with no linked account.
-          metadata: {
-            guestId,
-            houseId,
-            ...(guestData.userId ? { guestUserId: guestData.userId } : {}),
-          },
-          // An allowlist of one, by design: the client picks card or ACH
-          // upstream and the Payment Sheet is expected to offer only that.
-          //
-          // Stripe encourages omitting payment_method_types so dynamic payment
-          // methods apply, and expressing a genuine allowlist with
-          // allowed_payment_method_types instead. Adopting it waits on both an SDK
-          // upgrade and a deliberate pin bump: the parameter is absent from
-          // stripe@20.3.1 (locally verifiable), and per Stripe's web changelog it
-          // arrives in an API version later than the 2026-01-28.clover pin. Note it
-          // filters incompatible methods silently rather than erroring, so it is a
-          // weaker guarantee than this allowlist-of-one relies on.
-          //
-          // Dropping the restriction instead is not equivalent: the Payment
-          // Sheet would then show every method enabled in the Dashboard,
-          // regardless of which one the resident chose. That is a product
-          // decision about the rent-payment flow, not a mechanical cleanup.
-          payment_method_types: [paymentMethodType],
-          transfer_data: { destination: house.stripeAccountId },
-          application_fee_amount: applicationFeeAmount,
+  const stripe = createStripeClient();
+  let paymentIntent: Stripe.PaymentIntent;
+  try {
+    paymentIntent = await stripe.paymentIntents.create(
+      {
+        amount,
+        currency,
+        description: description || `Rent payment for ${houseId}`,
+        // guestUserId (the resident's uid) is copied onto payments/{id} by
+        // the webhook: the payments read rule and the resident's history
+        // query key on it. Omitted for a guest doc with no linked account.
+        metadata: {
+          guestId,
+          houseId,
+          ...(guestData.userId ? { guestUserId: guestData.userId } : {}),
         },
-        { idempotencyKey },
-      );
+        // An allowlist of one, by design: the client picks card or ACH
+        // upstream and the Payment Sheet is expected to offer only that.
+        //
+        // Stripe encourages omitting payment_method_types so dynamic payment
+        // methods apply, and expressing a genuine allowlist with
+        // allowed_payment_method_types instead. Adopting it waits on both an SDK
+        // upgrade and a deliberate pin bump: the parameter is absent from
+        // stripe@20.3.1 (locally verifiable), and per Stripe's web changelog it
+        // arrives in an API version later than the 2026-01-28.clover pin. Note it
+        // filters incompatible methods silently rather than erroring, so it is a
+        // weaker guarantee than this allowlist-of-one relies on.
+        //
+        // Dropping the restriction instead is not equivalent: the Payment
+        // Sheet would then show every method enabled in the Dashboard,
+        // regardless of which one the resident chose. That is a product
+        // decision about the rent-payment flow, not a mechanical cleanup.
+        payment_method_types: [paymentMethodType],
+        transfer_data: { destination: house.stripeAccountId },
+        application_fee_amount: applicationFeeAmount,
+      },
+      { idempotencyKey },
+    );
+  } catch (err) {
+    throw mapStripeError(err);
+  }
+
+  // ── 6. A replayed key whose intent is already paid (RENT-012) ─────────────
+  // On a replay Stripe returns its stored response for the original create,
+  // i.e. the intent as it was then, not as it is now. Its client secret would
+  // open a payment sheet for money that has already moved. Read the current
+  // status, and for a succeeded intent return no secret at all, so there is
+  // nothing the client can confirm.
+  if (isIdempotentReplay(paymentIntent)) {
+    let current: Stripe.PaymentIntent;
+    try {
+      current = await stripe.paymentIntents.retrieve(paymentIntent.id);
     } catch (err) {
       throw mapStripeError(err);
     }
-
-    // ── 6. A replayed key whose intent is already paid (RENT-012) ─────────────
-    // On a replay Stripe returns its stored response for the original create,
-    // i.e. the intent as it was then, not as it is now. Its client secret would
-    // open a payment sheet for money that has already moved. Read the current
-    // status, and for a succeeded intent return no secret at all, so there is
-    // nothing the client can confirm.
-    if (isIdempotentReplay(paymentIntent)) {
-      let current: Stripe.PaymentIntent;
-      try {
-        current = await stripe.paymentIntents.retrieve(paymentIntent.id);
-      } catch (err) {
-        throw mapStripeError(err);
-      }
-      if (current.status === "succeeded") {
-        logger.info("createPaymentIntent: replayed key, intent already paid", {
-          paymentIntentId: current.id,
-        });
-        return { alreadyPaid: true };
-      }
+    if (current.status === 'succeeded') {
+      logger.info('createPaymentIntent: replayed key, intent already paid', {
+        paymentIntentId: current.id,
+      });
+      return { alreadyPaid: true };
     }
+  }
 
-    return { clientSecret: paymentIntent.client_secret };
-  },
-);
+  return { clientSecret: paymentIntent.client_secret };
+});
 
 /**
  * True when Stripe answered from its idempotency cache rather than creating a
@@ -308,9 +291,8 @@ export const createPaymentIntent = onCall(
  * names.
  */
 function isIdempotentReplay(response: object): boolean {
-  const headers = (response as Partial<Stripe.Response<object>>).lastResponse
-    ?.headers;
-  return headers?.["idempotent-replayed"] === "true";
+  const headers = (response as Partial<Stripe.Response<object>>).lastResponse?.headers;
+  return headers?.['idempotent-replayed'] === 'true';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -321,90 +303,72 @@ function isIdempotentReplay(response: object): boolean {
 // house. House membership alone is not sufficient — `guestId` is client-supplied
 // and says nothing about who the caller is.
 // ─────────────────────────────────────────────────────────────────────────────
-export const listPayments = onCall(
-  { secrets: [STRIPE_SECRET_KEY] },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Login required");
-    }
+export const listPayments = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Login required');
+  }
 
-    const {
-      guestId,
-      houseId,
-      limit = 20,
-    } = parseInput(listPaymentsSchema, request.data);
+  const { guestId, houseId, limit = 20 } = parseInput(listPaymentsSchema, request.data);
 
-    // Authorization step 1: caller must hold a claim for this house at all.
-    // Cheap, and keeps a non-member from probing house existence below.
-    assertHouseMemberFromClaims(
-      request.auth.token,
-      houseId,
+  // Authorization step 1: caller must hold a claim for this house at all.
+  // Cheap, and keeps a non-member from probing house existence below.
+  assertHouseMemberFromClaims(request.auth.token, houseId);
+
+  const houseDoc = await db.collection('houses').doc(houseId).get();
+  if (!houseDoc.exists) {
+    throw new HttpsError('not-found', 'House not found');
+  }
+  const house = houseDoc.data() as HouseAdminFields & {
+    stripeAccountId?: string;
+  };
+
+  // Authorization step 2: bind the requested guestId to the caller, the same
+  // way updatePaymentInfo and createPaymentIntent do. `guests` is a TOP-LEVEL
+  // collection, so guestId alone says nothing about the client-supplied
+  // houseId — the guest doc is the authority on which house a resident
+  // belongs to. Checked before the Stripe read so the response cannot depend
+  // on a guestId the caller is not entitled to.
+  const guestSnap = await db.collection('guests').doc(guestId).get();
+  if (!guestSnap.exists) {
+    throw new HttpsError('not-found', 'Guest record not found');
+  }
+  const guestData = guestSnap.data() as {
+    userId?: string;
+    houseId?: string;
+  };
+  if (guestData.houseId !== houseId) {
+    throw new HttpsError('permission-denied', 'Guest does not belong to this house');
+  }
+  if (
+    guestData.userId !== request.auth.uid &&
+    !(await isHouseMoneyStaff(request.auth.uid, houseId, house))
+  ) {
+    throw new HttpsError(
+      'permission-denied',
+      'Only the resident or a house admin can view these payments',
     );
+  }
 
-    const houseDoc = await db.collection("houses").doc(houseId).get();
-    if (!houseDoc.exists) {
-      throw new HttpsError("not-found", "House not found");
-    }
-    const house = houseDoc.data() as HouseAdminFields & {
-      stripeAccountId?: string;
-    };
+  if (!house.stripeAccountId) return { payments: [] };
 
-    // Authorization step 2: bind the requested guestId to the caller, the same
-    // way updatePaymentInfo and createPaymentIntent do. `guests` is a TOP-LEVEL
-    // collection, so guestId alone says nothing about the client-supplied
-    // houseId — the guest doc is the authority on which house a resident
-    // belongs to. Checked before the Stripe read so the response cannot depend
-    // on a guestId the caller is not entitled to.
-    const guestSnap = await db.collection("guests").doc(guestId).get();
-    if (!guestSnap.exists) {
-      throw new HttpsError("not-found", "Guest record not found");
-    }
-    const guestData = guestSnap.data() as {
-      userId?: string;
-      houseId?: string;
-    };
-    if (guestData.houseId !== houseId) {
-      throw new HttpsError(
-        "permission-denied",
-        "Guest does not belong to this house",
-      );
-    }
-    if (
-      guestData.userId !== request.auth.uid &&
-      !(await isHouseMoneyStaff(request.auth.uid, houseId, house))
-    ) {
-      throw new HttpsError(
-        "permission-denied",
-        "Only the resident or a house admin can view these payments",
-      );
-    }
+  const stripe = createStripeClient();
+  const charges = await stripe.charges.list({ limit }, { stripeAccount: house.stripeAccountId });
 
-    if (!house.stripeAccountId) return { payments: [] };
+  // Filter client-side by guestId metadata
+  const filtered = charges.data.filter((c) => c.metadata?.guestId === guestId);
 
-    const stripe = createStripeClient();
-    const charges = await stripe.charges.list(
-      { limit },
-      { stripeAccount: house.stripeAccountId },
-    );
-
-    // Filter client-side by guestId metadata
-    const filtered = charges.data.filter(
-      (c) => c.metadata?.guestId === guestId,
-    );
-
-    return {
-      payments: filtered.map((c) => ({
-        id: c.id,
-        amount: c.amount / 100,
-        currency: c.currency,
-        status: c.status,
-        description: c.description,
-        createdAt: new Date(c.created * 1000).toISOString(),
-        receiptUrl: c.receipt_url,
-      })),
-    };
-  },
-);
+  return {
+    payments: filtered.map((c) => ({
+      id: c.id,
+      amount: c.amount / 100,
+      currency: c.currency,
+      status: c.status,
+      description: c.description,
+      createdAt: new Date(c.created * 1000).toISOString(),
+      receiptUrl: c.receipt_url,
+    })),
+  };
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // listHousePayments
@@ -415,172 +379,132 @@ export const listPayments = onCall(
 // belongs to, so this is a house-wide view of other residents' records — a
 // resident reads their own through listPayments instead.
 // ─────────────────────────────────────────────────────────────────────────────
-export const listHousePayments = onCall(
-  { secrets: [STRIPE_SECRET_KEY] },
-  async (request) => {
-    if (!request.auth) {
-      throw new HttpsError("unauthenticated", "Login required");
-    }
+export const listHousePayments = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Login required');
+  }
 
-    const { houseId, limit = 100 } = parseInput(
-      listHousePaymentsSchema,
-      request.data,
-    );
+  const { houseId, limit = 100 } = parseInput(listHousePaymentsSchema, request.data);
 
-    assertHouseMemberFromClaims(
-      request.auth.token,
-      houseId,
-    );
+  assertHouseMemberFromClaims(request.auth.token, houseId);
 
-    const houseDoc = await db.collection("houses").doc(houseId).get();
-    if (!houseDoc.exists) {
-      throw new HttpsError("not-found", "House not found");
-    }
-    const house = houseDoc.data() as HouseAdminFields & {
-      stripeAccountId?: string;
-    };
+  const houseDoc = await db.collection('houses').doc(houseId).get();
+  if (!houseDoc.exists) {
+    throw new HttpsError('not-found', 'House not found');
+  }
+  const house = houseDoc.data() as HouseAdminFields & {
+    stripeAccountId?: string;
+  };
 
-    // Ground truth from the house doc, not the token: custom claims only say
-    // "member", and may be up to an hour stale after a role change.
-    await assertHouseMoneyStaff(
-      request.auth.uid,
-      houseId,
-      house,
-      "Only house admins can view house-wide payments",
-    );
+  // Ground truth from the house doc, not the token: custom claims only say
+  // "member", and may be up to an hour stale after a role change.
+  await assertHouseMoneyStaff(
+    request.auth.uid,
+    houseId,
+    house,
+    'Only house admins can view house-wide payments',
+  );
 
-    if (!house.stripeAccountId) return { payments: [] };
+  if (!house.stripeAccountId) return { payments: [] };
 
-    const stripe = createStripeClient();
-    const charges = await stripe.charges.list(
-      { limit },
-      { stripeAccount: house.stripeAccountId },
-    );
+  const stripe = createStripeClient();
+  const charges = await stripe.charges.list({ limit }, { stripeAccount: house.stripeAccountId });
 
-    return {
-      payments: charges.data.map((c) => ({
-        id: c.id,
-        amount: c.amount / 100,
-        currency: c.currency,
-        status: c.status,
-        description: c.description,
-        createdAt: new Date(c.created * 1000).toISOString(),
-        receiptUrl: c.receipt_url,
-        guestId: c.metadata?.guestId ?? null,
-        houseId: c.metadata?.houseId ?? houseId,
-      })),
-    };
-  },
-);
+  return {
+    payments: charges.data.map((c) => ({
+      id: c.id,
+      amount: c.amount / 100,
+      currency: c.currency,
+      status: c.status,
+      description: c.description,
+      createdAt: new Date(c.created * 1000).toISOString(),
+      receiptUrl: c.receipt_url,
+      guestId: c.metadata?.guestId ?? null,
+      houseId: c.metadata?.houseId ?? houseId,
+    })),
+  };
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // getPaymentMethod
 // Retrieves the default payment method for a Stripe customer.
 // ─────────────────────────────────────────────────────────────────────────────
-export const getPaymentMethod = onCall(
-  { secrets: [STRIPE_SECRET_KEY] },
-  async (request) => {
-    if (!request.auth)
-      throw new HttpsError("unauthenticated", "Login required");
-    // Ownership: resolve the Stripe customer from the caller's own record.
-    // Never trust a client-supplied customerId — doing so let any authenticated
-    // user enumerate other tenants' card metadata.
-    parseInput(getPaymentMethodSchema, request.data);
-    const caller = await getUser(request.auth.uid);
-    const customerId = caller?.subscriptionMetadata?.customerId;
-    if (!customerId) {
-      throw new HttpsError("not-found", "No billing account on file");
-    }
-    const stripe = createStripeClient();
-    const customer = await stripe.customers.retrieve(customerId);
-    if (customer.deleted) {
-      throw new HttpsError("not-found", "Billing account no longer exists");
-    }
-    const paymentMethodId = customer.invoice_settings?.default_payment_method;
-    if (!paymentMethodId) return null;
-    return stripe.paymentMethods.retrieve(paymentMethodId as string);
-  },
-);
+export const getPaymentMethod = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
+  // Ownership: resolve the Stripe customer from the caller's own record.
+  // Never trust a client-supplied customerId — doing so let any authenticated
+  // user enumerate other tenants' card metadata.
+  parseInput(getPaymentMethodSchema, request.data);
+  const caller = await getUser(request.auth.uid);
+  const customerId = caller?.subscriptionMetadata?.customerId;
+  if (!customerId) {
+    throw new HttpsError('not-found', 'No billing account on file');
+  }
+  const stripe = createStripeClient();
+  const customer = await stripe.customers.retrieve(customerId);
+  if (customer.deleted) {
+    throw new HttpsError('not-found', 'Billing account no longer exists');
+  }
+  const paymentMethodId = customer.invoice_settings?.default_payment_method;
+  if (!paymentMethodId) return null;
+  return stripe.paymentMethods.retrieve(paymentMethodId as string);
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // updatePaymentInfo
 // ─────────────────────────────────────────────────────────────────────────────
-export const updatePaymentInfo = onCall(
-  { secrets: [STRIPE_SECRET_KEY] },
-  async (request) => {
-    if (!request.auth)
-      throw new HttpsError("unauthenticated", "Login required");
-    const { paymentMethod, guestId } = parseInput(
-      updatePaymentInfoSchema,
-      request.data,
-    );
+export const updatePaymentInfo = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
+  const { paymentMethod, guestId } = parseInput(updatePaymentInfoSchema, request.data);
 
-    // Ownership 1: resolve the Stripe customer from the caller's own record,
-    // never from client-supplied data (prevents attaching a card to another
-    // tenant's customer).
-    const caller = await getUser(request.auth.uid);
-    const customerId = caller?.subscriptionMetadata?.customerId;
-    if (!customerId) {
-      throw new HttpsError("not-found", "No billing account on file");
+  // Ownership 1: resolve the Stripe customer from the caller's own record,
+  // never from client-supplied data (prevents attaching a card to another
+  // tenant's customer).
+  const caller = await getUser(request.auth.uid);
+  const customerId = caller?.subscriptionMetadata?.customerId;
+  if (!customerId) {
+    throw new HttpsError('not-found', 'No billing account on file');
+  }
+
+  // Ownership 2: only the resident may put a card on their own guest doc. The
+  // card is attached to the caller's customer, and scheduledRentCollection
+  // charges the guest doc's defaultPaymentMethodId, so house staff writing
+  // it would put their own card on a resident's autopay. firestore.rules
+  // refuses these ids to every client for the same reason.
+  if (guestId) {
+    const guestSnap = await db.collection('guests').doc(guestId).get();
+    if (!guestSnap.exists) {
+      throw new HttpsError('not-found', 'Guest record not found');
     }
+    const guestData = guestSnap.data() as { userId?: string };
+    if (!guestData.userId || guestData.userId !== request.auth.uid) {
+      throw new HttpsError('permission-denied', 'Only the resident can update this payment method');
+    }
+  }
 
-    // Ownership 2: if writing a guest's default payment method, the caller must
-    // be that resident or an admin of the guest's house.
+  const stripe = createStripeClient();
+  try {
+    const payment = await stripe.paymentMethods.attach(paymentMethod, {
+      customer: customerId,
+    });
+    await stripe.customers.update(customerId, {
+      invoice_settings: {
+        default_payment_method: payment.id,
+      },
+    });
     if (guestId) {
-      const guestSnap = await db.collection("guests").doc(guestId).get();
-      if (!guestSnap.exists) {
-        throw new HttpsError("not-found", "Guest record not found");
-      }
-      const guestData = guestSnap.data() as {
-        userId?: string;
-        houseId?: string;
-      };
-      let authorized = guestData.userId === request.auth.uid;
-      if (!authorized && guestData.houseId) {
-        const houseSnap = await db
-          .collection("houses")
-          .doc(guestData.houseId)
-          .get();
-        authorized =
-          houseSnap.exists &&
-          (await isHouseMoneyStaff(
-            request.auth.uid,
-            guestData.houseId,
-            houseSnap.data() as HouseAdminFields,
-          ));
-      }
-      if (!authorized) {
-        throw new HttpsError(
-          "permission-denied",
-          "Only the resident or a house admin can update this payment method",
-        );
-      }
+      await db.collection('guests').doc(guestId).update({
+        defaultPaymentMethodId: payment.id,
+      });
     }
-
-    const stripe = createStripeClient();
-    try {
-      const payment = await stripe.paymentMethods.attach(paymentMethod, {
-        customer: customerId,
-      });
-      await stripe.customers.update(customerId, {
-        invoice_settings: {
-          default_payment_method: payment.id,
-        },
-      });
-      if (guestId) {
-        await db.collection("guests").doc(guestId).update({
-          defaultPaymentMethodId: payment.id,
-        });
-      }
-      return;
-    } catch (error) {
-      logger.error("updatePaymentInfo: failed to attach payment method", {
-        error,
-      });
-      throw new HttpsError("internal", "Failed to save payment method");
-    }
-  },
-);
+    return;
+  } catch (error) {
+    logger.error('updatePaymentInfo: failed to attach payment method', {
+      error,
+    });
+    throw new HttpsError('internal', 'Failed to save payment method');
+  }
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // connectStripeAccount
@@ -606,172 +530,159 @@ export const updatePaymentInfo = onCall(
 //     that two simultaneous calls cannot both create separate Stripe accounts
 //     for the same house.
 // ─────────────────────────────────────────────────────────────────────────────
-export const connectStripeAccount = onCall(
-  { secrets: [STRIPE_SECRET_KEY] },
-  async (request) => {
-    const stripe = createStripeClient();
-    const { data, auth } = request;
-    // ── 1. Auth guard ─────────────────────────────────────────────────────────
-    if (!auth) {
-      throw new HttpsError("unauthenticated", "Login required");
-    }
+export const connectStripeAccount = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (request) => {
+  const stripe = createStripeClient();
+  const { data, auth } = request;
+  // ── 1. Auth guard ─────────────────────────────────────────────────────────
+  if (!auth) {
+    throw new HttpsError('unauthenticated', 'Login required');
+  }
 
-    // ── 2. Input validation ───────────────────────────────────────────────────
-    // returnUrl / refreshUrl are optional.  If the client supplies them we
-    // validate the scheme to prevent open-redirect attacks; otherwise we
-    // fall back to the hosted HTTP endpoints (stripeConnectReturn /
-    // stripeConnectReauth) that this same deployment provides.  Defaults
-    // are constructed below, after we know the Stripe account ID.
-    const { houseId, returnUrl, refreshUrl } = parseInput(
-      connectStripeAccountSchema,
-      data,
-    );
+  // ── 2. Input validation ───────────────────────────────────────────────────
+  // returnUrl / refreshUrl are optional.  If the client supplies them we
+  // validate the scheme to prevent open-redirect attacks; otherwise we
+  // fall back to the hosted HTTP endpoints (stripeConnectReturn /
+  // stripeConnectReauth) that this same deployment provides.  Defaults
+  // are constructed below, after we know the Stripe account ID.
+  const { houseId, returnUrl, refreshUrl } = parseInput(connectStripeAccountSchema, data);
 
-    // ── 3. Fetch house & admin check ──────────────────────────────────────────
-    const houseRef = admin.firestore().collection("houses").doc(houseId);
-    const houseSnap = await houseRef.get();
+  // ── 3. Fetch house & admin check ──────────────────────────────────────────
+  const houseRef = admin.firestore().collection('houses').doc(houseId);
+  const houseSnap = await houseRef.get();
 
-    if (!houseSnap.exists) {
-      throw new HttpsError("not-found", "House not found");
-    }
+  if (!houseSnap.exists) {
+    throw new HttpsError('not-found', 'House not found');
+  }
 
-    const house = houseSnap.data() as HouseAdminFields & {
-      stripeAccountId?: string;
-      stripeAccountApi?: unknown;
-    };
+  const house = houseSnap.data() as HouseAdminFields & {
+    stripeAccountId?: string;
+    stripeAccountApi?: unknown;
+  };
 
-    // Deliberately NOT gated on house entitlement. Connecting Stripe is how
-    // rent starts flowing to the house, which is the operator's means of
-    // recovering from a lapse — the same reasoning that exempts
-    // createPaymentIntent above. Blocking setup during a lapse would make the
-    // lapse self-perpetuating. Do not add enforceHouseEntitlement here.
-    assertHouseAdmin(
-      auth.uid,
-      house,
-      "Only house admins can connect a Stripe account",
-    );
+  // Deliberately NOT gated on house entitlement. Connecting Stripe is how
+  // rent starts flowing to the house, which is the operator's means of
+  // recovering from a lapse — the same reasoning that exempts
+  // createPaymentIntent above. Blocking setup during a lapse would make the
+  // lapse self-perpetuating. Do not add enforceHouseEntitlement here.
+  assertHouseAdmin(auth.uid, house, 'Only house admins can connect a Stripe account');
 
-    // ── 4. Get or create the house's Stripe account ───────────────────────────
-    //   We use a transaction so that concurrent calls do not create two accounts.
-    let stripeAccountId: string = house.stripeAccountId ?? "";
+  // ── 4. Get or create the house's Stripe account ───────────────────────────
+  //   We use a transaction so that concurrent calls do not create two accounts.
+  let stripeAccountId: string = house.stripeAccountId ?? '';
 
-    // A closed v2 account still retrieves but accepts no operations, so an
-    // onboarding link for it fails every time. Detach it and fall through to
-    // creating a fresh one. The clear is conditional on the id being unchanged
-    // so a concurrent call that already attached a new account is not undone.
-    // v2 only: v1 has no closed state, and this platform rejects v1 accounts on
-    // v2 endpoints.
-    if (stripeAccountId && houseAccountApi(house.stripeAccountApi) === "v2") {
-      let closed: boolean;
-      try {
-        closed = await isRecipientAccountClosed(stripe, stripeAccountId);
-      } catch (err) {
-        throw mapStripeError(err);
-      }
-      if (closed) {
-        const closedId = stripeAccountId;
-        await admin.firestore().runTransaction(async (tx) => {
-          const snap = await tx.get(houseRef);
-          const current = snap.data() as { stripeAccountId?: string } | undefined;
-          if (current?.stripeAccountId === closedId) {
-            tx.update(houseRef, {
-              stripeAccountId: admin.firestore.FieldValue.delete(),
-              stripeAccountApi: admin.firestore.FieldValue.delete(),
-              stripeStatus: "disconnected",
-            });
-          }
-        });
-        logger.info("connectStripeAccount: replacing closed Stripe account", {
-          houseId,
-          closedAccountId: closedId,
-        });
-        stripeAccountId = "";
-      }
-    }
-
-    if (!stripeAccountId) {
-      // Create the account first (outside the transaction) so we have an ID
-      // to write. Creation is NOT idempotent: a second call racing here creates
-      // a second account. The transaction below ensures only one ID is ever
-      // persisted, and the loser's account is closed.
-      // New accounts use the configured API; the house records it so every
-      // later read and close uses the same one.
-      const api = connectAccountsApi();
-      let newAccount: { id: string };
-      try {
-        newAccount = await createHouseAccount(stripe, houseId, api);
-      } catch (err) {
-        throw mapStripeError(err);
-      }
-
-      // Transactionally write the account ID only if the field is still empty.
-      // IMPORTANT: No async Stripe calls are made inside the transaction callback
-      // because Firestore transactions can retry on contention, and we must not
-      // make external API calls on every retry attempt.
-      let existingAccountId: string | null = null;
-      try {
-        stripeAccountId = await admin.firestore().runTransaction(async (tx) => {
-          const snap = await tx.get(houseRef);
-          const current = snap.data() as
-            | { stripeAccountId?: string }
-            | undefined;
-
-          if (current?.stripeAccountId) {
-            // Another call already wrote an account ID — record it so we can
-            // clean up our newly-created account AFTER the transaction.
-            existingAccountId = current.stripeAccountId;
-            return current.stripeAccountId;
-          }
-
-          tx.update(houseRef, {
-            stripeAccountId: newAccount.id,
-            stripeAccountApi: api,
-            stripeStatus: "pending",
-          });
-          return newAccount.id;
-        });
-      } catch (err) {
-        // If the transaction fails for any reason, clean up the Stripe account.
-        await closeOrphanedAccount(stripe, newAccount.id, api);
-        throw new HttpsError("internal", "Failed to save Stripe account");
-      }
-
-      // Post-transaction cleanup: if the transaction found a concurrent account,
-      // close (v2) or delete (v1) the one we created so it is not left orphaned.
-      if (existingAccountId !== null) {
-        await closeOrphanedAccount(stripe, newAccount.id, api);
-      }
-    }
-
-    // ── 5. Resolve return/refresh URLs (client-provided or hosted defaults) ───
-    // Defaults point to stripeConnectReturn / stripeConnectReauth, which are
-    // HTTP Cloud Functions in this same deployment.  Region defaults to
-    // us-central1 (matches the project's setGlobalOptions / deploy default).
-    // Shared with stripeConnectReauth via util/connectUrls, so one onboarding
-    // flow cannot redirect to two different origins. This used to build the URL
-    // inline with us-central1 hardcoded and an empty-project fallback; the
-    // helper reads the deployed region and refuses to emit an unresolvable URL.
-    // Evaluated lazily: a client that supplied both URLs never calls it.
-    const resolvedReturnUrl = returnUrl ?? connectReturnUrl();
-    const resolvedRefreshUrl =
-      refreshUrl ?? connectRefreshUrl(stripeAccountId);
-
-    // ── 6. Create an account link (works for both new and existing accounts) ──
-    let accountLink: Stripe.AccountLink;
+  // A closed v2 account still retrieves but accepts no operations, so an
+  // onboarding link for it fails every time. Detach it and fall through to
+  // creating a fresh one. The clear is conditional on the id being unchanged
+  // so a concurrent call that already attached a new account is not undone.
+  // v2 only: v1 has no closed state, and this platform rejects v1 accounts on
+  // v2 endpoints.
+  if (stripeAccountId && houseAccountApi(house.stripeAccountApi) === 'v2') {
+    let closed: boolean;
     try {
-      accountLink = await stripe.accountLinks.create({
-        account: stripeAccountId,
-        refresh_url: resolvedRefreshUrl,
-        return_url: resolvedReturnUrl,
-        type: "account_onboarding",
+      closed = await isRecipientAccountClosed(stripe, stripeAccountId);
+    } catch (err) {
+      throw mapStripeError(err);
+    }
+    if (closed) {
+      const closedId = stripeAccountId;
+      await admin.firestore().runTransaction(async (tx) => {
+        const snap = await tx.get(houseRef);
+        const current = snap.data() as { stripeAccountId?: string } | undefined;
+        if (current?.stripeAccountId === closedId) {
+          tx.update(houseRef, {
+            stripeAccountId: admin.firestore.FieldValue.delete(),
+            stripeAccountApi: admin.firestore.FieldValue.delete(),
+            stripeStatus: 'disconnected',
+          });
+        }
       });
+      logger.info('connectStripeAccount: replacing closed Stripe account', {
+        houseId,
+        closedAccountId: closedId,
+      });
+      stripeAccountId = '';
+    }
+  }
+
+  if (!stripeAccountId) {
+    // Create the account first (outside the transaction) so we have an ID
+    // to write. Creation is NOT idempotent: a second call racing here creates
+    // a second account. The transaction below ensures only one ID is ever
+    // persisted, and the loser's account is closed.
+    // New accounts use the configured API; the house records it so every
+    // later read and close uses the same one.
+    const api = connectAccountsApi();
+    let newAccount: { id: string };
+    try {
+      newAccount = await createHouseAccount(stripe, houseId, api);
     } catch (err) {
       throw mapStripeError(err);
     }
 
-    return { url: accountLink.url };
-  },
-);
+    // Transactionally write the account ID only if the field is still empty.
+    // IMPORTANT: No async Stripe calls are made inside the transaction callback
+    // because Firestore transactions can retry on contention, and we must not
+    // make external API calls on every retry attempt.
+    let existingAccountId: string | null = null;
+    try {
+      stripeAccountId = await admin.firestore().runTransaction(async (tx) => {
+        const snap = await tx.get(houseRef);
+        const current = snap.data() as { stripeAccountId?: string } | undefined;
+
+        if (current?.stripeAccountId) {
+          // Another call already wrote an account ID — record it so we can
+          // clean up our newly-created account AFTER the transaction.
+          existingAccountId = current.stripeAccountId;
+          return current.stripeAccountId;
+        }
+
+        tx.update(houseRef, {
+          stripeAccountId: newAccount.id,
+          stripeAccountApi: api,
+          stripeStatus: 'pending',
+        });
+        return newAccount.id;
+      });
+    } catch (err) {
+      // If the transaction fails for any reason, clean up the Stripe account.
+      await closeOrphanedAccount(stripe, newAccount.id, api);
+      throw new HttpsError('internal', 'Failed to save Stripe account');
+    }
+
+    // Post-transaction cleanup: if the transaction found a concurrent account,
+    // close (v2) or delete (v1) the one we created so it is not left orphaned.
+    if (existingAccountId !== null) {
+      await closeOrphanedAccount(stripe, newAccount.id, api);
+    }
+  }
+
+  // ── 5. Resolve return/refresh URLs (client-provided or hosted defaults) ───
+  // Defaults point to stripeConnectReturn / stripeConnectReauth, which are
+  // HTTP Cloud Functions in this same deployment.  Region defaults to
+  // us-central1 (matches the project's setGlobalOptions / deploy default).
+  // Shared with stripeConnectReauth via util/connectUrls, so one onboarding
+  // flow cannot redirect to two different origins. This used to build the URL
+  // inline with us-central1 hardcoded and an empty-project fallback; the
+  // helper reads the deployed region and refuses to emit an unresolvable URL.
+  // Evaluated lazily: a client that supplied both URLs never calls it.
+  const resolvedReturnUrl = returnUrl ?? connectReturnUrl();
+  const resolvedRefreshUrl = refreshUrl ?? connectRefreshUrl(stripeAccountId);
+
+  // ── 6. Create an account link (works for both new and existing accounts) ──
+  let accountLink: Stripe.AccountLink;
+  try {
+    accountLink = await stripe.accountLinks.create({
+      account: stripeAccountId,
+      refresh_url: resolvedRefreshUrl,
+      return_url: resolvedReturnUrl,
+      type: 'account_onboarding',
+    });
+  } catch (err) {
+    throw mapStripeError(err);
+  }
+
+  return { url: accountLink.url };
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // disconnectStripeAccount
@@ -800,18 +711,18 @@ export const disconnectStripeAccount = onCall(
     const { data, auth } = request;
     // ── 1. Auth guard ─────────────────────────────────────────────────────────
     if (!auth) {
-      throw new HttpsError("unauthenticated", "Login required");
+      throw new HttpsError('unauthenticated', 'Login required');
     }
 
     // ── 2. Input validation ───────────────────────────────────────────────────
     const { houseId } = parseInput(houseIdSchema, data);
 
     // ── 3. Fetch house & admin check ──────────────────────────────────────────
-    const houseRef = admin.firestore().collection("houses").doc(houseId);
+    const houseRef = admin.firestore().collection('houses').doc(houseId);
     const houseSnap = await houseRef.get();
 
     if (!houseSnap.exists) {
-      throw new HttpsError("not-found", "House not found");
+      throw new HttpsError('not-found', 'House not found');
     }
 
     const house = houseSnap.data() as HouseAdminFields & {
@@ -819,16 +730,12 @@ export const disconnectStripeAccount = onCall(
       stripeAccountApi?: unknown;
     };
 
-    assertHouseAdmin(
-      auth.uid,
-      house,
-      "Only house admins can disconnect a Stripe account",
-    );
+    assertHouseAdmin(auth.uid, house, 'Only house admins can disconnect a Stripe account');
 
     // ── 4. If there is no account, we are already in the desired state ─────────
     const { stripeAccountId } = house;
 
-    if (stripeAccountId && houseAccountApi(house.stripeAccountApi) === "v2") {
+    if (stripeAccountId && houseAccountApi(house.stripeAccountApi) === 'v2') {
       // ── 5. Close the Stripe account (v2) ─────────────────────────────────────
       // Close, not oauth.deauthorize. Deauthorization is for OAuth-connected
       // Standard accounts and is one of the cases Stripe documents as forcing
@@ -848,7 +755,7 @@ export const disconnectStripeAccount = onCall(
       // would forfeit that, and live-mode deletion also fails while the
       // account holds any balance. The account keeps metadata.houseId, the
       // durable link back to this house; the log line is for operators.
-      logger.info("disconnectStripeAccount: unlinking v1 account without deleting it", {
+      logger.info('disconnectStripeAccount: unlinking v1 account without deleting it', {
         houseId,
         stripeAccountId,
       });
@@ -858,7 +765,7 @@ export const disconnectStripeAccount = onCall(
     await houseRef.update({
       stripeAccountId: admin.firestore.FieldValue.delete(),
       stripeAccountApi: admin.firestore.FieldValue.delete(),
-      stripeStatus: "disconnected",
+      stripeStatus: 'disconnected',
       stripeRequirements: admin.firestore.FieldValue.delete(),
       stripeChargesEnabled: false,
       stripePayoutsEnabled: false,
@@ -885,12 +792,7 @@ export const disconnectStripeAccount = onCall(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** Status values that mirror the StripeAccountStatus enum on the client. */
-type StripeStatus =
-  | "active"
-  | "pending"
-  | "restricted"
-  | "disconnected"
-  | "not_connected";
+type StripeStatus = 'active' | 'pending' | 'restricted' | 'disconnected' | 'not_connected';
 
 interface AccountStatusResult {
   status: StripeStatus;
@@ -903,126 +805,121 @@ interface AccountStatusResult {
   capabilities: Record<string, string>;
 }
 
-export const getStripeAccountStatus = onCall(
-  { secrets: [STRIPE_SECRET_KEY] },
-  async (request) => {
-    const stripe = createStripeClient();
-    const { data, auth } = request;
-    // ── 1. Auth guard ─────────────────────────────────────────────────────────
-    if (!auth) {
-      throw new HttpsError("unauthenticated", "Login required");
-    }
+export const getStripeAccountStatus = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (request) => {
+  const stripe = createStripeClient();
+  const { data, auth } = request;
+  // ── 1. Auth guard ─────────────────────────────────────────────────────────
+  if (!auth) {
+    throw new HttpsError('unauthenticated', 'Login required');
+  }
 
-    // ── 2. Input validation ───────────────────────────────────────────────────
-    const { houseId } = parseInput(houseIdSchema, data);
+  // ── 2. Input validation ───────────────────────────────────────────────────
+  const { houseId } = parseInput(houseIdSchema, data);
 
-    // ── 3. Fetch house doc ────────────────────────────────────────────────────
-    const houseRef = admin.firestore().collection("houses").doc(houseId);
-    const houseSnap = await houseRef.get();
+  // ── 3. Fetch house doc ────────────────────────────────────────────────────
+  const houseRef = admin.firestore().collection('houses').doc(houseId);
+  const houseSnap = await houseRef.get();
 
-    if (!houseSnap.exists) {
-      throw new HttpsError("not-found", "House not found");
-    }
+  if (!houseSnap.exists) {
+    throw new HttpsError('not-found', 'House not found');
+  }
 
-    const house = houseSnap.data() as HouseAdminFields & {
-      stripeAccountId?: string;
-      stripeAccountApi?: unknown;
+  const house = houseSnap.data() as HouseAdminFields & {
+    stripeAccountId?: string;
+    stripeAccountApi?: unknown;
+  };
+
+  // ── 4. Membership check ───────────────────────────────────────────────────
+  const isHouseMember = await checkIsMember(auth.uid, houseId, house);
+  if (!isHouseMember) {
+    throw new HttpsError('permission-denied', 'Not a member of this house');
+  }
+
+  // ── 5. Short-circuit if no Stripe account is connected ────────────────────
+  if (!house.stripeAccountId) {
+    const notConnectedResult: AccountStatusResult = {
+      status: 'not_connected',
+      chargesEnabled: false,
+      payoutsEnabled: false,
+      requirements: { currentlyDue: [], pastDue: [] },
+      capabilities: {},
     };
+    return notConnectedResult;
+  }
 
-    // ── 4. Membership check ───────────────────────────────────────────────────
-    const isHouseMember = await checkIsMember(auth.uid, houseId, house);
-    if (!isHouseMember) {
-      throw new HttpsError("permission-denied", "Not a member of this house");
-    }
-
-    // ── 5. Short-circuit if no Stripe account is connected ────────────────────
-    if (!house.stripeAccountId) {
-      const notConnectedResult: AccountStatusResult = {
-        status: "not_connected",
-        chargesEnabled: false,
-        payoutsEnabled: false,
-        requirements: { currentlyDue: [], pastDue: [] },
-        capabilities: {},
-      };
-      return notConnectedResult;
-    }
-
-    // ── 6. Retrieve the live account from Stripe ──────────────────────────────
-    // Through the shared status helper, with the API that created the house's
-    // account: the transfers capability is the only signal that says whether
-    // this house can receive rent.
-    let accountStatus: ConnectAccountStatus | null = null;
-    try {
-      accountStatus = await fetchConnectAccountStatus(
-        stripe,
-        house.stripeAccountId,
-        houseAccountApi(house.stripeAccountApi),
-      );
-    } catch (err) {
-      // Only `resource_missing` means gone. Anything else — including the 403
-      // forbidden v2 returns for an id this key cannot see — says nothing about
-      // the house's account, so it surfaces rather than stopping rent.
-      if (!isResourceMissing(err)) {
-        throw mapStripeError(err);
-      }
-    }
-
-    // The account no longer exists, or Stripe has closed it — a closed account
-    // still retrieves but can never receive a transfer. Either way the house is
-    // not connected; sync that so rent collection stops.
-    if (accountStatus === null || accountStatus.closed) {
-      await houseRef.update({
-        stripeStatus: "disconnected",
-        stripeChargesEnabled: false,
-        stripePayoutsEnabled: false,
-        stripeRequirements: [],
-        stripeLastSyncAt: Date.now(),
-      });
-      const disconnectedResult: AccountStatusResult = {
-        status: "disconnected",
-        chargesEnabled: false,
-        payoutsEnabled: false,
-        requirements: { currentlyDue: [], pastDue: [] },
-        capabilities: {},
-      };
-      return disconnectedResult;
-    }
-
-    // ── 7. Map Stripe account to our status model ─────────────────────────────
-    const { currentlyDue, pastDue, eventuallyDue } = accountStatus;
-    const status: StripeStatus = accountStatus.status;
-
-    // chargesEnabled / payoutsEnabled are display-only rows for the mobile
-    // client; neither gates rent. How each API derives them is documented on
-    // ConnectAccountStatus.
-    const { chargesEnabled, payoutsEnabled } = accountStatus;
-
-    // All requirement items to persist — union of every deadline bucket.
-    const requirementsToStore = Array.from(
-      new Set([...currentlyDue, ...pastDue, ...eventuallyDue]),
+  // ── 6. Retrieve the live account from Stripe ──────────────────────────────
+  // Through the shared status helper, with the API that created the house's
+  // account: the transfers capability is the only signal that says whether
+  // this house can receive rent.
+  let accountStatus: ConnectAccountStatus | null = null;
+  try {
+    accountStatus = await fetchConnectAccountStatus(
+      stripe,
+      house.stripeAccountId,
+      houseAccountApi(house.stripeAccountApi),
     );
+  } catch (err) {
+    // Only `resource_missing` means gone. Anything else — including the 403
+    // forbidden v2 returns for an id this key cannot see — says nothing about
+    // the house's account, so it surfaces rather than stopping rent.
+    if (!isResourceMissing(err)) {
+      throw mapStripeError(err);
+    }
+  }
 
-    const capabilities: Record<string, string> = {
-      stripe_transfers: accountStatus.transfersStatus,
-    };
-
-    // ── 8. Sync status back to Firestore ─────────────────────────────────────
+  // The account no longer exists, or Stripe has closed it — a closed account
+  // still retrieves but can never receive a transfer. Either way the house is
+  // not connected; sync that so rent collection stops.
+  if (accountStatus === null || accountStatus.closed) {
     await houseRef.update({
-      stripeStatus: status,
-      stripeChargesEnabled: chargesEnabled,
-      stripePayoutsEnabled: payoutsEnabled,
-      stripeRequirements: requirementsToStore,
+      stripeStatus: 'disconnected',
+      stripeChargesEnabled: false,
+      stripePayoutsEnabled: false,
+      stripeRequirements: [],
       stripeLastSyncAt: Date.now(),
-      stripeError: admin.firestore.FieldValue.delete(),
     });
-
-    const result: AccountStatusResult = {
-      status,
-      chargesEnabled,
-      payoutsEnabled,
-      requirements: { currentlyDue, pastDue },
-      capabilities,
+    const disconnectedResult: AccountStatusResult = {
+      status: 'disconnected',
+      chargesEnabled: false,
+      payoutsEnabled: false,
+      requirements: { currentlyDue: [], pastDue: [] },
+      capabilities: {},
     };
-    return result;
-  },
-);
+    return disconnectedResult;
+  }
+
+  // ── 7. Map Stripe account to our status model ─────────────────────────────
+  const { currentlyDue, pastDue, eventuallyDue } = accountStatus;
+  const status: StripeStatus = accountStatus.status;
+
+  // chargesEnabled / payoutsEnabled are display-only rows for the mobile
+  // client; neither gates rent. How each API derives them is documented on
+  // ConnectAccountStatus.
+  const { chargesEnabled, payoutsEnabled } = accountStatus;
+
+  // All requirement items to persist — union of every deadline bucket.
+  const requirementsToStore = Array.from(new Set([...currentlyDue, ...pastDue, ...eventuallyDue]));
+
+  const capabilities: Record<string, string> = {
+    stripe_transfers: accountStatus.transfersStatus,
+  };
+
+  // ── 8. Sync status back to Firestore ─────────────────────────────────────
+  await houseRef.update({
+    stripeStatus: status,
+    stripeChargesEnabled: chargesEnabled,
+    stripePayoutsEnabled: payoutsEnabled,
+    stripeRequirements: requirementsToStore,
+    stripeLastSyncAt: Date.now(),
+    stripeError: admin.firestore.FieldValue.delete(),
+  });
+
+  const result: AccountStatusResult = {
+    status,
+    chargesEnabled,
+    payoutsEnabled,
+    requirements: { currentlyDue, pastDue },
+    capabilities,
+  };
+  return result;
+});

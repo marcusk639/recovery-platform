@@ -26,7 +26,7 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { doc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { doc, setDoc, updateDoc, deleteField, Timestamp } from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -104,7 +104,11 @@ describe('guests self-create payment fields', () => {
   ])('BLOCKS a house admin creating a guest doc carrying %s', async (_label, extra) => {
     const ctx = testEnv.authenticatedContext(ADMIN_UID, { admin: { [HOUSE_ID]: true } });
     await assertFails(
-      setDoc(doc(ctx.firestore(), 'guests/g1'), { ...signupGuest, userId: 'someoneElse', ...extra }),
+      setDoc(doc(ctx.firestore(), 'guests/g1'), {
+        ...signupGuest,
+        userId: 'someoneElse',
+        ...extra,
+      }),
     );
   });
 
@@ -142,6 +146,17 @@ describe('guests admin update payment fields', () => {
     },
   );
 
+  it.each([['stripeCustomerId'], ['defaultPaymentMethodId']])(
+    'BLOCKS a house admin removing a server-set %s',
+    async (field) => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        await setDoc(doc(ctx.firestore(), 'guests/g1'), { ...seeded, [field]: 'server_set' });
+      });
+      const ctx = testEnv.authenticatedContext(ADMIN_UID, ADMIN_CLAIMS);
+      await assertFails(updateDoc(doc(ctx.firestore(), 'guests/g1'), { [field]: deleteField() }));
+    },
+  );
+
   it('lets a house admin edit other fields of a guest doc that carries server-set ids', async () => {
     await testEnv.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'guests/g1'), {
@@ -155,24 +170,24 @@ describe('guests admin update payment fields', () => {
   });
 });
 
-describe("guests self-update payment fields", () => {
-  it.each([["stripeCustomerId"], ["defaultPaymentMethodId"]])(
-    "BLOCKS a resident adding %s to their own guest doc",
+describe('guests self-update payment fields', () => {
+  it.each([['stripeCustomerId'], ['defaultPaymentMethodId']])(
+    'BLOCKS a resident adding %s to their own guest doc',
     async (field) => {
       await testEnv.withSecurityRulesDisabled(async (ctx) => {
-        await setDoc(doc(ctx.firestore(), "guests/g1"), signupGuest);
+        await setDoc(doc(ctx.firestore(), 'guests/g1'), signupGuest);
       });
       const ctx = testEnv.authenticatedContext(SELF_UID);
-      await assertFails(updateDoc(doc(ctx.firestore(), "guests/g1"), { [field]: "planted" }));
+      await assertFails(updateDoc(doc(ctx.firestore(), 'guests/g1'), { [field]: 'planted' }));
     },
   );
 });
 
-describe("users self-create Stripe ids", () => {
+describe('users self-create Stripe ids', () => {
   // The client writes the whole User entity on create; its defaults are "".
-  const defaults = { status: "", customerId: "", subscriptionId: "", houses: {} };
+  const defaults = { status: '', customerId: '', subscriptionId: '', houses: {} };
 
-  it("lets a user create their doc with the default empty billing ids", async () => {
+  it('lets a user create their doc with the default empty billing ids', async () => {
     const ctx = testEnv.authenticatedContext(SELF_UID);
     await assertSucceeds(
       setDoc(doc(ctx.firestore(), `users/${SELF_UID}`), { subscriptionMetadata: defaults }),
@@ -180,9 +195,9 @@ describe("users self-create Stripe ids", () => {
   });
 
   it.each([
-    ["customerId", { customerId: "cus_victim" }],
-    ["subscriptionId", { subscriptionId: "sub_victim" }],
-  ])("BLOCKS a user creating their doc with a seeded %s", async (_label, seeded) => {
+    ['customerId', { customerId: 'cus_victim' }],
+    ['subscriptionId', { subscriptionId: 'sub_victim' }],
+  ])('BLOCKS a user creating their doc with a seeded %s', async (_label, seeded) => {
     const ctx = testEnv.authenticatedContext(SELF_UID);
     await assertFails(
       setDoc(doc(ctx.firestore(), `users/${SELF_UID}`), {
