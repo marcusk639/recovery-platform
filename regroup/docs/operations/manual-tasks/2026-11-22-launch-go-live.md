@@ -49,26 +49,25 @@ legal access can do, in the order it has to happen.
 `regroup/scripts/regroup_feedback_mailmerge.csv` (238 rows) and `regroup/scripts/test.csv` (17 rows)
 hold email addresses and first names, and have been public since the first commit (`8e36c372`).
 
-```bash
-git rm regroup/scripts/regroup_feedback_mailmerge.csv regroup/scripts/test.csv
-git commit -m "chore(regroup): remove committed contact lists"
-```
+**Merge #291**, which removes both files and the mail-merge send logs in `regroup/scripts/logs/`
+(they name the same recipients), and gitignores all three.
 
 Then decide:
 
 - **History:** removing the files leaves them in history. A rewrite (for example `git filter-repo --path
-regroup/scripts/regroup_feedback_mailmerge.csv --path regroup/scripts/test.csv --invert-paths`) needs
+regroup/scripts/regroup_feedback_mailmerge.csv --path regroup/scripts/test.csv --path regroup/scripts/logs --invert-paths`) needs
   a force-push of `main` and every open branch rebuilt. GitHub keeps cached views until GitHub Support
   purges them.
 - **Notice:** whether the people listed need telling.
 
-**Expected result:** neither file is on `main`.
+**Expected result:** none of those files is on `main`.
 
 #### A2. Rotate the key in the local commit `e0d94a63` (M2)
 
 `e0d94a63`, on the local-only branch `feat/regroup-tier-billing`, adds `recovery-api/scripts/service-key.json`.
 
-1. Confirm it was never pushed: `git branch -r --contains e0d94a63` should print nothing.
+1. Confirm it was never pushed: `git branch -r --contains e0d94a63` should print nothing. (It printed
+   nothing on 2026-11-24. Rotate anyway: the file sat in a local clone.)
 2. Find the key's id: `git show e0d94a63:recovery-api/scripts/service-key.json | grep private_key_id`.
    That prints only the id, not the key.
 3. Console → IAM & Admin → Service accounts (project `recovery-platform-e6cb3`) → that account → Keys →
@@ -86,7 +85,12 @@ regroup/scripts/regroup_feedback_mailmerge.csv --path regroup/scripts/test.csv -
    - `customer.subscription.created`
    - `customer.subscription.trial_will_end`
    - `invoice.payment_action_required`
-2. **Customer Portal.** Settings → Billing → Customer portal:
+2. **Connect webhook event (S1, #292).** Developers → Webhooks → the endpoint ending
+   `…/handleStripeConnectWebhook` (`we_1UNgzIKsstp3aqoPeAGheDy3`) → ⋯ → Update details → Select events.
+   It listens to connected accounts and has only `account.updated` and `account.application.deauthorized`
+   (read 2026-11-22). Add **`payout.failed`**, so a house's failed bank payout reaches its admins. It's safe
+   before the deploy: today's code answers an unhandled event with 200.
+3. **Customer Portal.** Settings → Billing → Customer portal:
    - **Payment methods:** allow customers to update.
    - **Invoice history:** on.
    - **Cancellations:** allow, at the end of the billing period.
@@ -98,7 +102,7 @@ regroup/scripts/regroup_feedback_mailmerge.csv --path regroup/scripts/test.csv -
 
 **Expected result:**
 
-- the endpoint lists 14 events;
+- the `stripeEvents` endpoint lists 14 events, and the Connect endpoint 3;
 - the portal page shows "Active";
 - `stripe billing_portal configurations list --live` returns one configuration with `is_default: true`.
 
@@ -161,9 +165,9 @@ The live policy (`https://regroup-app.com/privacy-policy`, source
 - **Say what the app actually collects:** medication names and doses (the medication log), drug-test
   results, documents and their files, location (house search and check-ins), and contact details.
 - **List the processors:** Google Firebase/Cloud, Stripe, SendGrid, Google Maps and Sentry.
-- **"HIPAA compliant":** keep it only if a Google Cloud BAA covers the services holding resident data,
-  and say so. Otherwise remove it from the policy, the pricing page and the site (open question in the
-  plan).
+- **"HIPAA compliant":** #295 removes the claim from the website (`discover-two`, `work`), since the
+  policy already says this data isn't PHI. Put it back only if a Google Cloud BAA covers the services
+  holding resident data, and say so in the policy too.
 - **Contact domain:** one, `regroup-app.com` (the policy uses `regroup.app`).
 
 Get legal review of the final text. The code PR fixes the app's link, which pointed at `/privacy`, a 404.
@@ -173,12 +177,14 @@ Get legal review of the final text. The code PR fixes the app's link, which poin
 #### B3. Store listings (B7, the owner track)
 
 - **App Store Connect:**
-  - App Privacy answers matching B2;
+  - App Privacy answers matching B2: use the table in
+    `regroup/docs/operations/manual-tasks/2026-11-22-app-privacy-answers.md` (#291), which matches the app's
+    `PrivacyInfo.xcprivacy`;
   - age rating;
   - the privacy policy URL `https://regroup-app.com/privacy-policy`;
   - in the review notes, a demo operator account with an entitled house.
 - **Play Console** (after the account is approved):
-  - Data safety answers matching B2;
+  - Data safety answers matching B2 (the same doc's Play section);
   - the app content declarations (health: "no"; it's a recovery-housing tool, not medical);
   - the privacy policy URL;
   - an internal testing track first.
@@ -298,11 +304,15 @@ collection or a Stripe webhook fails. The app side (render crashes to Sentry) is
 
    ```
    resource.type="cloud_run_revision"
-   resource.labels.service_name=("rentcharges" OR "scheduledrentcollection" OR "stripeevents" OR "handlestripeconnectwebhook" OR "weeklytransfers")
+   resource.labels.service_name=("rentcharges" OR "scheduledrentcollection" OR "stripeevents" OR "handlestripeconnectwebhook" OR "weeklytransfers" OR "createoperatorsubscription")
    severity>=ERROR
    ```
 
    **Run query.** On a quiet day it should return nothing, or only errors you already know about.
+   `createoperatorsubscription` is there for #290: when checkout's records can't be written, it cancels
+   the new Stripe subscription and logs an error. If that cancel also fails it logs "Checkout subscription
+   left live with no records: cancel it by hand", with the subscription and customer ids. Cancel that
+   subscription in the Dashboard the same day.
 
 3. **Actions → Create log alert.** Name it `regroup money-path errors`. Keep the query. Set
    "Time between notifications" to 5 minutes and "Incident autoclose" to 1 day, then pick the C9.1
@@ -354,7 +364,8 @@ After C1–C8 and D:
 - **A test signup on the web** (`https://regroup-app.com/signup`) with a real card reaches the trial. In
   Stripe, a customer and a `trialing` subscription on a tier price appear on **regroup-app.com**.
 - **On the phone, the operator connects a bank account:** Stripe onboarding opens and returns to the
-  app. Then `stripe accounts list --live --limit 3` shows the new connected account.
+  app, and Payments shows the new status without leaving the screen (#294). Then
+  `stripe accounts list --live --limit 3` shows the new connected account.
 - **An invite email opens the app's invite screen** on iOS and Android.
 - **A resident pays rent,** and the payment shows on Regroup's account with a transfer to the house's
   connected account.
@@ -374,6 +385,9 @@ After C1–C8 and D:
   version.
 
 ## Notes & Gotchas
+
+- **When the operator portal ships,** delete "(coming soon)" from the compliance export and analytics
+  bullets in `regroup/web/src/app/components/pricing/pricing-one/pricing-one.component.html` (#295).
 
 - **Never `gcloud secrets versions add` with `read -p` in zsh.** It stores an empty value; that is what
   created the empty versions 4–6. Use `read -rs "var?prompt"` as above.
