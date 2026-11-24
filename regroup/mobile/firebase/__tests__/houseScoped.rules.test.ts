@@ -258,6 +258,11 @@ describe('payments history list queries', () => {
         guestUserId: OTHER_RESIDENT_UID,
         createdAt: '2026-10-02T00:00:00Z',
       });
+      // The admin here is the house's manager. Payment reads check the
+      // house-roles tier: peer leaders hold the same admin claim but no money.
+      await setDoc(doc(ctx.firestore(), `house-roles/${HOUSE_ID}_${ADMIN_UID}`), {
+        tier: 'manager',
+      });
     });
   });
 

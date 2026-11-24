@@ -157,7 +157,10 @@ export function useGuestBalances(houseId: string, guests: Guest[]) {
       // Firestore records, so manual payments count (#191).
       const payments = await getHousePaymentRecords(houseId);
       return guests.map(guest => {
-        const guestPayments = payments.filter(p => p.guestId === guest.id);
+        // A linked intake record's payments keep its guestId and name the
+        // record they moved to in linkedTo (functions' linkIntakeRecord); they
+        // count there, and only there.
+        const guestPayments = payments.filter(p => (p.linkedTo ?? p.guestId) === guest.id);
         const totalPaid = guestPayments.reduce(
           (sum, p) => sum + netPaidCents(p),
           0,

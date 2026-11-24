@@ -32,5 +32,7 @@ export function paymentDisplayStatus(
       : { label: 'partially refunded', tone: 'warning' };
   }
   const paid = payment.status === 'succeeded' || payment.status === 'resolved_offline';
-  return { label: payment.status.replace('_', ' '), tone: paid ? 'good' : 'bad' };
+  // Pending has not failed: yellow, as the Pay Rent badge shows it.
+  const tone: PaymentTone = paid ? 'good' : payment.status === 'pending' ? 'warning' : 'bad';
+  return { label: payment.status.replace('_', ' '), tone };
 }
