@@ -121,6 +121,49 @@ describe('writeInvitationMembership', () => {
     expect(w.createGuest).toHaveBeenCalledTimes(2);
   });
 
+  it('a concurrent double call creates one record', async () => {
+    const w = writers();
+    const m1 = buildInvitationMembership(user, { type: 'guest', houseId: 'h1' })!;
+    const m2 = buildInvitationMembership(user, { type: 'guest', houseId: 'h1' })!;
+    await Promise.all([
+      writeInvitationMembership(m1, user, w),
+      writeInvitationMembership(m2, user, w),
+    ]);
+    expect(w.createGuest).toHaveBeenCalledTimes(1);
+    expect(w.updateUser.mock.calls.every((c) => (c as unknown[])[1] === m1.updates)).toBe(true);
+  });
+
+  it('a create that succeeded server-side but rejected on the client is retried with the same record id', async () => {
+    const w = writers();
+    w.createGuest.mockRejectedValueOnce(Object.assign(new Error('offline'), { code: 'unavailable' }));
+    const first = buildInvitationMembership(user, { type: 'guest', houseId: 'h1' })!;
+    await expect(writeInvitationMembership(first, user, w)).rejects.toThrow('offline');
+    const retry = buildInvitationMembership(user, { type: 'guest', houseId: 'h1' })!;
+    await writeInvitationMembership(retry, user, w);
+    const ids = w.createGuest.mock.calls.map((c) => (c as unknown[])[0] as { id: string });
+    expect(ids).toHaveLength(2);
+    expect(ids[1].id).toBe(ids[0].id);
+    // Ids are mocked constant in this suite, so also check it is the same record object.
+    expect(w.createGuest.mock.calls[1][0]).toBe(w.createGuest.mock.calls[0][0]);
+    expect(w.updateUser).toHaveBeenLastCalledWith(user, first.updates);
+  });
+
+  it('a definite rules rejection forgets the record (the retry builds a new one)', async () => {
+    const w = writers();
+    w.createGuest.mockRejectedValueOnce(
+      Object.assign(new Error('denied'), { code: 'firestore/permission-denied' }),
+    );
+    const first = buildInvitationMembership(user, { type: 'guest', houseId: 'h1' })!;
+    await expect(writeInvitationMembership(first, user, w)).rejects.toThrow('denied');
+    const retry = buildInvitationMembership(user, { type: 'guest', houseId: 'h1' })!;
+    await writeInvitationMembership(retry, user, w);
+    const ids = w.createGuest.mock.calls.map((c) => (c as unknown[])[0] as { id: string });
+    // The retry creates its own freshly built record, not the rejected one.
+    expect(w.createGuest.mock.calls[1][0]).toBe(retry.kind === 'guest' ? retry.guest : null);
+    expect(w.createGuest.mock.calls[1][0]).not.toBe(w.createGuest.mock.calls[0][0]);
+    expect(ids).toHaveLength(2);
+  });
+
   it('creates the admins record and updates the user', async () => {
     const w = writers();
     const m = buildInvitationMembership(user, { type: 'admin', houseId: 'h1' })!;

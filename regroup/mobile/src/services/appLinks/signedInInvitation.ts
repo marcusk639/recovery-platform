@@ -110,11 +110,14 @@ export async function acceptInvitationAsCurrentUser(
   // refuse here, and an accept never builds records from a stale profile.
   let user: Partial<User> | null;
   try {
-    user = cachedUser?.uid ? await getUser(cachedUser.uid) : cachedUser;
+    user = cachedUser?.uid ? await getUser(cachedUser.uid) : null;
   } catch (error) {
     logException(error, 'acceptInvitationAsCurrentUser: user reload failed');
     return { ok: false, message: GENERIC };
   }
+  // No user doc (or no uid) means nothing to build a membership on: stop
+  // before the redeem spends the invitation.
+  if (!user?.uid) return { ok: false, message: GENERIC };
   let role: MembershipInvitation;
   try {
     role = await invitationRole(invitation);

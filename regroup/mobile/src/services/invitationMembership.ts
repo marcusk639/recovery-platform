@@ -67,13 +67,18 @@ export function buildInvitationMembership(
 }
 
 /**
- * Records already created whose user-doc update has not succeeded yet, keyed
- * by account, role and house. The record's id is random and the rules allow no
- * client lookup of one's own record (an admins list query is refused), so a
- * retry in the same app session reuses this record instead of creating a
- * second one. Lost on an app restart: see SETUP_UNFINISHED's advice.
+ * The record a failed attempt chose, keyed by account, role and house, so a
+ * retry in the same app session reuses its id instead of creating a second
+ * one (ids are random, and the rules allow no client lookup of one's own
+ * record: an admins list query is refused). `create` is the in-flight or
+ * settled create; it is stored BEFORE it is awaited, so a double tap shares
+ * one create. Lost on an app restart: see SETUP_UNFINISHED's advice.
  */
-const createdNotLinked = new Map<string, InvitationMembership>();
+interface Pending {
+  membership: InvitationMembership;
+  create: Promise<unknown> | null;
+}
+const pendingByKey = new Map<string, Pending>();
 
 const retryKey = (user: Partial<User>, m: InvitationMembership): string =>
   m.kind === 'guest'
@@ -82,14 +87,20 @@ const retryKey = (user: Partial<User>, m: InvitationMembership): string =>
 
 /** Test seam: forget records created by a failed attempt. */
 export function resetInvitationMembershipRetryState(): void {
-  createdNotLinked.clear();
+  pendingByKey.clear();
 }
+
+/** A rules rejection: nothing was written, so the record id can be dropped. */
+const isDefiniteRejection = (error: unknown): boolean =>
+  /permission-denied/.test(String((error as { code?: unknown })?.code ?? ''));
 
 /**
  * Writes the record, then links the user to it. Sequential, so a failure
  * leaves only "record exists, user not linked" (never a user pointing at a
- * record that was not created), and a retry skips the create. Rejects if
- * either write fails.
+ * record that was not created). Single-flight per key. A create that failed
+ * without a definite rules rejection (it may have reached the server) keeps
+ * its record id, and the retry re-sends the create for that same id. Rejects
+ * if either write fails.
  */
 export async function writeInvitationMembership(
   membership: InvitationMembership,
@@ -97,16 +108,25 @@ export async function writeInvitationMembership(
   writers: MembershipWriters,
 ): Promise<void> {
   const key = retryKey(user, membership);
-  let created = createdNotLinked.get(key);
-  if (!created) {
-    await (membership.kind === 'guest'
-      ? writers.createGuest(membership.guest)
-      : writers.createAdmin(membership.admin));
-    created = membership;
-    createdNotLinked.set(key, created);
+  let entry = pendingByKey.get(key);
+  if (!entry) {
+    entry = { membership, create: null };
+    pendingByKey.set(key, entry);
   }
-  await writers.updateUser(user as User, created.updates);
-  createdNotLinked.delete(key);
+  const chosen = entry.membership;
+  if (!entry.create) {
+    const started = Promise.resolve(
+      chosen.kind === 'guest' ? writers.createGuest(chosen.guest) : writers.createAdmin(chosen.admin),
+    );
+    entry.create = started;
+    started.catch((error) => {
+      if (isDefiniteRejection(error)) pendingByKey.delete(key);
+      else if (pendingByKey.get(key)?.create === started) pendingByKey.get(key)!.create = null;
+    });
+  }
+  await entry.create;
+  await writers.updateUser(user as User, chosen.updates);
+  pendingByKey.delete(key);
 }
 
 /**

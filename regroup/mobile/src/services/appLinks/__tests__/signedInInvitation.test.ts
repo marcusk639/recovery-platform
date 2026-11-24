@@ -220,6 +220,18 @@ describe('acceptInvitationAsCurrentUser — fresh user read', () => {
     expect(w.createGuest).toHaveBeenCalledWith(expect.objectContaining({ firstName: 'Fresh' }));
   });
 
+  it.each([
+    ['a missing user doc', null],
+    ['a doc with no uid', { email: 'g@rats-e2e.com' }],
+  ])('does not redeem when the fresh read returns %s', async (_n, doc) => {
+    const { w, accept } = setup(roleless, hydrated('guest'));
+    getUser.mockResolvedValue(doc);
+    const result = await accept();
+    expect(result.ok === false && result.message).toMatch(/couldn't accept/i);
+    expect(redeem).not.toHaveBeenCalled();
+    expect(w.createGuest).not.toHaveBeenCalled();
+  });
+
   it('does not redeem when the fresh read fails', async () => {
     const { w, accept } = setup(roleless, hydrated('guest'));
     getUser.mockRejectedValue(new Error('offline'));
