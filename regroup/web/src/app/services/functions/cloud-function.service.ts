@@ -47,6 +47,11 @@ export class CloudFunctionService {
       .toPromise();
   }
 
+  /** Deletes the signed-in user's account server-side, cancelling any subscription it holds. */
+  deleteAccount(): Promise<{ deleted: true }> {
+    return this.functions.httpsCallable('deleteAccount')({}).toPromise();
+  }
+
   getTierCatalog(): Promise<TierCatalog> {
     return this.functions.httpsCallable('getTierCatalog')({}).toPromise();
   }

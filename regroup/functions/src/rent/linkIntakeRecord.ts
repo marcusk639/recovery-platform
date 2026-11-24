@@ -10,6 +10,7 @@ import { logger } from 'firebase-functions/v2';
 import {
   guestCollection,
   invitationCollection,
+  paymentsCollection,
   ratsFirestore,
   rentAccountCollection,
   rentChargeCollection,
@@ -157,6 +158,7 @@ async function linkRecords(
     );
     // Read here, with the records: a transaction does every read before any write.
     const history = await txn.get(rentChargeCollection.where('guestId', '==', intakeId));
+    const payments = await txn.get(paymentsCollection.where('guestId', '==', intakeId));
     const target = (newSnap.data() ?? {});
     const source = (intakeSnap.data() ?? {});
     if (
@@ -218,6 +220,15 @@ async function linkRecords(
     // reversal finds the record the balance moved to after staff delete the intake
     // record. In the same commit as the link: once linked, nothing would retry it.
     history.docs.forEach((d) => txn.update(d.ref, { guestUserId: userId, linkedTo: newGuestId }));
+    // Payments too: the resident's Payment History lists by guestUserId, and staff
+    // viewing the invite record list by guestId or linkedTo. The record keeps its
+    // guestId, as a payment's history should; an account already on it is kept.
+    payments.docs.forEach((d) =>
+      txn.update(d.ref, {
+        linkedTo: newGuestId,
+        ...(isPlausibleUid(d.data()?.guestUserId) ? {} : { guestUserId: userId }),
+      }),
+    );
     if (oldAccount.exists) {
       if (!newAccount.exists) {
         txn.set(newAccountRef, { ...(oldAccount.data() ?? {}), guestId: newGuestId });

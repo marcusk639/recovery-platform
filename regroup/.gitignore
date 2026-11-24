@@ -36,3 +36,7 @@ ui-debug.log
 .env.local
 .env.*.local
 scripts/.env
+
+# Mail-merge inputs and send logs hold recipients' names and addresses.
+scripts/*.csv
+scripts/logs/

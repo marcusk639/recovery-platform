@@ -40,13 +40,14 @@ const mockResident = {
   firstName: 'Alice',
   lastName: 'Smith',
 };
-let mockGuest = mockResident;
+let mockGuest: typeof mockResident | null = mockResident;
+let mockGuestLoading = false;
 let mockSignedInUid = 'user-1';
 jest.mock('../../../hooks/useSelectedGuest', () => ({
   useSelectedGuest: () => ({
     guest: mockGuest,
     guestId: 'guest-1',
-    isLoading: false,
+    isLoading: mockGuestLoading,
   }),
 }));
 jest.mock('../../../hooks/useSelectedHouse', () => ({
@@ -116,9 +117,36 @@ const _fakeNavigation: any = { goBack: jest.fn(), navigate: jest.fn() };
 describe('PaymentHistory', () => {
   afterEach(() => {
     mockGuest = mockResident;
+    mockGuestLoading = false;
     mockSignedInUid = 'user-1';
     (paymentsService.getPaymentHistory as jest.Mock).mockReset().mockResolvedValue([]);
     (paymentsService.getGuestPayments as jest.Mock).mockReset().mockResolvedValue([]);
+  });
+
+  // The screen showed "No payments found." while the resident's record was
+  // still loading, and when it could not be loaded at all.
+  it("shows a spinner, not an empty history, while the resident's record loads", () => {
+    mockGuest = null;
+    mockGuestLoading = true;
+    const { getByTestId, queryByText } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    expect(getByTestId('payment-history-loading')).toBeTruthy();
+    expect(queryByText('No payments found.')).toBeNull();
+  });
+
+  it("says the history could not be loaded when the resident's record can't be", async () => {
+    mockGuest = null;
+    const { findByText, queryByText } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByText("Couldn't load payment history. Please try again.");
+    expect(queryByText('No payments found.')).toBeNull();
+  });
+
+  it('shows a plain message, not the raw error, when the read fails', async () => {
+    (paymentsService.getPaymentHistory as jest.Mock).mockRejectedValue(
+      new Error('[firestore/permission-denied] Missing or insufficient permissions.'),
+    );
+    const { findByText, queryByText } = render(<PaymentHistory navigation={_fakeNavigation} />);
+    await findByText("Couldn't load payment history. Please try again.");
+    expect(queryByText(/permission/)).toBeNull();
   });
 
   it("shows an operator the resident's payments by guest record, including any from before the account linked", async () => {

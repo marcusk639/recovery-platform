@@ -81,6 +81,38 @@ describe('exportPaymentHistoryCSV', () => {
     expect(csv.split('\n')[1]).toMatch(/^2026-05-01,/);
   });
 
+  // Staff sum these columns in a spreadsheet. A refund or a failed or pending
+  // attempt leaves Amount at the gross figure, so the file also says what was
+  // refunded and what the record brought in (netPaidCents, as the dashboard).
+  describe('refunded and net columns', () => {
+    const row = (overrides: Partial<RentPayment>) =>
+      exportPaymentHistoryCSV([makePayment(overrides)], {}).split('\n')[1];
+
+    it('heads the columns after Amount', () => {
+      const header = exportPaymentHistoryCSV([], {}).split('\n')[0];
+      expect(header).toBe('Date,Guest,Amount ($),Refunded ($),Net ($),Status,Description');
+    });
+
+    it('shows a partial refund and what is left', () => {
+      expect(row({ amount: 50000, refundedAmountCents: 20000 })).toContain(
+        ',500.00,200.00,300.00,partially refunded,',
+      );
+    });
+
+    it('counts a full refund as nothing brought in', () => {
+      expect(row({ amount: 50000, refundedAmountCents: 50000 })).toContain(',500.00,500.00,0.00,refunded,');
+    });
+
+    it('counts a failed or pending attempt as nothing brought in', () => {
+      expect(row({ amount: 50000, status: 'failed' })).toContain(',500.00,0.00,0.00,failed,');
+      expect(row({ amount: 50000, status: 'pending' })).toContain(',500.00,0.00,0.00,pending,');
+    });
+
+    it('leaves all three empty for a record with no dollar amount', () => {
+      expect(row({ amount: undefined as any, currency: 'eur' })).toContain(',,,,');
+    });
+  });
+
   it('leaves the date empty when createdAt cannot be read', () => {
     const csv = exportPaymentHistoryCSV([makePayment({ createdAt: { bogus: true } as any })], {});
     expect(csv.split('\n')[1]).toMatch(/^,/);
