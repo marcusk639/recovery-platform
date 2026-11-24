@@ -152,6 +152,35 @@ describe('ensureWebhooks', () => {
     expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
   });
 
+  // A sandbox provisioned before an event was added to the spec (payout.failed on
+  // Connect, #292) must say what to add, not just refuse.
+  it('names the missing event and a fix that keeps the secret when a reused endpoint predates it', async () => {
+    const { mock, stripe, endpoints } = makeStripe();
+    await ensureWebhooks(stripe, hooks());
+    const connect = endpoints.find((e: any) => e.application);
+    connect.enabled_events = CONNECT_EVENTS.filter((e) => e !== 'payout.failed');
+    const err = await ensureWebhooks(stripe, hooks()).catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toMatch(/missing: payout\.failed/);
+    expect((err as Error).message).toMatch(/Developers → Webhooks/);
+    expect((err as Error).message).not.toMatch(/extra:/);
+    expect(mock.webhookEndpoints.update).not.toHaveBeenCalled();
+    expect(mock.webhookEndpoints.del).not.toHaveBeenCalled();
+  });
+
+  it('names extra events on a reused endpoint', async () => {
+    const { stripe, endpoints } = makeStripe();
+    await ensureWebhooks(stripe, hooks());
+    endpoints[0].enabled_events = [
+      ...endpoints[0].enabled_events,
+      'invoice.created',
+      'customer.created',
+    ];
+    await expect(ensureWebhooks(stripe, hooks())).rejects.toThrow(
+      /\(extra: customer\.created, invoice\.created\)/,
+    );
+  });
+
   it('refuses to reuse an endpoint on another (or the account default) API version', async () => {
     for (const apiVersion of [null, '2020-03-02']) {
       const { mock, stripe, endpoints } = makeStripe();

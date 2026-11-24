@@ -130,11 +130,24 @@ function assertEndpointMatches(
   spec: { events: readonly string[]; connect: boolean },
   apiVersion: string,
 ): void {
-  const have = [...endpoint.enabled_events].sort().join(',');
-  const want = [...spec.events].sort().join(',');
-  if (endpoint.status !== 'enabled' || have !== want) {
+  const have = new Set(endpoint.enabled_events);
+  const want = new Set(spec.events);
+  const missing = [...want].filter((e) => !have.has(e)).sort();
+  const extra = [...have].filter((e) => !want.has(e)).sort();
+  if (endpoint.status !== 'enabled' || missing.length > 0 || extra.length > 0) {
+    // Usually a sandbox provisioned before the spec gained an event. Editing the
+    // endpoint's events keeps its id and signing secret; deleting it does not.
+    const diff =
+      [
+        missing.length > 0 ? `missing: ${missing.join(', ')}` : '',
+        extra.length > 0 ? `extra: ${extra.join(', ')}` : '',
+      ]
+        .filter(Boolean)
+        .join('; ') || `status: ${endpoint.status}`;
     throw new Error(
-      `Existing webhook endpoint ${endpoint.id} does not match the e2e spec; not updating.`,
+      `Existing webhook endpoint ${endpoint.id} does not match the e2e spec (${diff}); not updating. ` +
+        `Fix its events in the Stripe Dashboard (Developers → Webhooks → ${endpoint.id} → ` +
+        'Update details → Select events), which keeps its signing secret, then rerun.',
     );
   }
   // null means "the account's default version", which is not the pinned one.
