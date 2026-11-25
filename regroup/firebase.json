@@ -8,7 +8,10 @@
       "firebase-debug.*.log",
       "*.local",
       "service-key.json",
-      "**/service-key.json"
+      "**/service-key.json",
+      ".claude",
+      "**/.claude",
+      "coverage"
     ]
   }
 }
