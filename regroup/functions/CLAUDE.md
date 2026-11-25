@@ -70,6 +70,8 @@ src/
     myHouseTiers.ts  the caller's own tier per house, for the operator portal's display
     resolveFailedPayment.ts  resolveFailedPaymentOffline: money staff mark a failed payment
                      resolved off-platform (status only; payments is server-written)
+    previewRentCharges.ts  what each current resident would be charged if the house saved
+                     a schedule and price (managers and above; read-only, rent spec §5)
   triggers/
     firestore/      Firestore document triggers. index.ts: notify, notifyNewHouseCreated,
                     setHouseSubscriptionStatusOnCreate, sendContactEmail,
