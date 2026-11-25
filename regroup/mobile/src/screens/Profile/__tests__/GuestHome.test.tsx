@@ -76,6 +76,14 @@ jest.mock("../../../state/queries/houseTierQueries", () => ({
   useMayViewHouseMoney: () => mockMayViewHouseMoney,
 }));
 
+// The rate field has its own suite (components/custom-rent); here only whether it shows.
+jest.mock("../../../components/custom-rent/CustomRentField", () => {
+  const React = require("react");
+  const { View } = require("react-native");
+  return (props: any) =>
+    React.createElement(View, { testID: "custom-rent-field-stub", guestId: props.guest?.id });
+});
+
 // ─── Activity hooks ────────────────────────────────────────────────────────────
 const mockUseWeekSummary = jest.fn();
 const mockUseComplianceCheck = jest.fn();
@@ -654,6 +662,41 @@ describe("GuestHome", () => {
       const { getByTestId } = renderScreen();
       fireEvent.press(getByTestId("payment-history-card"));
       expect(mockNavigation.navigate).toHaveBeenCalledWith("paymentHistory");
+    });
+  });
+
+  // ─── Rate and balance (rent spec §4.6) ──────────────────────────────────
+  // The store's signed-in user is "admin-1"; BASE_GUEST belongs to "user-1".
+  describe("rate and balance", () => {
+    it("shows a manager the Balance edit and the rate field on another resident", () => {
+      const { getByTestId } = renderScreen();
+      expect(getByTestId("guest-balance-card")).toBeTruthy();
+      expect(getByTestId("custom-rent-field-stub")).toBeTruthy();
+    });
+
+    it("opens the Balance edit", () => {
+      const { getByTestId } = renderScreen();
+      fireEvent.press(getByTestId("guest-balance-card"));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith("guestBalance");
+    });
+
+    it("hides both from a peer leader", () => {
+      mockMayViewHouseMoney = false;
+      try {
+        const { queryByTestId } = renderScreen();
+        expect(queryByTestId("guest-balance-card")).toBeNull();
+        expect(queryByTestId("custom-rent-field-stub")).toBeNull();
+      } finally {
+        mockMayViewHouseMoney = true;
+      }
+    });
+
+    it("hides both on the manager's own resident record", () => {
+      const { queryByTestId } = renderScreen({
+        selectedGuest: { ...BASE_GUEST, userId: "admin-1" },
+      });
+      expect(queryByTestId("guest-balance-card")).toBeNull();
+      expect(queryByTestId("custom-rent-field-stub")).toBeNull();
     });
   });
 

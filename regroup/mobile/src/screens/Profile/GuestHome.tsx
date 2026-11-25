@@ -36,6 +36,7 @@ import { Guest, Stat } from "../../entities/Guest";
 import { ActivityType } from "../../entities/ActivityModel";
 import { House, StripeAccountStatus } from "../../entities/House";
 import { formatCentsAsCurrency } from "../RentPayment/rentPaymentHelpers";
+import CustomRentField from "../../components/custom-rent/CustomRentField";
 import { User } from "../../entities/User";
 import { Guests } from "../../types";
 import { Health } from "../../constants/health";
@@ -235,6 +236,10 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
   const mayViewHouseMoney = useMayViewHouseMoney(house?.id ?? "");
   const mayViewPayments =
     mayViewHouseMoney || (!!user?.id && currentGuest?.userId === user.id);
+  // A resident's rate and balance: managers and above, never on their own
+  // record (rules: rentMoneyByManager, ownMoneyUnchanged; rent spec §4.6).
+  const maySetRentMoney =
+    mayViewHouseMoney && !(!!currentGuest?.userId && currentGuest.userId === user?.id);
 
   // Activity system: pre-fetch week summary (hooks must be called before early returns).
   // React Query is the sole source of truth — the prior `hooks/activity/useWeekSummary`
@@ -541,6 +546,27 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
           iconBackgroundColor={color.dark_grey}
           onPress={() => navigation.navigate(Routes.PaymentHistory)}
           testID="payment-history-card"
+        />
+      )}
+
+      {/******************************* RATE AND BALANCE (managers and above) *******************************/}
+      {maySetRentMoney && (
+        <StatSection
+          name="Balance"
+          description="Correct a balance or give a credit"
+          iconName="chevron-right"
+          iconColor={color.dark_grey}
+          boxedIconName="balance-scale"
+          iconBackgroundColor={color.medium_grey}
+          onPress={() => navigation.navigate(Routes.GuestBalance)}
+          testID="guest-balance-card"
+        />
+      )}
+      {maySetRentMoney && (
+        <CustomRentField
+          guest={currentGuest!}
+          house={house}
+          currentUserId={user?.id ?? ""}
         />
       )}
 

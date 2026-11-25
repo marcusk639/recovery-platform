@@ -56,6 +56,7 @@ import { PhaseConfigSetup } from '../screens/SetupWizards/PhaseSetup/PhaseConfig
 import HouseSettings from '../screens/HouseSettings/HouseSettings';
 import StripeSettingsScreen from '../screens/HouseSettings/StripeSettingsScreen';
 import RentSettingsScreen from '../screens/HouseSettings/RentSettingsScreen';
+import GuestBalanceScreen from '../screens/GuestUpdate/GuestBalanceScreen';
 import UserInfo from '../screens/Profile/UserInfo';
 import PhaseCustomization from '../screens/Profile/PhaseCustomization';
 import SubscriptionHandler from '../screens/SubscriptionHandler/SubscriptionHandler';
@@ -358,6 +359,10 @@ export const RootNavigator = ({
       <RootStack.Screen
         name={Routes.RentSettings}
         component={RentSettingsScreen}
+      />
+      <RootStack.Screen
+        name={Routes.GuestBalance}
+        component={GuestBalanceScreen}
       />
       <RootStack.Screen name={Routes.GuestInfo} component={UserInfo} />
       <RootStack.Screen

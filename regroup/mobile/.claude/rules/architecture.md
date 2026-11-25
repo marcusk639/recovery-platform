@@ -59,7 +59,7 @@ React Navigation 7 native stack. Route names: `Routes` enum in `src/navigation/t
 - `MainTabParamList` — bottom tabs: House, Guest, Activities, Contacts, HouseChat, Personal
 - `RootStackParamList` — everything else pushed as full-screen modals from any tab
 
-Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetings, OxfordVoting, CharterCompliance, TreasuryDashboard, ResidentPayment, PaymentHistory, PaymentDashboard, RentPayment, HouseSettings, StripeSettings, RentSettings, Notifications, DrugTesting, DrugTestForm, DrugTestHistory, StaffNotes, ResidentIntake, Documents, BalanceDashboard, ApplicationList, ApplicationDetail, GuestImport, AdminReport, PhaseSetup. (`ChoreRotationSetupScreen` exists in `src/screens/HouseSettings/` but is not registered as a route.)
+Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetings, OxfordVoting, CharterCompliance, TreasuryDashboard, ResidentPayment, PaymentHistory, PaymentDashboard, RentPayment, HouseSettings, StripeSettings, RentSettings, GuestBalance, Notifications, DrugTesting, DrugTestForm, DrugTestHistory, StaffNotes, ResidentIntake, Documents, BalanceDashboard, ApplicationList, ApplicationDetail, GuestImport, AdminReport, PhaseSetup. (`ChoreRotationSetupScreen` exists in `src/screens/HouseSettings/` but is not registered as a route.)
 
 ## Service Layer
 
