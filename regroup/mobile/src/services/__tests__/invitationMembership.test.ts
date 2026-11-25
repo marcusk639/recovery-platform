@@ -82,9 +82,9 @@ describe('buildInvitationMembership', () => {
 
 describe('writeInvitationMembership', () => {
   const writers = () => ({
-    createGuest: jest.fn(() => Promise.resolve()),
-    createAdmin: jest.fn(() => Promise.resolve()),
-    updateUser: jest.fn(() => Promise.resolve()),
+    createGuest: jest.fn((_record: unknown) => Promise.resolve()),
+    createAdmin: jest.fn((_record: unknown) => Promise.resolve()),
+    updateUser: jest.fn((_user: unknown, _updates: unknown) => Promise.resolve()),
   });
 
   it('creates the resident record and updates the user', async () => {
