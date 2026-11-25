@@ -82,7 +82,6 @@ export function PaymentsSection({ guest, houseId }: { guest: any; houseId: strin
     <Section testId="record-payments" title="Payments">
       <Field label="Rent owed">{balanceLabel(guest.rentOwed)}</Field>
       <Field label="Chore fees">{balanceLabel(guest.choreFees)}</Field>
-      <Field label="Autopay">{guest.autoPayEnabled ? 'On' : 'Off'}</Field>
       <p style={{ margin: '8px 0 0' }}>
         <HouseLink href={`${residentPath(houseId, guest.id)}/payments`} route={Routes.PaymentHistory} params={{ houseId, guestId: guest.id }} style={link}>
           Payment history
