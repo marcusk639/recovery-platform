@@ -524,35 +524,21 @@ export const updatePaymentInfo = onCall(
       throw new HttpsError("not-found", "No billing account on file");
     }
 
-    // Ownership 2: if writing a guest's default payment method, the caller must
-    // be that resident or an admin of the guest's house.
+    // Ownership 2: only the resident may put a card on their own guest doc. The
+    // card is attached to the caller's customer, and scheduledRentCollection
+    // charges the guest doc's defaultPaymentMethodId, so house staff writing
+    // it would put their own card on a resident's autopay. firestore.rules
+    // refuses these ids to every client for the same reason.
     if (guestId) {
       const guestSnap = await db.collection("guests").doc(guestId).get();
       if (!guestSnap.exists) {
         throw new HttpsError("not-found", "Guest record not found");
       }
-      const guestData = guestSnap.data() as {
-        userId?: string;
-        houseId?: string;
-      };
-      let authorized = guestData.userId === request.auth.uid;
-      if (!authorized && guestData.houseId) {
-        const houseSnap = await db
-          .collection("houses")
-          .doc(guestData.houseId)
-          .get();
-        authorized =
-          houseSnap.exists &&
-          (await isHouseMoneyStaff(
-            request.auth.uid,
-            guestData.houseId,
-            houseSnap.data() as HouseAdminFields,
-          ));
-      }
-      if (!authorized) {
+      const guestData = guestSnap.data() as { userId?: string };
+      if (!guestData.userId || guestData.userId !== request.auth.uid) {
         throw new HttpsError(
           "permission-denied",
-          "Only the resident or a house admin can update this payment method",
+          "Only the resident can update this payment method",
         );
       }
     }

@@ -295,7 +295,16 @@ service cloud.firestore {
            d.customRent.frequency in ['weekly', 'monthly']);
       }
 
+      // Stripe billing ids on a guest doc are server-only, for admins too:
+      // scheduledRentCollection trusts them. Only the Admin SDK may set or
+      // change them. (Housemates can read guest docs, owner decision
+      // 2026-11-22; no card or bank details are stored on them.)
+      function billingIdsAbsent(d) {
+        return !('stripeCustomerId' in d) && !('defaultPaymentMethodId' in d);
+      }
+
       allow create: if createdByCaller(request.resource.data) &&
+                       billingIdsAbsent(request.resource.data) &&
                        moveOutDateValid(request.resource.data) &&
                        customRentValid(request.resource.data) &&
                        !('rentLinkedTo' in request.resource.data) &&
@@ -443,6 +452,8 @@ service cloud.firestore {
       allow update: if
         userIdUnchangedOrLinked() &&
         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rentLinkedTo']) &&
+        !request.resource.data.diff(resource.data).affectedKeys()
+          .hasAny(['stripeCustomerId', 'defaultPaymentMethodId']) &&
         (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['customRent']) ||
          customRentValid(request.resource.data)) &&
         request.resource.data.get('createdBy', null) == resource.data.get('createdBy', null) &&

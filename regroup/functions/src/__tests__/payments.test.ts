@@ -2687,6 +2687,74 @@ describe("updatePaymentInfo — ownership", () => {
     );
   });
 
+  // The card is attached to the caller's own customer, so only the resident may
+  // put it on their guest doc: scheduledRentCollection trusts the guest doc's
+  // billing ids, and firestore.rules refuses them to every client.
+  describe("with a guestId", () => {
+    const HOUSE_ID = "house-pm-1";
+    beforeEach(() => {
+      seedHouse(HOUSE_ID, { adminIds: ["admin-uid"] });
+      seedGuest("guest-pm-1", {
+        userId: "resident-uid",
+        houseId: HOUSE_ID,
+        defaultPaymentMethodId: "pm_resident_old",
+      });
+      mockStripeCustomersUpdate.mockResolvedValue({});
+    });
+
+    it("refuses house money staff and leaves the resident's card alone", async () => {
+      mockGetUser.mockResolvedValue({
+        subscriptionMetadata: { customerId: "cus_admin" },
+      });
+      mockStripePaymentMethodsAttach.mockResolvedValue({ id: "pm_admin" });
+      const adminAuth = {
+        uid: "admin-uid",
+        token: { admin: { [HOUSE_ID]: true } },
+      };
+
+      await expect(
+        callV(
+          updatePaymentInfo,
+          { paymentMethod: "pm_admin", guestId: "guest-pm-1" },
+          adminAuth,
+        ),
+      ).rejects.toMatchObject({ code: "permission-denied" });
+
+      expect(mockStripePaymentMethodsAttach).not.toHaveBeenCalled();
+      expect(mockStripeCustomersUpdate).not.toHaveBeenCalled();
+      expect(
+        firestoreDocStore["guests/guest-pm-1"]?.defaultPaymentMethodId,
+      ).toBe("pm_resident_old");
+    });
+
+    it("lets the resident set their own guest doc's card", async () => {
+      mockGetUser.mockResolvedValue({
+        subscriptionMetadata: { customerId: "cus_resident" },
+      });
+      mockStripePaymentMethodsAttach.mockResolvedValue({
+        id: "pm_resident_new",
+      });
+      const residentAuth = {
+        uid: "resident-uid",
+        token: { guest: { [HOUSE_ID]: true } },
+      };
+
+      await callV(
+        updatePaymentInfo,
+        { paymentMethod: "pm_resident_new", guestId: "guest-pm-1" },
+        residentAuth,
+      );
+
+      expect(mockStripePaymentMethodsAttach).toHaveBeenCalledWith(
+        "pm_resident_new",
+        { customer: "cus_resident" },
+      );
+      expect(
+        firestoreDocStore["guests/guest-pm-1"]?.defaultPaymentMethodId,
+      ).toBe("pm_resident_new");
+    });
+  });
+
   it("throws internal HttpsError when stripe.paymentMethods.attach fails", async () => {
     mockGetUser.mockResolvedValue({
       subscriptionMetadata: { customerId: "cus_self" },
