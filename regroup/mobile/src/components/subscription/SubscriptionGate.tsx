@@ -7,7 +7,7 @@ import RatsLoadingIndicator from '../rats-loading-indicator/rats-loading-indicat
 import GracePeriodBanner from './GracePeriodBanner';
 import SubscriptionRequiredScreen from '../../screens/Subscription/SubscriptionRequiredScreen';
 import GraceExpiredScreen from '../../screens/Subscription/GraceExpiredScreen';
-import { houseKeys } from '../../state/queries/houseQueries';
+import { refreshPlanState } from '../../services/planState';
 import { guestKeys } from '../../state/queries/guestQueries';
 
 interface Props {
@@ -48,22 +48,9 @@ const SubscriptionGate: React.FC<Props> = ({ children }) => {
         const isActive = nextState === 'active';
 
         if (wasBackground && isActive) {
-          // W13: Only invalidate when user ID is available to avoid cold-start
-          // race where the cache invalidation fires before user data is loaded.
-          if (currentUser?.id) {
-            queryClient.invalidateQueries({
-              queryKey: ['user', currentUser.id],
-            });
-          }
-          if (currentUser?.houseId) {
-            queryClient.invalidateQueries({
-              queryKey: houseKeys.detail(currentUser.houseId as string),
-            });
-          }
-          // Also invalidate the paywall kill-switch config
-          queryClient.invalidateQueries({
-            queryKey: ['paywall', 'config'],
-          });
+          // W13: refreshPlanState skips the user and house keys until their
+          // ids are loaded, avoiding a cold-start race.
+          refreshPlanState(queryClient, { id: currentUser?.id, houseId: currentUser?.houseId as string | undefined });
         }
 
         appState.current = nextState;

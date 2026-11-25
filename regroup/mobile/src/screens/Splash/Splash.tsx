@@ -14,6 +14,8 @@ import { normalize } from "../../styles/theme";
 import { RatsLogo } from "../../components/rats-logo";
 import { getInitialLink, onLink } from "../../services/native-deep-links";
 import { parseAppLink } from "../../services/appLinks/parseAppLink";
+import { refreshPlanState } from "../../services/planState";
+import { queryClient } from "../../state/queryClient";
 import {
   deliverAppLink,
   deliverPendingAppLink,
@@ -150,6 +152,7 @@ export const withSplash = <P extends object>(
         deliverAppLink(appLink, {
           signedIn: isSignedInUser(latest.current.userState.user),
           dispatch: latest.current.dispatch,
+          onCheckoutReturn: () => refreshPlanState(queryClient, latest.current.userState.user),
         });
       }
       return appLink;
@@ -313,7 +316,11 @@ export const withSplash = <P extends object>(
     useEffect(() => {
       deliverPendingAppLink(
         { pendingAppLink, pendingAppLinkReceivedAt },
-        { signedIn, dispatch },
+        {
+          signedIn,
+          dispatch,
+          onCheckoutReturn: () => refreshPlanState(queryClient, latest.current.userState.user),
+        },
       );
     }, [signedIn, pendingAppLink, pendingAppLinkReceivedAt, dispatch]);
 
