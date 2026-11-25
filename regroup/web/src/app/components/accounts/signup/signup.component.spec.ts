@@ -136,4 +136,34 @@ describe('SignupComponent', () => {
       }),
     );
   });
+
+  // Launch P5 Task 11: a checkout started from the app hands back to it.
+  describe('hand-back to the app', () => {
+    const setFrom = (from: string | null) =>
+      ((TestBed.inject(ActivatedRoute) as any).snapshot = {
+        queryParamMap: convertToParamMap(from ? { from } : {}),
+      });
+
+    it('with from=app, a completed checkout goes to /checkout-return?result=success', () => {
+      setFrom('app');
+      component.setBillingCompleted(true);
+      expect(navigateSpy).toHaveBeenCalledWith(['/checkout-return'], {
+        queryParams: { result: 'success' },
+      });
+    });
+
+    it('without from=app, it stays on the success block with the download prompt', () => {
+      setFrom(null);
+      component.setBillingCompleted(true);
+      expect(navigateSpy).not.toHaveBeenCalledWith(['/checkout-return'], jasmine.anything());
+      expect(component.billingCompleted).toBe(true);
+      expect(component.fromApp).toBe(false);
+    });
+
+    it('does not hand back before billing completes', () => {
+      setFrom('app');
+      component.setBillingCompleted(false);
+      expect(navigateSpy).not.toHaveBeenCalledWith(['/checkout-return'], jasmine.anything());
+    });
+  });
 });

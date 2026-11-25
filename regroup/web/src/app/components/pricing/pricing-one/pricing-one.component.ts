@@ -1,4 +1,5 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, Optional } from '@angular/core';
+import { ActivatedRoute } from '@angular/router';
 import { environment } from '../../../../environments/environment';
 import { BaseComponent } from '../../base.component';
 import { TierCatalogService } from 'src/app/services/subscriptions/tier-catalog.service';
@@ -19,7 +20,10 @@ export class PricingOneComponent extends BaseComponent implements OnInit {
   traditionalTiers: TierCatalogEntry[] = [];
   oxfordTiers: TierCatalogEntry[] = [];
 
-  constructor(private tierCatalog: TierCatalogService) {
+  constructor(
+    private tierCatalog: TierCatalogService,
+    @Optional() private route?: ActivatedRoute,
+  ) {
     super();
   }
 
@@ -94,10 +98,13 @@ export class PricingOneComponent extends BaseComponent implements OnInit {
   }
 
   signupQueryParams(tier: TierCatalogEntry) {
+    // Opened from the mobile app (?from=app): signup hands back after checkout.
+    const fromApp = this.route?.snapshot?.queryParamMap?.get('from') === 'app';
     return {
       houseType: tier.houseType,
       tier: tier.tier,
       period: this.effectiveInterval(tier),
+      ...(fromApp ? { from: 'app' } : {}),
     };
   }
 

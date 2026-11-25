@@ -10,7 +10,7 @@
  */
 import { TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
-import { Router } from '@angular/router';
+import { Router, convertToParamMap } from '@angular/router';
 import { PLATFORM_ID } from '@angular/core';
 import { AuthGuard } from './auth.guard';
 import { AuthService } from '../services/auth/auth-service.service';
@@ -104,5 +104,17 @@ describe('AuthGuard', () => {
     const { guard } = setup('server', { user: null, doAutoLogin } as any);
     guard.canActivate(route, state);
     expect(doAutoLogin).not.toHaveBeenCalled();
+  });
+
+  // Launch P5 Task 11: from=app survives the redirect to /login.
+  it('keeps from=app on the redirect to /login', async () => {
+    const { guard, router } = setup('browser', {
+      user: null,
+      doAutoLogin: () => Promise.resolve(null),
+    } as any);
+    const navigate = spyOn(router, 'navigate');
+    const next = { queryParamMap: convertToParamMap({ from: 'app' }) } as any;
+    await expectAsync(guard.canActivate(next, state) as Promise<boolean>).toBeResolvedTo(false);
+    expect(navigate).toHaveBeenCalledWith(['login'], { queryParams: { from: 'app' } });
   });
 });

@@ -175,25 +175,7 @@ export class BillingInfoComponent implements OnInit {
               this.analytics.logEvent('subscription-created');
               this.setBillingCompleted(true);
               this.setLoading(false);
-              try {
-                const email =
-                  this.authService.cachedDetails && this.authService.cachedDetails.email;
-                if (
-                  typeof window !== 'undefined' &&
-                  //@ts-ignore
-                  window.ReactNativeWebView &&
-                  email
-                ) {
-                  //@ts-ignore
-                  window.ReactNativeWebView.postMessage(
-                    JSON.stringify({ event: 'signup-complete', email }),
-                  );
-                }
-              } catch (error) {
-                // postMessage failed; non-fatal
-              } finally {
-                this.authService.clearCachedDetails();
-              }
+              this.authService.clearCachedDetails();
             }
           } else if (result.error) {
             this.setLoading(false);

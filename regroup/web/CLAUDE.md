@@ -207,9 +207,11 @@ Auto-login calls `doAutoLogin()` which sets Firebase persistence then resolves `
 
 ### Routing & Themes
 
-Flat route structure in `app-routing.module.ts`. Default route (`/`) renders `ThemeTwoComponent`. Five landing page variants are routed at `/theme-{name}`: `theme-two` through `theme-six`. `ThemeOneComponent` is imported but has no route, so `/theme-one` falls through to the catch-all and renders `ErrorComponent`. Auth-protected route: `my-account` (uses `AuthGuard`).
+Flat route structure in `app-routing.module.ts`. Default route (`/`) and `/theme-two` render `ThemeTwoComponent`. The template's other demo pages (`theme-three` to `theme-six`, the blog pages, `reviews`, `faq`) redirect to `/`. `ThemeOneComponent` is imported but has no route, so `/theme-one` falls through to the catch-all and renders `ErrorComponent`. Auth-protected route: `my-account` (uses `AuthGuard`).
 
-- `/billing` redirects to `/my-account`. The mobile app's "Manage Subscription" button deep-links to `/billing`, and `my-account` hosts the Stripe billing portal.
+- `/billing` redirects to `/my-account`, which hosts the Stripe billing portal.
+- **Opened from the app (`?from=app`).** The mobile app opens `/pricing` and `/my-account` in the system browser with `?from=app` (`regroup/mobile/src/services/webBilling.ts`); it has no billing WebView. The flag survives `AuthGuard` → `/login` → `/my-account` and pricing → `/signup`. With it, a completed signup checkout navigates to `/checkout-return?result=success`, and `my-account` shows "Return to Regroup" (`/checkout-return?result=portal`) and keeps the flag in the portal's return URL. Without it nothing changes.
+- **App-link landing page.** `/invite`, `/checkout-return` and `/app/**` (the paths `regroup/app-links.json` claims) render `AppLinkLandingComponent`: one "Open in Regroup" button with the same route and query on `regroup-app://` (`/checkout-return` → `app/checkout-return`) plus the store links. It only shows when the OS didn't open the app.
 - `{ path: '**', component: ErrorComponent }` must stay the last route. Without it an unknown URL makes the router throw; under SSR that throw escapes the Universal handler without a response. Before the catch-all and the render deadline existed, the `ssr` function then hung until it timed out.
 
 ---

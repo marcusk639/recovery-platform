@@ -48,14 +48,15 @@ export class SignupComponent implements OnInit {
 
   setBillingCompleted = (value: boolean) => {
     this.billingCompleted = value;
-    if (this.billingCompleted) {
-      // go back to the mobile app
+    // Opened from the app (?from=app, services/webBilling.ts): hand back to it.
+    // The /checkout-return page offers "Return to Regroup".
+    if (this.billingCompleted && this.fromApp) {
+      this.router.navigate(['/checkout-return'], { queryParams: { result: 'success' } });
     }
   };
 
-  get fromApp() {
-    //@ts-ignore
-    return isPlatformBrowser(this.platformId) && window.launchedFromMobile;
+  get fromApp(): boolean {
+    return this.route.snapshot?.queryParamMap?.get('from') === 'app';
   }
 
   get valid() {
