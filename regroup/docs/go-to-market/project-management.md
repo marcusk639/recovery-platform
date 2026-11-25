@@ -172,8 +172,8 @@ stubbed.) Each task maps to a blocker row in §1.
   after Task F** (billing-model decision).
 - **Task F — IAP vs. direct-billing architecture decision (→ RG-P0-5, legal).**
   Apple requires in-app digital-goods sales to use IAP (15–30% cut). Options: **A
-  web-only** (upgrade CTA opens the `SubscriptionHandler` WebView to the web
-  subscribe page — 0% cut, already built), **B native IAP** (StoreKit 2, 15–30%
+  web-only** (upgrade CTAs open the web pricing or account page in the system
+  browser, `services/webBilling.ts` — 0% cut; built in launch P5 Task 9), **B native IAP** (StoreKit 2, 15–30%
   cut, 2–3 weeks eng), **C hybrid** (free tier in-app, paid upgrade via web link —
   same as A). Recommendation: **A/C**, justified by the B2B-SaaS pattern Apple has
   historically permitted to link out. Record the decision (decisions-log / ADR) to

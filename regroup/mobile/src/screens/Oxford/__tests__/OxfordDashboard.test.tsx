@@ -20,6 +20,10 @@ jest.mock("../../../hooks/useSelectedHouse", () => ({
 }));
 
 jest.mock("@react-navigation/native-stack", () => ({}));
+const mockOpenWebBilling = jest.fn((_page: string) => Promise.resolve(true));
+jest.mock("../../../services/webBilling", () => ({
+  openWebBilling: (page: string) => mockOpenWebBilling(page),
+}));
 
 jest.mock("../../../../firebase-setup", () => ({
   firestore: {
@@ -186,10 +190,11 @@ describe("OxfordDashboard — paywall", () => {
     expect(getByTestId("oxford-dashboard-content")).toBeTruthy();
   });
 
-  it("navigates to SubscriptionHandler when upgrade button is pressed", () => {
+  it("opens plan management in the browser when upgrade button is pressed", () => {
     const { getByTestId } = renderScreen(false, OXFORD_ONBOARDED);
     fireEvent.press(getByTestId("oxford-upgrade-button"));
-    expect(mockNavigate).toHaveBeenCalledWith(Routes.SubscriptionHandler);
+    expect(mockOpenWebBilling).toHaveBeenCalledWith("my-account");
+    expect(mockNavigate).not.toHaveBeenCalledWith(Routes.SubscriptionHandler);
   });
 });
 

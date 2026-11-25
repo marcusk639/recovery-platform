@@ -1,0 +1,32 @@
+# Billing link-out (launch P5 Task 9, BILL-020): a plan-required operator's
+# "View plans" opens web pricing in the system browser, never an in-app WebView.
+# Persona: an operator whose house has no subscriptionStatus.
+#
+# PRECONDITION (seed gap): the seed has no plan-required operator yet. Add
+# test-plan-required@rats-e2e.com (superAdmin of a house with no
+# subscriptionStatus) to maestro/scripts/seed before running this flow.
+#
+# Maestro can't read the browser, so the flow asserts the app's old WebView
+# test ID never appears after the tap.
+#
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/billing-link-out.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - billing
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-plan-required@rats-e2e.com
+- extendedWaitUntil:
+    visible:
+      id: plan-required-panel
+    timeout: 20000
+- tapOn:
+    id: plan-required-view-plans
+- assertNotVisible:
+    id: subscription-webview
+- assertNotVisible:
+    id: signup-webview

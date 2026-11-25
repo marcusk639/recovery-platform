@@ -138,6 +138,8 @@ The gate is `SubscriptionGate` (`src/components/subscription/SubscriptionGate.ts
 - **Guests:** 7-day grace window after operator lapses → dismissible banner → `GraceExpiredScreen`
 - **potentialSuperAdmin / setup-incomplete users:** not gated (routed to SetupStack before gate runs)
 
+Plans are bought and managed only on the web, in the system browser: every entry point (`SubscriptionRequiredScreen`, `PlanRequiredPanel`, the Oxford upgrade, operator sign-up and `SubscriptionHandler`) calls `openWebBilling('pricing' | 'my-account')` (`src/services/webBilling.ts`), which opens `<webBaseUrl()>/<page>?from=app`. No screen loads billing in a WebView or collects card details (launch design A6, App Store 3.1.1). Neither page may be claimed by `regroup/app-links.json`; `webBilling.test.ts` pins that.
+
 Oxford features are additionally gated by `houseOxfordActive()` in Firestore rules (requires `oxfordEnabled == true` AND `subscriptionStatus ∈ {active, trialing}`).
 
 ## Domain Entities

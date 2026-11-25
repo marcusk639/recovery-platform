@@ -682,6 +682,7 @@ Oxford:      Standard $49 (15, 1), Plus $89 (25, 1), Network $299 (no caps; not 
 - The plan sets the house type (traditional or Oxford); `setOxfordEnabled` refuses a switch
 - Cancellation at period end (not immediate); reactivation un-cancels a `cancelling` subscription or creates a new one for a `canceled` one (see §3.1)
 - Subscription state is synced to `users.subscriptionMetadata`, the `subscriptions` doc and the houses by the subscription webhooks, which re-read the subscription from Stripe
+- Checkout and plan management happen only on the web. The mobile app links out to `/pricing` or `/my-account` with `?from=app` in the system browser (`mobile/src/services/webBilling.ts`); it has no billing WebView and collects no card details (launch design A6)
 
 ---
 

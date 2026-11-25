@@ -1,14 +1,12 @@
 /**
  * SubscriptionHandler Tests
  *
- * Covers:
- * - Loading state rendering via WebView
- * - Error state when WebView fails to load
- * - Retry and go-back buttons in error state
+ * Covers (launch P5 Task 9): the screen links out to web billing in the
+ * browser and never renders a WebView.
  */
 
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent } from '@testing-library/react-native';
 
 // Mock context
 jest.mock('../../../context', () => ({
@@ -30,6 +28,11 @@ jest.mock('../../../context', () => ({
 jest.mock('../../../state/store', () => ({
   useAppDispatch: () => jest.fn(),
   useAppSelector: jest.fn(),
+}));
+
+const mockOpenWebBilling = jest.fn((_page: string) => Promise.resolve(true));
+jest.mock('../../../services/webBilling', () => ({
+  openWebBilling: (page: string) => mockOpenWebBilling(page),
 }));
 
 import SubscriptionHandler from '../SubscriptionHandler';
@@ -60,91 +63,46 @@ describe('SubscriptionHandler', () => {
     jest.clearAllMocks();
   });
 
-  // -----------------------------------------------------------------------
-  // Normal rendering
-  // -----------------------------------------------------------------------
-  describe('normal rendering', () => {
-    it('renders the WebView element', () => {
-      const { getByTestId } = renderScreen();
-      // react-native-webview is mocked as a View in jest.setup.js
-      expect(getByTestId('subscription-webview')).toBeTruthy();
-    });
-  });
-
-  // -----------------------------------------------------------------------
-  // Error state
-  // -----------------------------------------------------------------------
-  describe('error state', () => {
-    it('shows error UI when WebView triggers onError', async () => {
-      const { getByTestId } = renderScreen();
-      const webView = getByTestId('subscription-webview');
-
-      // Trigger error event
-      fireEvent(webView, 'error', { nativeEvent: { description: 'net::ERR_NAME_NOT_RESOLVED' } });
-
-      await waitFor(() => {
-        expect(getByTestId('subscription-webview-error')).toBeTruthy();
-      });
+  describe('link-out screen', () => {
+    it('renders no WebView', () => {
+      const { queryByTestId, UNSAFE_root } = renderScreen();
+      expect(queryByTestId('subscription-webview')).toBeNull();
+      // react-native-webview is mocked in jest.setup.js; nothing of it renders.
+      const names = UNSAFE_root.findAll(() => true).map((n) =>
+        typeof n.type === 'string' ? n.type : (n.type as { displayName?: string; name?: string }).displayName ?? (n.type as { name?: string }).name,
+      );
+      expect(names.some((n) => /webview/i.test(String(n)))).toBe(false);
     });
 
-    it('shows a retry button in error state', async () => {
-      const { getByTestId } = renderScreen();
-
-      fireEvent(getByTestId('subscription-webview'), 'error', {
-        nativeEvent: { description: 'failed' },
-      });
-
-      await waitFor(() => {
-        expect(getByTestId('subscription-webview-retry')).toBeTruthy();
-      });
+    it('explains that the plan opens in the browser', () => {
+      const { getByTestId, getByText } = renderScreen();
+      expect(getByTestId('subscription-link-out')).toBeTruthy();
+      expect(getByText('Manage your plan on the web')).toBeTruthy();
     });
 
-    it('shows a go-back button in error state', async () => {
+    it('opens my-account in the browser when Open is pressed', () => {
       const { getByTestId } = renderScreen();
-
-      fireEvent(getByTestId('subscription-webview'), 'error', {
-        nativeEvent: { description: 'failed' },
-      });
-
-      await waitFor(() => {
-        expect(getByTestId('subscription-webview-go-back')).toBeTruthy();
-      });
+      fireEvent.press(getByTestId('subscription-link-out-open'));
+      expect(mockOpenWebBilling).toHaveBeenCalledTimes(1);
+      expect(mockOpenWebBilling).toHaveBeenCalledWith('my-account');
     });
 
-    it('calls navigation.goBack when the go-back button is pressed', async () => {
+    it('does not open anything until Open is pressed', () => {
+      renderScreen();
+      expect(mockOpenWebBilling).not.toHaveBeenCalled();
+    });
+
+    it('stays on the screen after opening the browser', () => {
       const { getByTestId } = renderScreen();
+      fireEvent.press(getByTestId('subscription-link-out-open'));
+      expect(mockNavigation.goBack).not.toHaveBeenCalled();
+      expect(mockNavigation.navigate).not.toHaveBeenCalled();
+    });
 
-      fireEvent(getByTestId('subscription-webview'), 'error', {
-        nativeEvent: { description: 'failed' },
-      });
-
-      await waitFor(() => {
-        expect(getByTestId('subscription-webview-go-back')).toBeTruthy();
-      });
-
-      fireEvent.press(getByTestId('subscription-webview-go-back'));
+    it('calls navigation.goBack when Go Back is pressed', () => {
+      const { getByTestId } = renderScreen();
+      fireEvent.press(getByTestId('subscription-link-out-go-back'));
       expect(mockNavigation.goBack).toHaveBeenCalledTimes(1);
-    });
-
-    it('clears error state and returns to WebView when retry is pressed', async () => {
-      const { getByTestId, queryByTestId } = renderScreen();
-
-      // Trigger error
-      fireEvent(getByTestId('subscription-webview'), 'error', {
-        nativeEvent: { description: 'failed' },
-      });
-
-      await waitFor(() => {
-        expect(getByTestId('subscription-webview-error')).toBeTruthy();
-      });
-
-      // Press retry
-      fireEvent.press(getByTestId('subscription-webview-retry'));
-
-      await waitFor(() => {
-        expect(queryByTestId('subscription-webview-error')).toBeNull();
-        expect(getByTestId('subscription-webview')).toBeTruthy();
-      });
     });
   });
 });
