@@ -8,10 +8,10 @@
  *     has created it. The old rule dereferenced resource.data.houseId, so a
  *     missing doc was denied for everyone and the onSnapshot listener died
  *     before the summary existed. A missing doc must read as "not found".
- *   - write: residents never could write (that was the production bug —
- *     their activities went uncounted). Admin write is kept only for app
- *     versions released before the trigger, which still apply a client-side
- *     +1 that the trigger then overwrites.
+ *   - write: nobody writes from a client. Residents never could (that was
+ *     the production bug — their activities went uncounted), and the admin
+ *     write kept for app versions released before the trigger is closed:
+ *     there are no users on those versions.
  *
  * Requires the Firebase Firestore emulator running on port 8080.
  *
@@ -185,9 +185,38 @@ describe('week-summaries write', () => {
     await assertFails(updateDoc(summaryDoc(resident()), { 'stats.choresCompleted': increment(1) }));
   });
 
-  it('still lets a house admin increment, for app versions released before the trigger', async () => {
-    await assertSucceeds(
+  // The admin write was kept only for app versions released before the server
+  // trigger. There are no users on those versions, and the write let any
+  // admin claim rewrite a summary's houseId and contents, so it is closed.
+  it('BLOCKS a house admin from incrementing a summary (the server owns them)', async () => {
+    await assertFails(
       updateDoc(summaryDoc(houseAdmin()), { 'stats.choresCompleted': increment(1) }),
+    );
+  });
+
+  it("BLOCKS an admin of another house from moving a summary into their house", async () => {
+    const otherAdmin = testEnv.authenticatedContext('otherAdmin', adminClaims(OTHER_HOUSE_ID));
+    await assertFails(updateDoc(summaryDoc(otherAdmin), { houseId: OTHER_HOUSE_ID }));
+  });
+
+  it("BLOCKS an admin of another house from creating a summary for this house's resident", async () => {
+    const otherAdmin = testEnv.authenticatedContext('otherAdmin', adminClaims(OTHER_HOUSE_ID));
+    await assertFails(
+      setDoc(summaryDoc(otherAdmin, MISSING_ID), {
+        ...summary(),
+        id: MISSING_ID,
+        houseId: OTHER_HOUSE_ID,
+        startDate: '2026-01-19',
+      }),
+    );
+  });
+
+  it("BLOCKS a house admin from overwriting their own house's summary", async () => {
+    await assertFails(
+      setDoc(summaryDoc(houseAdmin()), {
+        ...summary(),
+        stats: { ...summary().stats, meetingsAttended: 99 },
+      }),
     );
   });
 

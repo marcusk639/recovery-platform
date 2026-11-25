@@ -96,3 +96,8 @@ maestro/output/
 # E2EStaging iOS Firebase config: copied at build time from ~/.config/regroup-e2e
 # (scripts/ios-configure-e2e-bundle.sh). Never commit it.
 /ios/config/E2EStaging/GoogleService-Info.plist
+
+# Signed release bundles are build output; upload them, never commit them.
+android/app/release/
+*.aab
+*.apk

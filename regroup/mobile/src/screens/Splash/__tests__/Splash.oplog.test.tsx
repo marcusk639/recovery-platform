@@ -51,6 +51,13 @@ jest.mock('../../../state/slices/userSlice', () => {
     initializeInvitation: (arg: unknown) => ({ type: 'initializeInvitation', arg }),
   };
 });
+jest.mock('../../../state/slices/userMessagingToken', () => ({
+  addMessagingToken: (arg?: unknown) => ({
+    type: 'addMessagingToken',
+    arg,
+    unwrap: async () => 'token',
+  }),
+}));
 jest.mock('../../../state/store', () => ({
   useAppDispatch: () => (action: { type: string; arg?: unknown }) => {
     mockDispatched.push({ type: action.type, arg: action.arg });
@@ -139,8 +146,8 @@ describe('FCM token on mount', () => {
     renderSplash({ user: u });
 
     await waitFor(() =>
-      expect(dispatchedOf('updateUser')).toEqual([
-        { type: 'updateUser', arg: { user: u, updates: { messagingToken: ['mock-fcm-token'] } } },
+      expect(dispatchedOf('addMessagingToken')).toEqual([
+        { type: 'addMessagingToken', arg: { user: u, token: 'mock-fcm-token' } },
       ]),
     );
   });
@@ -150,10 +157,10 @@ describe('FCM token on mount', () => {
     renderSplash({ user: u });
 
     await waitFor(() =>
-      expect(dispatchedOf('updateUser')).toEqual([
+      expect(dispatchedOf('addMessagingToken')).toEqual([
         {
-          type: 'updateUser',
-          arg: { user: u, updates: { messagingToken: ['old-token', 'mock-fcm-token'] } },
+          type: 'addMessagingToken',
+          arg: { user: u, token: 'mock-fcm-token' },
         },
       ]),
     );
@@ -164,7 +171,7 @@ describe('FCM token on mount', () => {
     const u = user();
     renderSplash({ user: u });
 
-    await waitFor(() => expect(dispatchedOf('updateUser')).toHaveLength(1));
+    await waitFor(() => expect(dispatchedOf('addMessagingToken')).toHaveLength(1));
   });
 
   it('does not store a token the user already has', async () => {
@@ -177,7 +184,7 @@ describe('FCM token on mount', () => {
 
     await waitFor(() => expect(tokenRead).toBe(true));
     await settle();
-    expect(dispatchedOf('updateUser')).toEqual([]);
+    expect(dispatchedOf('addMessagingToken')).toEqual([]);
   });
 
   it('does not read or store a token when permission is denied', async () => {
@@ -196,7 +203,7 @@ describe('FCM token on mount', () => {
     await waitFor(() => expect(asked).toBe(true));
     await settle();
     expect(tokenRead).toBe(false);
-    expect(dispatchedOf('updateUser')).toEqual([]);
+    expect(dispatchedOf('addMessagingToken')).toEqual([]);
   });
 
   it('does not store the token while the user is updating', async () => {
@@ -209,7 +216,7 @@ describe('FCM token on mount', () => {
 
     await waitFor(() => expect(tokenRead).toBe(true));
     await settle();
-    expect(dispatchedOf('updateUser')).toEqual([]);
+    expect(dispatchedOf('addMessagingToken')).toEqual([]);
   });
 });
 
@@ -226,10 +233,10 @@ describe('messaging listeners', () => {
 
     await refresh!('fresh-token');
 
-    expect(dispatchedOf('updateUser')).toEqual([
+    expect(dispatchedOf('addMessagingToken')).toEqual([
       {
-        type: 'updateUser',
-        arg: { user: u, updates: { messagingToken: ['mock-fcm-token', 'fresh-token'] } },
+        type: 'addMessagingToken',
+        arg: { user: u, token: 'fresh-token' },
       },
     ]);
   });
@@ -249,7 +256,7 @@ describe('messaging listeners', () => {
 
     await refresh!('mock-fcm-token');
 
-    expect(dispatchedOf('updateUser')).toEqual([]);
+    expect(dispatchedOf('addMessagingToken')).toEqual([]);
   });
 
   it('ignores a refreshed token when no user is loaded', async () => {
@@ -263,7 +270,7 @@ describe('messaging listeners', () => {
 
     await refresh!('fresh-token');
 
-    expect(dispatchedOf('updateUser')).toEqual([]);
+    expect(dispatchedOf('addMessagingToken')).toEqual([]);
   });
 
   it('displays a foreground message that carries a notifee payload', async () => {
