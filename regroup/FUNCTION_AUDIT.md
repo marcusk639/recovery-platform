@@ -36,6 +36,7 @@ as a quota stopgap — see that file's comment for the constraint.
 | `disconnectStripeAccount`          | `regroup/functions/src/callable/payments.ts:786`            | yes      | `STRIPE_SECRET_KEY, STRIPE_CLIENT_ID` |
 | `findMeetings`                     | `regroup/functions/src/callable/meetings.ts:94`             | yes      | `RECOVERY_PLATFORM_API_KEY`           |
 | `finishOperatorSetup`              | `regroup/functions/src/callable/finishOperatorSetup.ts:137` | yes      | —                                     |
+| `getAppConfig`                     | `regroup/functions/src/callable/getAppConfig.ts:55`         | yes      | —                                     |
 | `getPaymentMethod`                 | `regroup/functions/src/callable/payments.ts:478`            | yes      | `STRIPE_SECRET_KEY`                   |
 | `getStripeAccountStatus`           | `regroup/functions/src/callable/payments.ts:900`            | yes      | `STRIPE_SECRET_KEY`                   |
 | `getTierCatalog`                   | `regroup/functions/src/callable/getTierCatalog.ts:140`      | yes      | `STRIPE_SECRET_KEY`                   |
