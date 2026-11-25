@@ -26,7 +26,12 @@ legal access can do, in the order it has to happen.
   - #286, invite links and the sign-up Privacy link (B5 code, B8 link). It overlaps P5 Tasks 3, 4
     and 6 (#281), which replace the `/redirect` email links with https app links. Merge one of the
     two, not both halves blindly;
-  - the link-out checkout (B6): P5 Tasks 9–11 (#281), implemented on `feat/regroup-launch-p5`.
+  - the link-out checkout (B6): P5 Tasks 9–11 (#281), implemented on `feat/regroup-launch-p5`;
+  - #287, which drops the auto-pay switch nothing honours (M7) and reports render crashes to Sentry
+    (M10, the app half). C4b clears the stored flags;
+  - #288, which removes the 2FA screen (M11). A5 turns off the phone sign-in it left behind;
+  - #289, which makes guest Stripe billing ids server-only. Its rules ship in C4;
+  - #292, which delivers a house's failed payout to its admins (S1). A3 step 2 is its Dashboard half.
 - **Tools:**
   - `firebase-tools` from npm (`npm i -g firebase-tools`), not Homebrew's;
   - `gcloud`, signed in as an owner of `phoenix-cleanhouse`;
@@ -131,6 +136,22 @@ regroup/scripts/regroup_feedback_mailmerge.csv --path regroup/scripts/test.csv -
    Then redeploy `stripeEvents` (`firebase deploy --only functions:stripeEvents --project phoenix-cleanhouse`).
 
 **Expected result:** both test events are logged as handled, with no signature error.
+
+#### A5. Turn off phone sign-in (M11, #288)
+
+**Where:** Firebase console, project `phoenix-cleanhouse` → Authentication → Sign-in method.
+
+The old 2FA screen linked a phone number to each account that used it, as a second sign-in method,
+not a second factor. While the Phone provider is on, those accounts can sign in with an SMS code alone,
+so a SIM swap is a way in. After #288 no Regroup app signs in by phone (email and password only), so:
+
+1. Read the Phone provider's state. If it's already **Disabled**, there's nothing to do.
+2. Otherwise, Phone → **Disable** → Save.
+
+If phone sign-in must stay on for another reason, unlink the phone credential from each affected
+account instead (Admin SDK `updateUser(uid, { phoneNumber: null })`) before launch.
+
+**Expected result:** the Phone provider shows **Disabled**.
 
 ### Part B — App links and store prerequisites (start now; outside lead times)
 
@@ -250,7 +271,24 @@ npm run deploy:rules
 cd ..
 ```
 
+This deploys #289's rules (guest Stripe billing ids become server-only) and #287's (residents can no
+longer set `autoPayEnabled`), along with everything else on `main`.
+
 **Expected result:** both the Firestore and Storage rulesets release. The dry run compiles cleanly.
+
+#### C4b. Clear the stored auto-pay flags (M7, #287)
+
+Run this after C4, so residents can't set the flag again. #287 removes the switch, but guests who turned
+it on still have `autoPayEnabled: true`. `scheduledRentCollection` selects guests on
+`autoPayEnabled == true` and `rentOwed > 0` (`functions/src/scheduled/scheduledRentCollection.ts`), so
+it keeps picking them up.
+
+1. Firestore console → `guests` → filter `autoPayEnabled == true`. Count the matches.
+2. If there are a handful, set each one's `autoPayEnabled` to `false` in the console. If there are more,
+   there's no backfill script yet: write one in `functions/src/scripts/` on the pattern of the other
+   `backfill*` scripts, and rehearse it on the emulator first (`scriptBootstrap.ts`).
+
+**Expected result:** the `autoPayEnabled == true` filter on `guests` returns nothing.
 
 #### C5. Indexes
 
@@ -367,6 +405,7 @@ After C1–C8 and D:
   app, and Payments shows the new status without leaving the screen (#294). Then
   `stripe accounts list --live --limit 3` shows the new connected account.
 - **An invite email opens the app's invite screen** on iOS and Android.
+- **Phone sign-in is off** (A5), and no guest has `autoPayEnabled: true` (C4b).
 - **A resident pays rent,** and the payment shows on Regroup's account with a transfer to the house's
   connected account.
 - **Refund that test payment** (Dashboard → Payments → Refund), then cancel the test subscription.
