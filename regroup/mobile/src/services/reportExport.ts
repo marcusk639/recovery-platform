@@ -1,10 +1,18 @@
 import { Platform } from 'react-native';
-import { csvCell, recordAmountCsv, recordNetCsv, recordRefundedCsv } from '../util/paymentDisplay';
+import {
+  chargeDetail,
+  chargeLabel,
+  csvCell,
+  recordAmountCsv,
+  recordNetCsv,
+  recordRefundedCsv,
+} from '../util/paymentDisplay';
 import { format, parseISO } from 'date-fns';
 import { toDateSafe } from '../util/firestore';
 import { generatePDF } from 'react-native-html-to-pdf';
 
 import { RentPayment } from './payments';
+import type { RentCharge } from './rentCharges';
 import { paymentDisplayStatus } from '../util/paymentStatus';
 
 import { Guest } from '../entities/Guest';
@@ -70,13 +78,24 @@ function paymentDate(createdAt: unknown): string {
 /**
  * Generates a CSV string for a payment history export.
  * guestNames maps guestId → display name for the name column.
+ * Rent charges (optional) are rows in the same columns, in the other direction:
+ * a negative Amount and Net (money owed, not paid), Status "Rent charge", dated
+ * by the first day charged. With charges, rows run newest first by date.
  */
 export function exportPaymentHistoryCSV(
   payments: RentPayment[],
   guestNames: Record<string, string>,
+  charges: RentCharge[] = [],
 ): string {
   const header = ['Date', 'Guest', 'Amount ($)', 'Refunded ($)', 'Net ($)', 'Status', 'Description'].join(',');
-  const rows = payments.map((p) => {
+  const chargeRows = charges.map((c) => {
+    const owed = `-${(c.amountCents / 100).toFixed(2)}`;
+    const detail = chargeDetail(c);
+    const description = escapeCsvField(detail ? `${chargeLabel(c)} (${detail})` : chargeLabel(c));
+    const guest = escapeCsvField(guestNames[c.guestId] ?? c.guestId);
+    return [c.firstDay, guest, owed, '', owed, 'Rent charge', description].join(',');
+  });
+  const paymentRows = payments.map((p) => {
     const date = paymentDate(p.createdAt);
     const guest = escapeCsvField(guestNames[p.guestId] ?? p.guestId);
     const amount = recordAmountCsv(p);
@@ -86,6 +105,9 @@ export function exportPaymentHistoryCSV(
     const description = escapeCsvField(p.description ?? '');
     return [date, guest, amount, refunded, net, status, description].join(',');
   });
+  if (chargeRows.length === 0) return [header, ...paymentRows].join('\n');
+  // yyyy-MM-dd sorts as text; a stable sort keeps same-day rows as given.
+  const rows = [...paymentRows, ...chargeRows].sort((a, b) => b.slice(0, 10).localeCompare(a.slice(0, 10)));
   return [header, ...rows].join('\n');
 }
 

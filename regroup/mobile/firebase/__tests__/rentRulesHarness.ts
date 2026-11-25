@@ -17,6 +17,8 @@ export const PEER = 'peerLeader';
 export const RESIDENT = 'resident';
 export const OTHER_RESIDENT = 'otherResident';
 
+const [EMULATOR_HOST, EMULATOR_PORT] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080').split(':');
+
 /** Registers the suite's hooks. Call once at the top of a suite file. */
 /** Each suite passes its own project id: jest runs suites in parallel on one emulator. */
 export function useRentRulesEnv(projectId: string) {
@@ -26,8 +28,9 @@ export function useRentRulesEnv(projectId: string) {
       projectId,
       firestore: {
         rules: fs.readFileSync(RULES_PATH, 'utf8'),
-        host: '127.0.0.1',
-        port: 8080,
+        // The emulator emulators:exec started (FIRESTORE_EMULATOR_HOST), as the newer suites do.
+        host: EMULATOR_HOST,
+        port: Number(EMULATOR_PORT),
       },
     });
   });

@@ -94,7 +94,7 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 | `paywall.ts`                    | `paywallConfigRef` only (the `paywall/config` kill switch) |
 | `phaseAdvancement.ts`           | Phase advancement eligibility + automation                |
 | `receiptService.ts`             | Payment receipt generation                                |
-| `rentCharges.ts`                | `previewRentCharges` callable (price in dollars, rows in cents) |
+| `rentCharges.ts`                | `previewRentCharges` callable (price in dollars, rows in cents); `listGuestCharges` (resident by `guestUserId`, staff by `guestId`) |
 | `reportExport.ts`               | PDF/CSV export for activity and compliance reports        |
 | `reportingService.ts`           | Admin analytics and reporting aggregation                 |
 | `setup-wizard.ts`               | House onboarding wizard steps                             |

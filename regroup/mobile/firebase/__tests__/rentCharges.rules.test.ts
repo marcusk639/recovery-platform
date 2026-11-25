@@ -12,8 +12,27 @@
  */
 
 import { assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { ADMIN, HOUSE, OWNER, PEER, RESIDENT, useRentRulesEnv } from './rentRulesHarness';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
+import {
+  ADMIN,
+  HOUSE,
+  OTHER_RESIDENT,
+  OWNER,
+  PEER,
+  RESIDENT,
+  useRentRulesEnv,
+} from './rentRulesHarness';
 
 const rules = useRentRulesEnv('demo-rent-charges-rules-test');
 const as = rules.as;
@@ -280,6 +299,33 @@ describe('rentCharges', () => {
     );
     await assertFails(deleteDoc(doc(as(OWNER), 'rentCharges/gResident_2026-11-18')));
   });
+});
+
+// The resident's history lists their charges (services/rentCharges listGuestCharges).
+// Rules aren't filters: a list is allowed only when the query itself proves every
+// result readable, so a resident must ask by houseId and their own guestUserId.
+describe('rentCharges: listing a history', () => {
+  const charges = (uid: string) => collection(as(uid), 'rentCharges');
+  it('a resident lists their own charges by house and their own account', () =>
+    assertSucceeds(
+      getDocs(query(charges(RESIDENT), where('houseId', '==', HOUSE), where('guestUserId', '==', RESIDENT))),
+    ));
+  it("a resident cannot list another resident's charges", async () => {
+    await assertFails(
+      getDocs(
+        query(charges(RESIDENT), where('houseId', '==', HOUSE), where('guestUserId', '==', OTHER_RESIDENT)),
+      ),
+    );
+    await assertFails(
+      getDocs(query(charges(RESIDENT), where('houseId', '==', HOUSE), where('guestId', '==', 'gOther'))),
+    );
+  });
+  it("a resident cannot list the whole house's charges", () =>
+    assertFails(getDocs(query(charges(RESIDENT), where('houseId', '==', HOUSE)))));
+  it("a manager lists one resident's charges by house and guest record", () =>
+    assertSucceeds(
+      getDocs(query(charges(ADMIN), where('houseId', '==', HOUSE), where('guestId', '==', 'gOther'))),
+    ));
 });
 
 describe('rentAccounts and config', () => {

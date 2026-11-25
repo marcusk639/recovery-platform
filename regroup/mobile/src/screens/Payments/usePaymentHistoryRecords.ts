@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import { getGuestPayments, getPaymentHistory, RentPayment } from '../../services/payments';
+import { listGuestCharges, RentCharge } from '../../services/rentCharges';
 import { logException } from '../../util/logging';
 
 export const PAYMENT_HISTORY_LOAD_ERROR = "Couldn't load payment history. Please try again.";
+export const RENT_CHARGES_LOAD_ERROR = "Couldn't load rent charges.";
 
 type GuestRef = { id?: string; userId?: string } | null | undefined;
 type HouseRef = { id?: string } | null | undefined;
@@ -18,14 +20,26 @@ type HouseRef = { id?: string } | null | undefined;
  * Until the resident's record and the house load there is nothing to query;
  * once loaded, a missing one is an error, not an empty history. A failed read
  * goes to Sentry and shows a plain message, never the raw Firebase text.
+ *
+ * Rent charges (rent spec §4.5) are read by the same scope: the resident by
+ * their own uid, staff by the guest record. A failed charge read leaves the
+ * payments up and says the charges are missing, rather than hiding either.
  */
 export function usePaymentHistoryRecords(
   guest: GuestRef,
   house: HouseRef,
   signedInUid: string | undefined,
   selectionLoading: boolean,
-): { payments: RentPayment[]; loading: boolean; error: string | null } {
+): {
+  payments: RentPayment[];
+  charges: RentCharge[];
+  chargesError: string | null;
+  loading: boolean;
+  error: string | null;
+} {
   const [payments, setPayments] = useState<RentPayment[]>([]);
+  const [charges, setCharges] = useState<RentCharge[]>([]);
+  const [chargesError, setChargesError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,12 +60,30 @@ export function usePaymentHistoryRecords(
     let active = true;
     setLoading(true);
     setError(null);
+    setChargesError(null);
+    const own = !!guestUserId && guestUserId === signedInUid;
+    const fetchCharges = async () => {
+      try {
+        const data = await listGuestCharges(
+          own ? { houseId, guestUserId } : { houseId, guestId },
+        );
+        if (active) setCharges(data);
+      } catch (err) {
+        logException(err);
+        if (active) {
+          setCharges([]);
+          setChargesError(RENT_CHARGES_LOAD_ERROR);
+        }
+      }
+    };
     const fetchPayments = async () => {
       try {
-        const data =
-          guestUserId && guestUserId === signedInUid
-            ? await getPaymentHistory({ houseId, guestUserId })
-            : await getGuestPayments({ houseId, guestId });
+        const [data] = await Promise.all([
+          own
+            ? getPaymentHistory({ houseId, guestUserId })
+            : getGuestPayments({ houseId, guestId }),
+          fetchCharges(),
+        ]);
         if (active) setPayments(data);
       } catch (err) {
         logException(err);
@@ -67,5 +99,5 @@ export function usePaymentHistoryRecords(
     };
   }, [guestId, guestUserId, houseId, signedInUid, selectionLoading]);
 
-  return { payments, loading, error };
+  return { payments, charges, chargesError, loading, error };
 }
