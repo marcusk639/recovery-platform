@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { withFormik, FormikProps } from "formik";
-import ManagerSetupProps, { ManagerSetupWithForm } from "./ManagerSetupEntity";
+import ManagerSetupProps from "./ManagerSetupEntity";
+import { SetupScreenNavigationProp } from "../../navigation/types";
 import { View, ViewStyle } from "react-native";
 import {
   normalize,
@@ -32,8 +33,19 @@ export const WIZARD_BUTTON_CONTAINER: ViewStyle = {
   right: 0,
 };
 
+// House Settings opens this screen in its form modal with setupProps(), which
+// passes no navigation (there is no navigator there). Only the wizard has one.
+type ChoreSetupProps = Omit<ManagerSetupProps, "navigation"> & {
+  navigation?: SetupScreenNavigationProp;
+};
+
+// Both SetupButtons rows below always get a leftPress, so the legacy
+// SetupButtons never reaches its navigation.goBack fallback. It types
+// navigation as required, hence the casts.
+
 type ChoreSetupFormViewProps = FormikProps<Chores> &
-  ManagerSetupWithForm &
+  FormikProps<ManagerSetupProps> &
+  ChoreSetupProps &
   ChoreState;
 
 const ChoreSetupFormView: React.FC<ChoreSetupFormViewProps> = (props) => {
@@ -184,7 +196,7 @@ const ChoreSetupFormView: React.FC<ChoreSetupFormViewProps> = (props) => {
                 updateChore(mode, choreBeforeEdit, values[chore.name])
               }
               leftPress={() => setShowModal(false)}
-              navigation={props.navigation}
+              navigation={props.navigation as SetupScreenNavigationProp}
             />
           </View>
         </RatsModal>
@@ -222,7 +234,7 @@ const ChoreSetupFormView: React.FC<ChoreSetupFormViewProps> = (props) => {
         leftPress={onPrevPress || (() => {})}
         rightLabel={forSettings ? "Save" : "Next"}
         submit={forSettings ? settingsSubmit : onNextPress || (() => {})}
-        navigation={props.navigation}
+        navigation={props.navigation as SetupScreenNavigationProp}
       />
     );
   };
@@ -254,7 +266,7 @@ const ChoreSetupFormView: React.FC<ChoreSetupFormViewProps> = (props) => {
 };
 
 const ChoreSetupForm = withFormik<
-  ManagerSetupProps & ChoreState,
+  ChoreSetupProps & ChoreState,
   { [name: string]: Chore }
 >({
   enableReinitialize: true,
@@ -315,7 +327,7 @@ interface ChoreState {
   setChores?: (oldChore: Chore, newChore: Chore, callback: () => void) => void;
 }
 
-const ChoreSetup: React.FC<ManagerSetupWithForm> = (props) => {
+const ChoreSetup: React.FC<ChoreSetupProps> = (props) => {
   const [oldChore, setOldChore] = useState<Chore | null>(null);
   const [newChore, setNewChore] = useState<Chore | null>(null);
 

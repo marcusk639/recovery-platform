@@ -34,6 +34,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAppSelector, useAppDispatch } from '../../state/store';
 import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 import { useGuests } from '../../state/queries/guestQueries';
+import { useMayViewHouseMoney } from '../../state/queries/houseTierQueries';
 import { Routes, RootStackParamList } from '../../navigation/types';
 
 interface Props {
@@ -64,6 +65,7 @@ const HouseSettings: React.FC<Props> = (props) => {
 
   const dispatch = useAppDispatch();
   const { house, houseId } = useSelectedHouse();
+  const mayViewHouseMoney = useMayViewHouseMoney(houseId ?? '');
   const queryClient = useQueryClient();
 
   // Refetch on focus so returning from a sub-screen that mutated settings
@@ -223,13 +225,19 @@ const HouseSettings: React.FC<Props> = (props) => {
         iconName: 'credit-card',
         color: color.medium_grey,
       },
-      paymentDashboard: {
-        action: () => navigation.navigate(Routes.PaymentDashboard),
-        label: 'Payment Dashboard',
-        description: 'View all resident payment activity',
-        iconName: 'chart-bar',
-        color: color.medium_grey,
-      },
+      // Owners and managers only: peer leaders see no house money, and the
+      // rules refuse their reads of the house's payment records.
+      ...(mayViewHouseMoney
+        ? {
+            paymentDashboard: {
+              action: () => navigation.navigate(Routes.PaymentDashboard),
+              label: 'Payment Dashboard',
+              description: 'View all resident payment activity',
+              iconName: 'chart-bar',
+              color: color.medium_grey,
+            },
+          }
+        : {}),
       reports: {
         action: () => navigation.navigate(Routes.AdminReport),
         label: 'Reports',
@@ -249,7 +257,15 @@ const HouseSettings: React.FC<Props> = (props) => {
         color: color.medium_grey,
       },
     }),
-    [startHouseSetupModal, startChoreSetup, startPhaseSetup, showFormModal, setupProps, navigation],
+    [
+      startHouseSetupModal,
+      startChoreSetup,
+      startPhaseSetup,
+      showFormModal,
+      setupProps,
+      navigation,
+      mayViewHouseMoney,
+    ],
   );
 
   useEffect(() => {

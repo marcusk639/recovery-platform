@@ -2,8 +2,9 @@ import React, { useState, useCallback, useEffect, useRef } from "react";
 // Phase 3.3: Migrated from withHouseSetupWizard HOC to useHouseSetupWizard hook
 import { useHouseSetupWizard } from "../../hooks/useHouseSetupWizard";
 
-import { withFormik, Field } from "formik";
-import ManagerSetupProps, { ManagerSetupWithForm } from "./ManagerSetupEntity";
+import { withFormik, Field, FormikProps } from "formik";
+import ManagerSetupProps from "./ManagerSetupEntity";
+import { SetupScreenNavigationProp } from "../../navigation/types";
 import { View } from "react-native";
 import { validateAddress } from "../../util/form";
 import RatsTextInput from "../../components/rats-text-input/rats-text-input";
@@ -32,8 +33,15 @@ import RatsImagePicker from "../../components/rats-image-picker";
 import isEmpty from "lodash/isEmpty";
 
 const labelColor = "black";
+const noop = () => {};
 
-type HouseSetupFormViewProps = ManagerSetupWithForm;
+// House Settings opens this screen in its form modal with setupProps(), which
+// passes no navigation (there is no navigator there). Only the wizard has one.
+type HouseSetupProps = Omit<ManagerSetupProps, "navigation"> & {
+  navigation?: SetupScreenNavigationProp;
+};
+
+type HouseSetupFormViewProps = FormikProps<ManagerSetupProps> & HouseSetupProps;
 
 // Hardened 2026-07-07: this used to also call useHouseSetupWizard() here and
 // fall back to its selectedHouse — redundant since the outer HouseSetup
@@ -312,8 +320,10 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
             forSettings ? { ...SAVE_BUTTON, width: "49%" } : {}
           }
           submit={submit}
-          leftPress={onPrevPress ? onPrevPress : navigation.goBack}
-          navigation={navigation}
+          leftPress={onPrevPress ?? navigation?.goBack ?? noop}
+          // The legacy SetupButtons types navigation as required and reads
+          // navigation.goBack only when leftPress is missing; it never is here.
+          navigation={navigation as SetupScreenNavigationProp}
         />
       )}
     </View>
@@ -322,7 +332,7 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
 
 const initialValues = new House();
 
-const HouseSetupForm = withFormik<ManagerSetupProps, House>({
+const HouseSetupForm = withFormik<HouseSetupProps, House>({
   enableReinitialize: true,
   mapPropsToValues: (props) =>
     props.selectedHouse ? props.selectedHouse : initialValues,
@@ -365,7 +375,7 @@ const HouseSetupForm = withFormik<ManagerSetupProps, House>({
   //@ts-ignore
 })(HouseSetupFormView);
 
-export const HouseSetup: React.FC<ManagerSetupWithForm> = (props) => {
+export const HouseSetup: React.FC<HouseSetupProps> = (props) => {
   const setupWizard = useHouseSetupWizard();
   return (
     <HouseSetupForm

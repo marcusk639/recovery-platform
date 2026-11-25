@@ -54,6 +54,7 @@ import {
   upsertSubscriptionDoc,
   type SubscriptionDoc,
 } from "../api/firestore";
+import { closeOperatorBilling } from "../api/stripeDeletion";
 import { parseInput, safeReturnUrlSchema } from "../validation";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -156,6 +157,43 @@ async function finishCheckout<U extends { id: string }, M>(
 
 const BILLING_OFF_MESSAGE = "New subscriptions are not available right now";
 const SALES_CLOSED_MESSAGE = "Subscriptions open when the new Regroup app is released";
+const CHECKOUT_REVERSED_MESSAGE =
+  "We couldn't finish setting up your subscription, so we cancelled it. You have not been charged. Please try again.";
+const CHECKOUT_ORPHANED_MESSAGE =
+  "We couldn't finish setting up your subscription. Please contact support before trying again, so you aren't billed twice.";
+
+/**
+ * Stripe created the subscription but the records that tie it to the operator
+ * weren't written. The web deletes the new account on any error, so leaving the
+ * subscription would bill, after the trial, an account that no longer exists.
+ * Cancel it now through closeOperatorBilling, which acts only on a subscription
+ * Stripe ties to this uid. If that fails too, the subscription is still live:
+ * log its ids at ERROR for support and say so.
+ */
+async function reverseUnrecordedCheckout(
+  userId: string,
+  subscriptionId: string,
+  customerId: string,
+  writeError: unknown,
+): Promise<never> {
+  logger.error("Checkout records not written after Stripe; cancelling the subscription", {
+    userId,
+    subscriptionId,
+    error: writeError instanceof Error ? writeError.message : String(writeError),
+  });
+  try {
+    await closeOperatorBilling(userId, subscriptionId, customerId);
+  } catch (cancelError) {
+    logger.error("Checkout subscription left live with no records: cancel it by hand", {
+      userId,
+      subscriptionId,
+      customerId,
+      error: cancelError instanceof Error ? cancelError.message : String(cancelError),
+    });
+    throw new HttpsError("internal", CHECKOUT_ORPHANED_MESSAGE);
+  }
+  throw new HttpsError("internal", CHECKOUT_REVERSED_MESSAGE);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // createOperatorSubscription
@@ -259,23 +297,33 @@ export const createOperatorSubscription = onCall(
       // (items/plan) are intentionally absent, but oxfordEnabled is included so
       // mobile Oxford gating keeps working. The stored houses map is kept: it is
       // the property-cap count (see writeOperatorSubscription).
-      const writtenTierMetadata = await writeOperatorSubscription(
-        data.user.id,
-        persistedTierMetadata,
-      );
-      await upsertSubscriptionDoc({
-        houseId: "",
-        stripeCustomerId: tierMetadata.customerId,
-        stripeSubscriptionId: tierMetadata.subscriptionId,
-        status: tierResolvedStatus as SubscriptionDoc["status"],
-        // Never throw here: the Stripe subscription already exists.
-        currentPeriodEnd: tierMetadata.currentPeriodEnd
-          ? new Date(tierMetadata.currentPeriodEnd).toISOString()
-          : "",
-        planId: priceId,
-        guestCount: 0,
-        userId: data.user.id,
-      });
+      let writtenTierMetadata: Awaited<ReturnType<typeof writeOperatorSubscription>>;
+      try {
+        writtenTierMetadata = await writeOperatorSubscription(
+          data.user.id,
+          persistedTierMetadata,
+        );
+        await upsertSubscriptionDoc({
+          houseId: "",
+          stripeCustomerId: tierMetadata.customerId,
+          stripeSubscriptionId: tierMetadata.subscriptionId,
+          status: tierResolvedStatus as SubscriptionDoc["status"],
+          // Never throw here: the Stripe subscription already exists.
+          currentPeriodEnd: tierMetadata.currentPeriodEnd
+            ? new Date(tierMetadata.currentPeriodEnd).toISOString()
+            : "",
+          planId: priceId,
+          guestCount: 0,
+          userId: data.user.id,
+        });
+      } catch (writeError) {
+        return reverseUnrecordedCheckout(
+          data.user.id,
+          tierMetadata.subscriptionId,
+          tierMetadata.customerId,
+          writeError,
+        );
+      }
       await sendEmail({
         to: "admin@regroup-app.com",
         from: regroupEmail,

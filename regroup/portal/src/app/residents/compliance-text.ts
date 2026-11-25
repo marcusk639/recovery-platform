@@ -1,22 +1,9 @@
-// Report fields are untrusted input, so the report is given plain text and real
-// numbers. Ordinary text and real numbers print exactly as before.
-const ESCAPES: Record<string, string> = {
-  '&': '&amp;',
-  '<': '&lt;',
-  '>': '&gt;',
-  '"': '&quot;',
-  "'": '&#39;',
-};
-const escape = (s: string) => s.replace(/[&<>"']/g, (c) => ESCAPES[c]);
-
-const TEXT_FIELDS = ['firstName', 'lastName', 'phase'] as const;
-
+// Report fields are untrusted input, so the report is given real numbers. Text
+// is handed over as it is: the phone's report builder
+// (regroup/mobile/src/services/weeklyReportHtml.ts) escapes it, and escaping it
+// here too would print "&amp;" for "&".
 export function reportGuest<T extends Record<string, unknown>>(guest: T): T {
-  const copy: Record<string, unknown> = { ...guest };
-  for (const field of TEXT_FIELDS) {
-    if (copy[field] != null) copy[field] = escape(String(copy[field]));
-  }
-  return copy as T;
+  return { ...guest };
 }
 
 // Number(x) for a numeric field; missing stays missing. Something that isn't a
