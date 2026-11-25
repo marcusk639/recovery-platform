@@ -502,8 +502,9 @@
   - APPLY navigates to `Routes.Apply` with `{houseId, houseName}`;
   - the Apply submit navigates to `ApplicationStatus`;
   - Intake pre-fills from the application;
-  - an anonymous submit is accepted by the rules (the existing `applications` rules test gains an anonymous-auth case).
-- [ ] **Step 3: Implement.**
+  - an anonymous submit is accepted by the rules (the existing `applications` rules test gains an anonymous-auth case);
+  - a create carrying a field outside the allowlist is refused (deny test).
+- [ ] **Step 3: Implement.** Under (a), any anonymous session can write to any house's `applications`: today's create rule (`regroup/mobile/firebase/firestore.rules:646`) checks only `signedIn()` and `applicantUid`, with no field allowlist. Add `request.resource.data.keys().hasOnly([...])`, listing exactly the fields `submitApplication` (`services/applications.ts:33`) writes. Follow-up, out of scope: rate limiting and spam control for anonymous applications.
 - [ ] **Step 4: Run** the tests, the rules suite and the flow, on both platforms (PASS).
 - [ ] **Step 5: Docs and commit.** Update `regroup/docs/product/requirements.md` (the application path).
   `feat(regroup-mobile): prospective residents apply in the app, and approval opens a pre-filled intake`
