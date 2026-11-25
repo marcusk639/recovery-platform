@@ -1,0 +1,4 @@
+#!/bin/sh
+# Test stub (deployConfig.test.ts): the script must refuse before it builds.
+echo "npm must not be called: $*" >&2
+exit 99

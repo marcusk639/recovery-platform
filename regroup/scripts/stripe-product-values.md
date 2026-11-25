@@ -1,7 +1,21 @@
 # Stripe Product Values — Regroup Platform
 
-**Mode:** TEST  
-**Generated:** 2026-06-28 via `scripts/setup-stripe-all.js`  
+**Mode:** LIVE (account `acct_1GfryQKsstp3aqoP`), checked against Stripe 2026-11-22  
+**First generated:** 2026-06-28 via `scripts/setup-stripe-all.js` (test mode)
+
+> **Where the monthly (and annual) prices are kept.** Three places, which must agree:
+>
+> | What                                      | File                                                    | Who reads it                                                                  |
+> | ----------------------------------------- | ------------------------------------------------------- | ----------------------------------------------------------------------------- |
+> | Amount per tier, in cents (`amountCents`) | `regroup/functions/src/config.ts`, `SUBSCRIPTION_TIERS` | the caps and features per tier; `stripe:verify-live` checks Stripe against it |
+> | Live Stripe price IDs                     | `regroup/scripts/stripe-prices.env`                     | `npm run env:write` copies it into the production deploy config               |
+> | The human-readable table                  | this file, section 1                                    | people                                                                        |
+>
+> The app and the web show what Stripe returns for those IDs (`getTierCatalog`), not
+> `amountCents`. Changing a price means a new Stripe price (prices are immutable), its ID in
+> `stripe-prices.env`, `amountCents` in `config.ts`, and this table; then
+> `npm --prefix functions run stripe:verify-live -- --project phoenix-cleanhouse` must pass.
+
 **API Version:** `2026-01-28.clover` — matches `PINNED_API_VERSION` in `functions/src/util/stripeApiVersion.ts` [`S7`]
 
 > Non-secret values (price IDs, `STRIPE_API_VERSION`, `TIER_BILLING_ENABLED`) go in
@@ -23,41 +37,45 @@ Source: `functions/src/config.ts` [`S1`] — `SUBSCRIPTION_TIERS` object;
 All prices are USD. Annual = 2 months free (10× monthly). Monthly prices set
 as env vars consumed by `priceEnvVar` / `annualPriceEnvVar` fields in config.
 
+The IDs below are the **live-mode** prices on Regroup's account `acct_1GfryQKsstp3aqoP`,
+checked against Stripe 2026-11-22 (the annual ones were created that day). The products are
+`prod_UhV6sgrWbOgsyg` (Traditional) and `prod_UhV71tzKC4XToy` (Oxford). See
+`docs/launch-readiness/stripe-live-config-log-2026-11-21.md`.
+
 ### Traditional House Tiers
 
 | Env Var                                 | Price ID                         | Amount    | Interval |
 | --------------------------------------- | -------------------------------- | --------- | -------- |
-| `STRIPE_PRICE_TRAD_STARTER`             | `price_1TnBmGKsstp3aqoP5cUjb8Eo` | $69.00    | monthly  |
-| `STRIPE_PRICE_TRAD_STARTER_ANNUAL`      | `price_1TnBmGKsstp3aqoPHD06jOuG` | $690.00   | yearly   |
-| `STRIPE_PRICE_TRAD_PROFESSIONAL`        | `price_1TnBmHKsstp3aqoP6TvYRpbS` | $129.00   | monthly  |
-| `STRIPE_PRICE_TRAD_PROFESSIONAL_ANNUAL` | `price_1TnBmIKsstp3aqoPtC9eG9Oj` | $1,290.00 | yearly   |
-| `STRIPE_PRICE_TRAD_ENTERPRISE`          | `price_1TnBmIKsstp3aqoP29ZKgH3b` | $249.00   | monthly  |
-| `STRIPE_PRICE_TRAD_ENTERPRISE_ANNUAL`   | `price_1TnBmJKsstp3aqoPs87VKKSR` | $2,490.00 | yearly   |
+| `STRIPE_PRICE_TRAD_STARTER`             | `price_1TkbSgKsstp3aqoPbxh5xWSn` | $69.00    | monthly  |
+| `STRIPE_PRICE_TRAD_STARTER_ANNUAL`      | `price_1UeYjFKsstp3aqoPpBAgvcE1` | $690.00   | yearly   |
+| `STRIPE_PRICE_TRAD_PROFESSIONAL`        | `price_1TkbSgKsstp3aqoPhELFzjwr` | $129.00   | monthly  |
+| `STRIPE_PRICE_TRAD_PROFESSIONAL_ANNUAL` | `price_1UeYjGKsstp3aqoPROh0Gi5J` | $1,290.00 | yearly   |
+| `STRIPE_PRICE_TRAD_ENTERPRISE`          | `price_1TkbSgKsstp3aqoPIvsVavSw` | $249.00   | monthly  |
+| `STRIPE_PRICE_TRAD_ENTERPRISE_ANNUAL`   | `price_1UeYjGKsstp3aqoPeoGZhm1k` | $2,490.00 | yearly   |
 
 ### Oxford House Tiers
 
 | Env Var                               | Price ID                         | Amount    | Interval |
 | ------------------------------------- | -------------------------------- | --------- | -------- |
-| `STRIPE_PRICE_OXFORD_STANDARD`        | `price_1TnBmJKsstp3aqoPtoAenHYF` | $49.00    | monthly  |
-| `STRIPE_PRICE_OXFORD_STANDARD_ANNUAL` | `price_1TnBmKKsstp3aqoPJPrNQmbL` | $490.00   | yearly   |
-| `STRIPE_PRICE_OXFORD_PLUS`            | `price_1TnBmKKsstp3aqoPmcqRUm5o` | $89.00    | monthly  |
-| `STRIPE_PRICE_OXFORD_PLUS_ANNUAL`     | `price_1TnBmLKsstp3aqoPKA5okvUu` | $890.00   | yearly   |
-| `STRIPE_PRICE_OXFORD_NETWORK`         | `price_1TnBmLKsstp3aqoPFa1GLKoF` | $299.00   | monthly  |
-| `STRIPE_PRICE_OXFORD_NETWORK_ANNUAL`  | `price_1TnBmMKsstp3aqoP0LvT0Xnn` | $2,990.00 | yearly   |
+| `STRIPE_PRICE_OXFORD_STANDARD`        | `price_1TkbSeKsstp3aqoPBgJgeNkK` | $49.00    | monthly  |
+| `STRIPE_PRICE_OXFORD_STANDARD_ANNUAL` | `price_1UeYjHKsstp3aqoPaVufbFN9` | $490.00   | yearly   |
+| `STRIPE_PRICE_OXFORD_PLUS`            | `price_1TkbSfKsstp3aqoPONbJ6Oef` | $89.00    | monthly  |
+| `STRIPE_PRICE_OXFORD_PLUS_ANNUAL`     | `price_1UeYjIKsstp3aqoP9FsbGXOd` | $890.00   | yearly   |
+| `STRIPE_PRICE_OXFORD_NETWORK`         | `price_1TkbSfKsstp3aqoPRM0TYO4k` | $299.00   | monthly  |
+| `STRIPE_PRICE_OXFORD_NETWORK_ANNUAL`  | `price_1UeYjJKsstp3aqoPWvnA26Gu` | $2,990.00 | yearly   |
 
 > **Note:** Oxford Network has `availableForSale: false` in `config.ts` [`S1`] —
 > a price ID is required for internal use but the tier is blocked at checkout.
 
 ### Product IDs
 
-| Product                            | Stripe Product ID     |
-| ---------------------------------- | --------------------- |
-| Regroup Traditional — Starter      | `prod_UmlI5qr0ndeAdx` |
-| Regroup Traditional — Professional | `prod_UmlIecHlx0WO6w` |
-| Regroup Traditional — Enterprise   | `prod_UmlIMnr2dWkI2N` |
-| Regroup Oxford — Standard          | `prod_UmlI2YAQvlYYQY` |
-| Regroup Oxford — Plus              | `prod_UmlIcHFACN7o7g` |
-| Regroup Oxford — Network           | `prod_UmlIEjQp6WCsqu` |
+| Product                                                   | Stripe Product ID     |
+| --------------------------------------------------------- | --------------------- |
+| Regroup Traditional (all three tiers, monthly and annual) | `prod_UhV6sgrWbOgsyg` |
+| Regroup Oxford (all three tiers, monthly and annual)      | `prod_UhV71tzKC4XToy` |
+
+In live mode each catalog is one product carrying six prices. The per-tier products
+`prod_UmlI…` (Starter … Network) are the 2026-06-28 test-mode products.
 
 ---
 
@@ -80,8 +98,8 @@ These are still read at module load and used by the legacy code path
 
 | Env Var                  | Price ID                         | Description                                                          |
 | ------------------------ | -------------------------------- | -------------------------------------------------------------------- |
-| `STRIPE_HOUSE_PRICE_ID`  | `price_1TZqF1RuYQlYKoSlRuMJfupT` | Regroup House — $49/month legacy flat-fee plan (prod_UYy6h1eZ5G5WD2) |
-| `STRIPE_OXFORD_PRICE_ID` | `price_1TZqF2RuYQlYKoSl5ZW19Pvk` | Regroup Oxford — $79/month legacy plan (prod_UYy6cF0Ccj8fID)         |
+| `STRIPE_HOUSE_PRICE_ID`  | RETIRED: deliberately unset | The old ID (`price_1TZqF1…`) belongs to another Stripe account (launch plan S3). Do not put it back. |
+| `STRIPE_OXFORD_PRICE_ID` | RETIRED: deliberately unset | The old ID (`price_1TZqF2…`) belongs to another Stripe account (launch plan S3). Do not put it back. |
 | `STRIPE_GUEST_PRICE_ID`  | `plan_HFkh7QvRnNjMy8`            | Legacy per-guest metered plan — retained for existing subscribers    |
 
 ---

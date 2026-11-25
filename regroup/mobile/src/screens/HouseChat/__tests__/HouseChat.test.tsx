@@ -140,9 +140,11 @@ jest.mock('../../../components/rats-avatar', () => {
 // resolved relative to the project root becomes 'src/screens/DirectChat/BaseChat'.
 jest.mock('../../DirectChat/BaseChat', () => {
   const { View, TextInput, TouchableOpacity, Text } = require('react-native');
-  return ({ onSend, messages, conversationId }: any) => (
+  return ({ onSend, messages, conversationId, recipient, chatType }: any) => (
     <View testID="base-chat">
       <Text testID="conversation-id">{conversationId}</Text>
+      <Text testID="chat-type">{chatType ?? ''}</Text>
+      <Text testID="has-recipient">{String(!!recipient)}</Text>
       <Text testID="message-count">{(messages || []).length}</Text>
       <TextInput testID="message-input" onChangeText={() => {}} />
       <TouchableOpacity
@@ -446,6 +448,16 @@ describe('HouseChat', () => {
       await waitFor(() => {
         expect(getByTestId('conversation-id').props.children).toBe('house-1');
       });
+    });
+
+    // #183 item 9: recipient {} made BaseChat a direct chat, titled
+    // "undefined undefined" with a back arrow on a tab root.
+    it('opens BaseChat as the group chat, with no recipient', async () => {
+      const { getByTestId } = renderScreen();
+      await waitFor(() => {
+        expect(getByTestId('chat-type').props.children).toBe('group');
+      });
+      expect(getByTestId('has-recipient').props.children).toBe('false');
     });
 
     it('passes empty messages array when no messages exist', async () => {

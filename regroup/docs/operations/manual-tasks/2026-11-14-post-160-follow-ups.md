@@ -21,9 +21,30 @@ That merged code is not yet on staging or production, and a few items are still 
 - Mark Resolved doesn't work;
 - the new Storage rule isn't enforced.
 
-The rest is one open phone bug (#244), two portal follow-ups, and reinstalling the git hooks #210 changed.
+The rest is deleting a superseded branch, two portal follow-ups, and reinstalling the git hooks #210 changed. #244, the last open phone bug here, was fixed by #270.
 
 Status was checked on 2026-11-14 against `main` at `ebbff7a3`, and steps 9 and 10 against `1c87c78d`. Re-check each item before acting.
+
+## Status, 2026-11-21
+
+| Step                    | State                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Signing grant        | **Done on `regroup-e2e`.** **Still open on `phoenix-cleanhouse`:** its functions run as `155667333239-compute@developer.gserviceaccount.com`, which has the API but no grant. The owner runs the step 1 commands with `P=phoenix-cleanhouse`.                                                                                                                                                                                                                                                                                                                     |
+| 2. Functions on staging | **Done** from `main` at `2de821e5`: 65 functions, including `getDocumentLink` and `resolveFailedPaymentOffline`.                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| 3. Rules on staging     | **Done**: Firestore and Storage rules plus the indexes. Five committed indexes were missing on staging (two `chat`, two house-scoped `drug-tests`, one `guests`), and no index existed only on staging.                                                                                                                                                                                                                                                                                                                                                           |
+| 4. Production           | **Open.** These are launch-runbook deploys (P8, after the P7 staging release candidate), so they wait for that sequence.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| 5. F-a97437 sign-off    | **Done**: the owner's `review: F-a97437 👍` is on #160.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| 6. Simulator checks     | **Done** on an iOS 26 simulator, with the E2EEmulator build of `main` at `2de821e5`. **The chore flow passes:** it sees "1 of 1", logs the chore, then sees "2 of 1". The first attempt failed because the cold-start tap on SIGN IN didn't register; the rerun passed. **The Keychain reset works:** after signing in and reinstalling, the app opened still signed in without the reset and signed out with it. The script as a whole couldn't pass here: the only older E2EEmulator build (2026-10-30, before #160 merged) can't sign in against today's seed. |
+| 7. Device pass          | **Open**, pre-launch, on real phones.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| 8. Superseded branch    | **Done**: `fix/regroup-portal-visible-defects` is gone from the remote (checked 2026-11-25).                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| 9. Portal follow-ups    | **In PR #282**: the Mark Resolved journey and the corrected comment. The journey also found that `resolveFailedPaymentOffline` failed on the emulator, and that peer leaders saw a Mark Resolved that always fails; #282 fixes both.                                                                                                                                                                                                                                                                                                                              |
+| 10. Git hooks           | **Done**: installed from `main`, and all three match `scripts/git-hooks/`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+
+A staging smoke test on 2026-11-21 checked steps 1 to 3 end to end, with a temporary house admin, house, document and failed payment, all deleted afterwards:
+
+- `getDocumentLink` returned 200, and its signed link downloads.
+- A direct Storage read of the document path got 403.
+- `resolveFailedPaymentOffline` set the record to `resolved_offline`.
 
 ## Prerequisites
 
@@ -86,7 +107,7 @@ firebase deploy --only firestore:rules,storage --project regroup-e2e
 
 #### 4. Production: steps 1 to 3 for `phoenix-cleanhouse`
 
-> **Warning:** these are production deploys. Run them only after launch allows it and you've said go. Use `npm run deploy:rules:dry`, then `npm run deploy:rules`, from `regroup/mobile`.
+> **Warning:** these are production deploys. Run them only after launch allows it and you've said go. Use `npm run deploy:rules:dry`, then `npm run deploy:rules`, from `regroup/mobile`. Then compare production's live indexes with `regroup/mobile/firebase/firestore.indexes.json` (`firebase firestore:indexes --project phoenix-cleanhouse`): staging was missing five committed indexes (step 3), so production may be too. Run `npm run deploy:indexes` from `regroup/mobile` to add them.
 
 **Expected result:** the same as on staging.
 
@@ -136,18 +157,21 @@ It now includes opening a document (§4), which needs step 1 on the project you 
 
 ### Development (Claude can do these on request)
 
-#### 8. Land #244 alone
+#### 8. Delete the superseded portal-defects branch
 
-**Where:** a new branch from `origin/main`.
+**Where:** GitHub, branch `fix/regroup-portal-visible-defects`.
 
-Main already fixes three of the four bugs on `fix/regroup-portal-visible-defects`:
+> **Warning:** deleting a remote branch can't be undone from GitHub's side.
+
+All four bugs that branch fixes are fixed on `main` by other PRs:
 
 - #257 and #249, by commits pushed to #160;
-- #238, by #267.
+- #238, by #267;
+- #244, by #270 (merged 2026-11-15).
 
-Only #244 is left: open disputes older than two weeks are counted but can't be listed. Cherry-pick its commit (`c641debf`, `regroup/mobile/src/screens/Disputes/`) onto `main`, run the Disputes and hooks suites, and open a PR that fixes #244. Then delete `fix/regroup-portal-visible-defects`.
+It has no open PR. Delete it with `git push origin --delete fix/regroup-portal-visible-defects`, and remove the local worktree `rp-portal-defects`.
 
-**Expected result:** a PR with one commit. #244 closes when it merges.
+**Expected result:** the branch no longer appears in `git ls-remote --heads origin`.
 
 ---
 
@@ -180,12 +204,12 @@ Run `scripts/e2e.sh` before opening the PR, after checking with `lsof` that port
 
 ## Verification
 
-- [ ] On staging, a house admin opens an uploaded document: the signed link works (steps 1 to 3).
-- [ ] On staging, Mark Resolved on a failed payment clears the banner, and the record reads `resolved_offline` (step 2).
-- [ ] As a house admin, a direct Storage download of a document path is refused (step 3; covered by `documentUploads.rules.test.ts`).
-- [ ] #244 is closed (step 8).
+- [x] On staging, a house admin opens an uploaded document: the signed link works (steps 1 to 3). Smoke test, 2026-11-21.
+- [x] On staging, `resolveFailedPaymentOffline` sets a failed payment's record to `resolved_offline` (step 2). Smoke test through the callable, 2026-11-21. The banner check through the portal is step 9.
+- [x] As a house admin, a direct Storage download of a document path is refused (step 3; covered by `documentUploads.rules.test.ts`). It got 403 on staging, 2026-11-21.
+- [x] `fix/regroup-portal-visible-defects` is gone from the remote (step 8). Checked 2026-11-25.
 - [ ] The Mark Resolved journey passes in `regroup/portal — browser tests` (step 9).
-- [ ] Session start shows no hook drift warning (step 10).
+- [x] Session start shows no hook drift warning (step 10).
 
 ## Rollback
 
@@ -198,5 +222,5 @@ Run `scripts/e2e.sh` before opening the PR, after checking with `lsof` that port
 
 - The emulator can't sign links, so opening a document only works against staging or production.
 - `npm run deploy` in `regroup/functions` doesn't build. Always build first (`regroup/functions/CLAUDE.md`).
-- Indexes aren't part of `deploy:rules`. Nothing listed here needs a new index.
+- Indexes aren't part of `deploy:rules`; deploy them with `npm run deploy:indexes`. Staging lacked five committed indexes until step 3, so check production's live indexes before step 4 counts as done.
 - The production steps also wait on the deploy freeze in the launch roadmap.

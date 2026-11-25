@@ -2,9 +2,12 @@
 // one without (the webhook's unsupported-currency path writes amountMinorUnits
 // instead) showed as "$NaN". It now shows a dash, and an empty CSV cell.
 
+import { netPaidCents } from './money';
+
 type AmountFields = { amount?: number; currency?: string };
 
-const dollarCents = ({ amount, currency }: AmountFields): number | null =>
+/** The record's amount in US cents, or null when it holds none (see above). */
+export const dollarCents = ({ amount, currency }: AmountFields): number | null =>
   Number.isInteger(amount) && (!currency || currency.toLowerCase() === 'usd')
     ? (amount as number)
     : null;
@@ -17,6 +20,20 @@ export function recordAmountLabel(payment: AmountFields): string {
 export function recordAmountCsv(payment: AmountFields): string {
   const cents = dollarCents(payment);
   return cents === null ? '' : (cents / 100).toFixed(2);
+}
+
+type RecordFields = AmountFields & { status: string; refundedAmountCents?: number };
+
+/** The CSV's refunded dollars: the cumulative refund, empty when the amount is. */
+export function recordRefundedCsv(payment: RecordFields): string {
+  if (dollarCents(payment) === null) return '';
+  const refunded = Number(payment.refundedAmountCents ?? 0);
+  return ((Number.isFinite(refunded) ? refunded : 0) / 100).toFixed(2);
+}
+
+/** The CSV's net dollars: what the record brought in (netPaidCents, as the dashboard). */
+export function recordNetCsv(payment: RecordFields): string {
+  return dollarCents(payment) === null ? '' : (netPaidCents(payment) / 100).toFixed(2);
 }
 
 /**

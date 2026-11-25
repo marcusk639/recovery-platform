@@ -49,7 +49,8 @@ function renderTab() {
     navigation: { navigate: jest.fn(), goBack: jest.fn(), addListener: jest.fn(() => jest.fn()) },
     user: { uid: 'u1', firstName: 'A', lastName: 'B' },
     house: { id: 'h1' },
-    recipient: {},
+    // HouseChat's props: the group chat has no recipient (#183 item 9).
+    chatType: 'group',
     messages: [],
     guests: {},
     admins: {},

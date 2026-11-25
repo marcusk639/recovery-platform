@@ -116,6 +116,11 @@ jest.mock("../../util/email", () => ({
   regroupEmail: "admin@regroup-app.com",
 }));
 
+const mockCloseOperatorBilling = jest.fn().mockResolvedValue(undefined);
+jest.mock("../../api/stripeDeletion", () => ({
+  closeOperatorBilling: (...args: unknown[]) => mockCloseOperatorBilling(...args),
+}));
+
 const mockSetOperatorHousesStatus = jest.fn().mockResolvedValue(1);
 jest.mock("../../util/operatorHouses", () => ({
   setOperatorHousesStatus: (...args: unknown[]) => mockSetOperatorHousesStatus(...args),
@@ -1657,5 +1662,82 @@ describe("reactivating a canceled subscription records the replacement", () => {
       }),
     );
     expect(mockSetOperatorHousesStatus).toHaveBeenCalledWith(fakeUser.id, "incomplete");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// M8: once Stripe has created the subscription, a failed write must not leave
+// it billing an account the web then deletes. The callable cancels it (through
+// closeOperatorBilling, which checks Stripe ties it to the caller) and says so.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("createOperatorSubscription — a failure after Stripe is reversed", () => {
+  const { logger } = jest.requireMock<{ logger: { error: jest.Mock } }>("firebase-functions");
+  const input = {
+    user: fakeUser,
+    paymentMethod: "pm_test",
+    houseType: "traditional",
+    tier: "starter",
+  };
+
+  beforeEach(() => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    mockGetUser.mockResolvedValue(fakeUser);
+    mockUpdateUser.mockResolvedValue(undefined);
+    mockInitializeTierCustomer.mockResolvedValue({
+      customerId: "cus_tier",
+      subscriptionId: "sub_tier",
+      subscriptionItemId: "si_tier",
+      status: "trialing",
+      houseType: "traditional",
+      tier: "starter",
+    });
+  });
+  afterEach(() => {
+    delete process.env.TIER_BILLING_ENABLED;
+    delete process.env.STRIPE_PRICE_TRAD_STARTER;
+  });
+
+  it("cancels the new subscription when the operator record can't be written", async () => {
+    mockWriteOperatorSubscription.mockRejectedValueOnce(new Error("firestore unavailable"));
+
+    await expect(call(createOperatorSubscription, input)).rejects.toMatchObject({
+      code: "internal",
+      message: expect.stringContaining("You have not been charged"),
+    });
+    expect(mockCloseOperatorBilling).toHaveBeenCalledWith(fakeUser.id, "sub_tier", "cus_tier");
+    expect(mockGrantPotentialSuperAdminClaim).not.toHaveBeenCalled();
+    expect(jest.requireMock<{ sendEmail: jest.Mock }>("../../util/email").sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("cancels the new subscription when the subscriptions doc can't be written", async () => {
+    mockUpsertSubscriptionDoc.mockRejectedValueOnce(new Error("firestore unavailable"));
+
+    await expect(call(createOperatorSubscription, input)).rejects.toMatchObject({
+      code: "internal",
+      message: expect.stringContaining("You have not been charged"),
+    });
+    expect(mockCloseOperatorBilling).toHaveBeenCalledWith(fakeUser.id, "sub_tier", "cus_tier");
+  });
+
+  it("logs a live orphan and points to support when the cancel fails too", async () => {
+    mockWriteOperatorSubscription.mockRejectedValueOnce(new Error("firestore unavailable"));
+    mockCloseOperatorBilling.mockRejectedValueOnce(new Error("stripe unavailable"));
+
+    const error = await call(createOperatorSubscription, input).catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ code: "internal" });
+    expect((error as Error).message).toContain("contact support");
+    expect((error as Error).message).not.toContain("not been charged");
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining("left live"),
+      expect.objectContaining({ userId: fakeUser.id, subscriptionId: "sub_tier" }),
+    );
+  });
+
+  it("leaves a successful checkout's subscription alone", async () => {
+    await call(createOperatorSubscription, input);
+
+    expect(mockCloseOperatorBilling).not.toHaveBeenCalled();
   });
 });

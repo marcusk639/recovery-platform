@@ -6,8 +6,8 @@ const rentOwed = async (guest: string) => (await admin().doc(`guests/${guest}`).
 const paymentsOf = async (guest: string, amount: number) =>
   (await admin().collection('payments').where('guestId', '==', guest).where('amount', '==', amount).get()).size;
 
-// The dashboard reads the house's Firestore payment records (#191), so these
-// need no Stripe account; only the failed-payment banner calls Stripe.
+// The dashboard and its failed-payment banner read the house's Firestore payment
+// records (#191, #238), so these need no Stripe account.
 test.beforeEach(async () => {
   reseed({ E2E_RENT_CENTS: '15000' });
   await clearPayments();
@@ -64,6 +64,20 @@ test("Collected is the house's payment records, net of refunds", async ({ page }
   await page.getByText('All Time', { exact: true }).click();
   await expect(page.getByTestId('payment-stats-card')).toContainText('$260.00');
   await expect(page.locator('body')).not.toContainText('NaN');
+});
+
+// #238: Mark Resolved goes through resolveFailedPaymentOffline, which only sets
+// the record's status. The banner empties and no balance moves.
+test('Mark Resolved clears a failed payment from the banner and moves no money', async ({ page }) => {
+  await addRecord({ id: 'pay-f1', guestId: 'guest-a', amount: 15000, status: 'failed' });
+  await open(page);
+  await expect(page.getByTestId('failed-payment-row-pay-f1')).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('mark-resolved-pay-f1').click();
+  await expect
+    .poll(async () => (await admin().doc('payments/pay-f1').get()).data()!.status, { timeout: 15_000 })
+    .toBe('resolved_offline');
+  await expect(page.getByTestId('failed-payment-row-pay-f1')).toHaveCount(0, { timeout: 15_000 });
+  expect(await rentOwed('guest-a')).toBe(15000);
 });
 
 test('recording $50 writes 5000 cents and lowers the balance in one batch', async ({ page }) => {

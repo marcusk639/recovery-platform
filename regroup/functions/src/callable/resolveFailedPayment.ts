@@ -1,6 +1,7 @@
 import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { parseInput } from '../validation';
 import { assertHouseMoneyStaff, HouseAdminFields } from '../util/houseAuth';
@@ -47,6 +48,8 @@ export const resolveFailedPaymentOffline = onCall(async (request) => {
   );
 
   // In a transaction so a success the webhook records meanwhile is never overwritten.
+  // FieldValue comes from firebase-admin/firestore: on the functions emulator
+  // admin.firestore.FieldValue is undefined, so Mark Resolved always failed there.
   const changed = await db.runTransaction(async (tx) => {
     const current = await tx.get(paymentRef);
     const status = current.get('status');
@@ -56,9 +59,9 @@ export const resolveFailedPaymentOffline = onCall(async (request) => {
     }
     tx.update(paymentRef, {
       status: 'resolved_offline',
-      resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+      resolvedAt: FieldValue.serverTimestamp(),
       resolvedBy: uid,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
     });
     return true;
   });

@@ -1,5 +1,14 @@
 {
   "functions": {
-    "predeploy": ["node \"$PROJECT_DIR/scripts/preflight-billing.js\""]
+    "predeploy": ["node \"$PROJECT_DIR/scripts/preflight-billing.js\""],
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log",
+      "*.local",
+      "service-key.json",
+      "**/service-key.json"
+    ]
   }
 }

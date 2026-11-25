@@ -107,7 +107,7 @@ RootStack
   │   ├── Activities           # Activity logging & history
   │   ├── Contacts             # House member directory
   │   ├── HouseChat            # House-wide group chat
-  │   └── Personal             # Profile, settings, 2FA
+  │   └── Personal             # Profile, settings, account deletion
   │
   └── Modals (presented over any tab)
       ├── NewMeeting, MeetingSearch
