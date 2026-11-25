@@ -68,7 +68,7 @@ From `regroup/`:
 - If the deploy must not ship without it, add it to `REQUIRED_KEYS` and to `CONFIG_REQUIRED` in `scripts/preflight-billing.js`.
 - Document it in `functions/.env.example` as `[CONFIG]`, and add a test that pins the default or the refusal.
 
-**Staging (`regroup-e2e`):** `env:write` refuses any project except production, so staging never gets production's values by accident. Write `functions/.env.regroup-e2e` by hand from the sandbox's own price ids and test-mode settings, and keep a copy outside the repo. The preflight refuses a deploy that has no `.env.<projectId>`.
+**Staging (`regroup-e2e`):** `env:write` refuses any project except production, so staging never gets production's values by accident. Write `functions/.env.regroup-e2e` by hand from the sandbox's own price ids and test-mode settings, and keep a copy outside the repo. The preflight refuses a deploy only when neither `functions/.env` nor `.env.<projectId>` exists, so a leftover `functions/.env` lets a staging deploy through without `.env.regroup-e2e`, carrying whatever that file holds. One more reason to delete it.
 
 ### Secrets (Firebase Secret Manager)
 
@@ -170,5 +170,5 @@ The JS bundle gets exactly the names in `BUNDLED_ENV` (`mobile/scripts/bundled-e
 
 ## Known gaps
 
-- `functions/.env.example` still lists `RATS_API_KEY`, which no code reads, and doesn't list `CONNECT_BASE_URL`, which the deploy requires. Fix both by hand: a hook blocks automated sessions from editing `.env*` files.
+- The preflight accepts `functions/.env` alone as deploy config: it blocks only when neither that nor `.env.<projectId>` exists (`loadDeployConfig` and the no-config check in `scripts/preflight-billing.js`). Requiring `.env.<projectId>` would close the fallback for every project; until then, the checklist's first item is the guard.
 - Firebase reserved-name list: the examples above are not exhaustive. If a deploy refuses a key name, check the Firebase docs for "reserved environment variables".

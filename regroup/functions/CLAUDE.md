@@ -11,7 +11,7 @@ npm test                        # Jest unit tests (run in band)
 npm run test:watch              # Jest watch mode
 npm run test:coverage           # Jest with coverage
 npm run serve                   # Build + legacy `firebase serve --only functions`
-npm run preflight:billing       # Billing preflight (also the firebase.json predeploy hook); refuses a deploy with no functions/.env.<project>
+npm run preflight:billing       # Billing preflight (also the firebase.json predeploy hook); refuses a deploy only when neither functions/.env nor functions/.env.<project> exists
 npm run env:write -- --project phoenix-cleanhouse    # Writes the gitignored functions/.env.phoenix-cleanhouse from ../scripts/stripe-prices.env
 npm run stripe:verify-live -- --project phoenix-cleanhouse   # Read-only: the latest STRIPE_SECRET_KEY is Regroup's account and every tier price is live at the right amount
 npm run stripe:listen           # Forward Stripe events to local stripeEvents + handleStripeConnectWebhook
