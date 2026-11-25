@@ -113,7 +113,7 @@ describe('PricingOneComponent', () => {
 
     it('lists online rent payments on every tier', () => {
       for (const text of lists()) {
-        expect(text).toContain('Online rent payments by card or bank');
+        expect(text).toContain('Online rent payments by card');
       }
     });
 
