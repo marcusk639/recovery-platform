@@ -193,6 +193,11 @@ export function buildCases(
       event: evt('payout.failed', { id: 'po_unknown', amount: 1000 }, { account: 'acct_unknown' }),
     },
     {
+      name: 'payout.failed (Connect endpoint) for an unknown account',
+      handler: connect,
+      event: evt('payout.failed', { id: 'po_unknown', amount: 1000 }, { account: 'acct_unknown' }),
+    },
+    {
       name: 'account.updated (Connect endpoint) for an unknown account',
       handler: connect,
       event: evt('account.updated', { id: 'acct_unknown' }),

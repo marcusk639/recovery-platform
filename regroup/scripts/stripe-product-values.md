@@ -167,15 +167,12 @@ Since #254 the handler also acts on `customer.subscription.created`,
 which the list above (the endpoint's recorded subscriptions) does not include.
 Add them to the live endpoint, then update this list.
 
-> **Caution — `payout.failed` may never reach its handler [unverified].** The
-> handler (`handlePayoutFailed`) needs `event.account`, the connected account the
-> payout belongs to. Per Stripe's Connect model, events that happen on a connected
-> account (its payouts included) are delivered to **Connect** endpoints ("events on
-> connected accounts"), not to a platform endpoint like this one. The Connect
-> handler (§4b, `handleStripeConnectWebhook`) currently has no `payout.failed`
-> case: it acts only on `account.updated` and `account.application.deauthorized`.
-> So the "Payout failures" alert in §7 may not fire. Confirm with a test-mode
-> payout failure before relying on it.
+> **`payout.failed` here only sees the platform's own payouts.** The handler
+> (`handlePayoutFailed`) needs `event.account`, the connected account the payout
+> belongs to, and Stripe delivers events on connected accounts (a house's payouts)
+> only to **Connect** endpoints. A house's failed payout therefore arrives on the
+> Connect endpoint (§4b), which must subscribe to `payout.failed` for the "Payout
+> failures" alert in §7 to fire. This endpoint's case logs and returns 200.
 
 ### 4b. Stripe Connect Webhook
 
@@ -189,6 +186,7 @@ Add them to the live endpoint, then update this list.
 
 - `account.updated`
 - `account.application.deauthorized`
+- `payout.failed` — pushes the house admins. **The live endpoint does not have it yet (owner step, #292):** add it in the Dashboard, then drop this note. The e2e sandbox endpoint already subscribes (`CONNECT_EVENTS`).
 
 ### 4c. Rotating a webhook signing secret
 
@@ -292,7 +290,7 @@ Connect accounts are created per-house (not scripted — created at operator onb
 | Reauth URL      | `${CONNECT_BASE_URL}/stripe-refresh?stripeAccountId={id}`, i.e. `https://regroup-app.com/connect/stripe-refresh?stripeAccountId={id}` in production; a Hosting rewrite in `web/firebase.json` sends it to `stripeConnectReauth` (`util/connectUrls.ts`, `connectRefreshUrl`)                                                                                                                                                                                                                                                                                                                                                                                        |
 | Return URL      | `${CONNECT_BASE_URL}/stripe-return`, i.e. `https://regroup-app.com/connect/stripe-return`; rewritten to `stripeConnectReturn` (`connectReturnUrl`). `CONNECT_BASE_URL` is required: with it unset, building either URL throws                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Disconnect      | v2: `stripe.v2.core.accounts.close(id, { applied_configurations: ['recipient'] })`. v1: the house is unlinked and the account left open — never deleted, so transfer reversals for refunds and disputes stay possible.                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-| Payout failures | `payout.failed` → FCM push + email to house admins, handled on the platform endpoint only. See the caution in §4a: connected-account payout events go to Connect endpoints, whose handler has no `payout.failed` case                                                                                                                                                                                                                                                                                                                                                                                                                                               |
+| Payout failures | `payout.failed` → FCM push to house admins (no email; an admin with no device token gets nothing). A house's payout arrives on the Connect endpoint (§4b, `handleStripeConnectWebhook`), which the live endpoint must subscribe to; the platform endpoint's case sees only the platform's own payouts (§4a). A failed house lookup answers 500 so Stripe retries                                                                                                                                                                                                                                                                                                    |
 
 ---
 
