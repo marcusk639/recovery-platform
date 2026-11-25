@@ -9,6 +9,7 @@ import { localDateString, resolveTimeZone } from '../activities/weekSummaryMath'
 import {
   guestCollection,
   houseCollection,
+  paymentsCollection,
   ratsFirestore,
   rentAccountCollection,
   rentChargeCollection,
@@ -57,13 +58,28 @@ async function recordDeparture(guestId: string, before: Data, eventTime: string)
   await ref.set({ inactiveSince: day }, { merge: true });
 }
 
-/** An admin linked this record to an account: its resident can now see its charges. */
+/** Firestore's limit is 500 writes per batch. */
+const BATCH_WRITES = 400;
+
+/**
+ * An admin linked this record to an account: its resident can now see its charges,
+ * and the payments recorded before it had one (a resident's Payment History lists
+ * payments by guestUserId). A payment that already names an account keeps it.
+ */
 async function showChargesTo(guestId: string, userId: string): Promise<void> {
-  const history = await rentChargeCollection.where('guestId', '==', guestId).get();
-  if (history.empty) return;
-  const batch = ratsFirestore.batch();
-  history.docs.forEach((d) => batch.update(d.ref, { guestUserId: userId }));
-  await batch.commit();
+  const [charges, payments] = await Promise.all([
+    rentChargeCollection.where('guestId', '==', guestId).get(),
+    paymentsCollection.where('guestId', '==', guestId).get(),
+  ]);
+  const refs = [
+    ...charges.docs.map((d) => d.ref),
+    ...payments.docs.filter((d) => !isPlausibleUid(d.data()?.guestUserId)).map((d) => d.ref),
+  ];
+  for (let i = 0; i < refs.length; i += BATCH_WRITES) {
+    const batch = ratsFirestore.batch();
+    refs.slice(i, i + BATCH_WRITES).forEach((ref) => batch.update(ref, { guestUserId: userId }));
+    await batch.commit();
+  }
 }
 
 export async function rentOnGuestWrite(e: GuestRentEvent): Promise<'none' | ChargeOutcome> {

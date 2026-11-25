@@ -25,6 +25,11 @@ const rentRoiMetricsSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .optional(),
+  // The start of the caller's period as an instant (ISO 8601 with an offset or
+  // Z). Windows by instant so the period matches the caller's local day
+  // boundaries instead of UTC dates; payments strictly after it count, the same
+  // as the Payment Dashboard's own list. Takes the place of startDate.
+  startAt: z.string().datetime({ offset: true }).optional(),
 });
 
 // Lowest sellable tier whose `features.analytics` is true, per house type
@@ -42,7 +47,14 @@ interface PaymentRecord {
   createdAt?: unknown; // Firestore Timestamp | ISO string | Date
   refundedAmountCents?: number; // cumulative refunds in CENTS (#35, charge.refunded)
   dueDate?: string; // YYYY-MM-DD due date captured at charge time (#34)
+  stripePaymentIntentId?: string; // set on every Stripe-collected payment; manual ones have none
 }
+
+// "Hours saved" (#32, owner decisions 2026-11-15): each payment collected
+// through Stripe (autopay or the resident's own card/bank payment) is credited
+// this many minutes of staff time a manual collection would have taken; manual
+// cash/check records count for nothing. An estimate, and labelled as one.
+export const MINUTES_SAVED_PER_STRIPE_COLLECTION = 10;
 
 interface GuestRecord {
   status?: string;
@@ -74,6 +86,22 @@ function toDateStr(v: unknown): string {
   return "";
 }
 
+// A payment's createdAt as epoch milliseconds, or null if unparseable.
+function toInstantMs(v: unknown): number | null {
+  if (!v) return null;
+  if (typeof (v as { toDate?: () => Date }).toDate === "function") {
+    return (v as { toDate: () => Date }).toDate().getTime();
+  }
+  const seconds = (v as { _seconds?: number })._seconds;
+  if (typeof seconds === "number") return seconds * 1000;
+  if (v instanceof Date) return v.getTime();
+  if (typeof v === "string") {
+    const ms = Date.parse(v);
+    return Number.isNaN(ms) ? null : ms;
+  }
+  return null;
+}
+
 // Inclusive [start, end] window check on a YYYY-MM-DD string. Empty bounds are
 // treated as open-ended.
 function inWindow(dateStr: string, start?: string, end?: string): boolean {
@@ -99,7 +127,7 @@ function inWindow(dateStr: string, start?: string, end?: string): boolean {
 export const rentRoiMetrics = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
-  const { houseId, startDate, endDate } = parseInput<z.infer<typeof rentRoiMetricsSchema>>(
+  const { houseId, startDate, endDate, startAt } = parseInput<z.infer<typeof rentRoiMetricsSchema>>(
     rentRoiMetricsSchema,
     request.data,
   );
@@ -164,9 +192,13 @@ export const rentRoiMetrics = onCall(async (request) => {
   const payments = (await getSuccessfulPaymentsForHouse(
     houseId,
   )) as PaymentRecord[];
-  const filteredPayments = payments.filter((p) =>
-    inWindow(toDateStr(p.createdAt), startDate, endDate),
-  );
+  const startAtMs = startAt ? Date.parse(startAt) : null;
+  const filteredPayments = payments.filter((p) => {
+    if (!inWindow(toDateStr(p.createdAt), startDate, endDate)) return false;
+    if (startAtMs === null) return true;
+    const ms = toInstantMs(p.createdAt);
+    return ms !== null && ms > startAtMs;
+  });
 
   // amount is integer CENTS, the same unit as refundedAmountCents below and as
   // guests.rentOwed. It used to be read as dollars and multiplied by 100, which
@@ -202,6 +234,13 @@ export const rentRoiMetrics = onCall(async (request) => {
     duePaymentCount > 0
       ? Math.round((onTimePayments.length / duePaymentCount) * 100)
       : null;
+
+  const automatedCollectionCount = filteredPayments.filter(
+    (p) => typeof p.stripePaymentIntentId === "string" && p.stripePaymentIntentId.length > 0,
+  ).length;
+  // Hours, to one decimal.
+  const hoursSavedEstimate =
+    Math.round((automatedCollectionCount * MINUTES_SAVED_PER_STRIPE_COLLECTION) / 6) / 10;
 
   const guests = (await getGuestsForHouse(houseId)) as GuestRecord[];
   // Missing status ⇒ treat as active.
@@ -242,14 +281,16 @@ export const rentRoiMetrics = onCall(async (request) => {
   //     per-charge dueDate. If some windowed payments predate dueDate capture
   //     (or the guest had no due date), the rate covers only those with a
   //     recorded due date — flag that partial coverage.
-  //   • hours-saved remains deferred.
+  //   • hours-saved is an estimate (#32): say so, with its constant.
   const caveats: string[] = [];
   if (duePaymentCount < paymentCount) {
     caveats.push(
       "on-time rate covers only payments with a recorded due date; payments without a captured dueDate are excluded",
     );
   }
-  caveats.push("hours-saved is deferred (not yet computed)");
+  caveats.push(
+    `hours-saved is an estimate: ${MINUTES_SAVED_PER_STRIPE_COLLECTION} minutes for each payment collected through Stripe; manual payments count for nothing`,
+  );
 
   return {
     available: true,
@@ -266,6 +307,9 @@ export const rentRoiMetrics = onCall(async (request) => {
     duePaymentCount,
     outstandingCents,
     overdueResidentCount,
+    automatedCollectionCount,
+    minutesSavedPerCollection: MINUTES_SAVED_PER_STRIPE_COLLECTION,
+    hoursSavedEstimate,
     caveats,
   };
 });

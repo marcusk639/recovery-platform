@@ -650,14 +650,20 @@ service cloud.firestore {
       }
     }
     
-    // Payments: only admins can read all house payments; guests read their own.
+    // Payments: a house's owners and managers read all its payments; residents
+    // read their own. Peer leaders see no house money (owner decision
+    // 2026-11-09): they hold the same admin claim as managers, so the read also
+    // checks the house-roles tier (callerRank >= 2), as the payment callables
+    // do (isHouseMoneyStaff). A peer leader still reads their own payments as a
+    // resident.
     // Recording a payment (cash, check, Venmo, Zelle) takes a manager or above:
     // peer leaders do not record payments at launch (owner decision 2026-11-10).
     // A peer leader may still write the pending record the app keeps for their
     // own card payment (recordRentPayment); the Stripe webhook writes the real one.
     // Cloud Functions handle Stripe-originated writes via Admin SDK.
     match /payments/{paymentId} {
-      allow read: if isAdmin([resource.data.houseId]) ||
+      allow read: if (isAdmin([resource.data.houseId]) &&
+          callerRank(resource.data.houseId) >= 2) ||
         (isGuest([resource.data.houseId]) && isSameUser(resource.data.guestUserId));
       allow create: if isAdmin([request.resource.data.houseId]) && (
         callerRank(request.resource.data.houseId) >= 2 || (
@@ -1157,13 +1163,10 @@ service cloud.firestore {
            isGuest([summaryGuest(summaryId).houseId]) ||
            isAdmin([summaryGuest(summaryId).houseId]))) ||
         isGuest([resource.data.houseId]) || isAdmin([resource.data.houseId]);
-      // The app no longer writes summaries. Admin write remains ONLY for app
-      // versions released before the trigger, which still write them (+1 on
-      // log, -1 on delete, a full client recompute on edit/resolve). The
-      // trigger's next recompute overwrites those, but a write landing after
-      // it persists until then, so the post-rollout backfill re-run is
-      // mandatory. Change to `if false` once those versions are unsupported.
-      allow write: if isAdmin([request.resource.data.houseId]);
+      // Server-owned: only onActivityWritten (Admin SDK) writes summaries. The
+      // admin write that app versions released before the trigger used is
+      // closed: there are no users on those versions (owner, 2026-11-10).
+      allow write: if false;
     }
     
     match /direct-messages/{messageId}/chat/{chatId} {

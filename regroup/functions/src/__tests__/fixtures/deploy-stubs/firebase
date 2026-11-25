@@ -1,0 +1,4 @@
+#!/bin/sh
+# Test stub (deployConfig.test.ts): a real firebase here could deploy production.
+echo "firebase must not be called: $*" >&2
+exit 99
