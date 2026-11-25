@@ -14,7 +14,9 @@ describe('regroup/firebase.json functions upload', () => {
 
   // Without an ignore list the CLI skips only node_modules and .git, so a deploy from a
   // worktree with functions/.secret.local (regroup/CLAUDE.md says to copy it in) uploads it.
-  it.each(['*.local', 'service-key.json', 'node_modules', '.git'])(
+  // Untracked Claude Code session files (.claude/) and test coverage output
+  // sit in functions/ in a working checkout and must not ship with the source.
+  it.each(['*.local', 'service-key.json', 'node_modules', '.git', '.claude', '**/.claude', 'coverage'])(
     'never uploads %s',
     (pattern) => {
       expect(ignore).toContain(pattern);

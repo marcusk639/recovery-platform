@@ -1,8 +1,9 @@
 /**
  * Read-only check of what a production deploy will bind, before it ships:
  * the latest STRIPE_SECRET_KEY must belong to Regroup's Stripe account, and
- * every tier price in functions/.env.<project> must be live, active, and at the
- * amount and interval SUBSCRIPTION_TIERS sells (annual = monthly x 10).
+ * every tier price in functions/.env.<project> must be live, active, in USD,
+ * and at the amount and interval SUBSCRIPTION_TIERS sells (annual = monthly x 10),
+ * billed every one interval.
  *
  *   npm run stripe:verify-live -- --project phoenix-cleanhouse
  *
@@ -87,6 +88,9 @@ export async function verifyLive(
         p.unit_amount !== want.amount && `amount ${p.unit_amount}, expected ${want.amount}`,
         p.recurring?.interval !== want.interval &&
           `interval ${p.recurring?.interval}, expected ${want.interval}`,
+        p.currency !== 'usd' && `currency ${p.currency}, expected usd`,
+        p.recurring?.interval_count !== 1 &&
+          `every ${p.recurring?.interval_count} ${p.recurring?.interval}s, expected every 1`,
       ].filter(Boolean);
       if (problems.length) ok = false;
       lines.push(
