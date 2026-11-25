@@ -9,7 +9,7 @@
  *  - "Guest" label displayed when user isAdmin === false
  *  - Menu options render (My Profile, Notifications, File complaint, etc.)
  *  - Admin-only "Add Home" option is hidden for non-super-admins
- *  - Admin-only "Two-Factor Authentication" option hidden for guests
+ *  - No "Two-Factor Authentication" option for anyone (removed until real MFA)
  *  - Pressing "LOG OUT" calls navigation.navigate with PriorAuth route
  *  - Pressing "My Profile" navigates to EditUserInfo
  *  - Pressing "Notifications" navigates to Notifications
@@ -592,7 +592,7 @@ describe("PersonalScreen", () => {
       expect(getByText("Add Home")).toBeTruthy();
     });
 
-    it('hides "Two-Factor Authentication" when no admin entity exists (guest user)', () => {
+    it('shows no "Two-Factor Authentication" option to a guest', () => {
       const { queryByText } = renderScreen({
         user: BASE_USER_GUEST,
         admin: null,
@@ -601,9 +601,12 @@ describe("PersonalScreen", () => {
       expect(queryByText("Two-Factor Authentication")).toBeNull();
     });
 
-    it('shows "Two-Factor Authentication" when an admin entity exists', () => {
-      const { getByText } = renderScreen({ admin: BASE_ADMIN });
-      expect(getByText("Two-Factor Authentication")).toBeTruthy();
+    // The old screen only linked a phone number; MFA is a post-launch feature
+    // (TwoFactorSetup.oplog.test.tsx).
+    it('shows no "Two-Factor Authentication" option to an owner', () => {
+      const { queryByText, getByText } = renderScreen({ admin: SUPER_ADMIN });
+      expect(getByText("Delete account")).toBeTruthy();
+      expect(queryByText("Two-Factor Authentication")).toBeNull();
     });
 
     it('shows "Delete account" for a real signed-in user', () => {

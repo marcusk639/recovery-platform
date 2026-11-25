@@ -346,12 +346,6 @@ const PersonalScreen: React.FC<PersonalProps> = ({ navigation }) => {
         label: "Add Home",
         disabled: !admin || !admin.superAdmin,
       },
-      twoFactorSetup: {
-        icon: "shield-alt",
-        action: () => navigation.navigate(Routes.TwoFactorSetup),
-        label: "Two-Factor Authentication",
-        disabled: !admin,
-      },
       deleteAccount: {
         icon: "trash",
         action: () => navigation.navigate(Routes.DeleteAccount),
