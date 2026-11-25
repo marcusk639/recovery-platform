@@ -233,7 +233,7 @@ Never add direct Firestore cross-queries to another product's database — route
 
 ### Secrets
 
-Service key lives in `service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`. Functions read secrets via environment config, not hardcoded values.
+Service key lives in `service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`. Functions read secrets via environment config, not hardcoded values. How to set, rotate and check every env var and secret: `../docs/operations/environment-and-secrets.md`.
 
 The `defineSecret` set (`config.ts`) is nine secrets: `STRIPE_SECRET_KEY`, `STRIPE_CLIENT_ID`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_TEST_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_CONNECT_TEST_WEBHOOK_SECRET`, `SENDGRID_API_KEY`, `RECOVERY_PLATFORM_API_KEY` and `GOOGLE_MAPS_API_KEY`. Plain `process.env` config is templated in `functions/.env.example`; `scripts/preflight-billing.js` (`CONFIG_REQUIRED`) hard-requires `STRIPE_API_VERSION`, the 12 tier price ids (`STRIPE_PRICE_TRAD_*` / `STRIPE_PRICE_OXFORD_*`, monthly and `_ANNUAL`) and `CONNECT_BASE_URL` (`util/connectUrls.ts` throws without it, so no house can connect a bank account). `TIER_BILLING_ENABLED` and `RECOVERY_API_BASE_URL` are read too. The setup runbook (`docs/launch-readiness/billing-go-live-runbook.md`) does set `STRIPE_CONNECT_WEBHOOK_SECRET`.
 

@@ -46,6 +46,7 @@ Regroup is a React Native sober living house management app backed by Firebase. 
 | [`technical/mobile/firestore-data-model.md`](./technical/mobile/firestore-data-model.md)                 | Firestore collection schemas and access patterns                          | CURRENT  |
 | [`technical/performance-scalability.md`](./technical/performance-scalability.md)                         | Firestore query patterns, indexing, scale limits (2026-02 analysis)       | AGING    |
 | [`technical/development.md`](./technical/development.md)                                                 | Local setup: points to the `mobile/`, `functions/` and `web/` CLAUDE.md   | STUB     |
+| [`operations/environment-and-secrets.md`](./operations/environment-and-secrets.md) | How to set env vars and secrets: functions config and Secret Manager, mobile bundled env, portal, web, emulators | CURRENT |
 | [`technical/web/`](./technical/web/)                                                                     | Web app notes: Claude Code automations, 2026-05-26 iterative review       | CURRENT  |
 | [`archive/CODEBASE_ANALYSIS_REWRITE_VS_REFACTOR.md`](./archive/CODEBASE_ANALYSIS_REWRITE_VS_REFACTOR.md) | Historical: rewrite vs refactor decision (Nov 2025) — archived 2026-05-25 | ARCHIVED |
 
