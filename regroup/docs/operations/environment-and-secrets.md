@@ -41,7 +41,7 @@ Firebase reads these files from `regroup/functions/` (all gitignored except `.en
 
 Precedence is **per key**: `.env.<projectId>` overrides `.env` only for the keys it sets. A key it omits comes from `.env`. On 2026-11-25 this put another Stripe account's legacy `STRIPE_HOUSE_PRICE_ID`/`STRIPE_OXFORD_PRICE_ID` into production config: `stripe-prices.env` deliberately omits them, so they fell through to a stale generic `.env`. That same `.env` also held superseded annual price ids, which a production deploy would have used for as long as `.env.phoenix-cleanhouse` lacked them. `scripts/preflight-billing.js` reads the same merged set Firebase deploys, so it can't tell a value from `.env` apart from one in `.env.<projectId>`.
 
-Keys must be upper case. Firebase reserves some names (e.g. any starting with `FIREBASE_`, `X_GOOGLE_` or `EXT_`, and runtime names such as `PORT` and `K_SERVICE`); a deploy refuses them.
+Don't use Firebase's reserved names, in `.env` files or as secret names: any key starting with `FIREBASE_`, `X_GOOGLE_` or `EXT_`, and runtime names such as `PORT`, `K_SERVICE` and `GCLOUD_PROJECT`. The full list is under "Reserved environment variables" in [Configure your environment](https://firebase.google.com/docs/functions/config-env#reserved-names).
 
 ### Changing production config (non-secret)
 
@@ -97,7 +97,7 @@ firebase functions:secrets:set STRIPE_SECRET_KEY --project phoenix-cleanhouse --
 - Use the prompt or `--data-file`. Don't use `echo sk_live_… | firebase …`: that puts the value in shell history and process listings.
 - **A function keeps the secret version it was deployed with.** After setting a new value, redeploy every function that binds it, or it keeps using the old one. For a webhook secret that means `stripeEvents` or `handleStripeConnectWebhook`.
 - Inspect without printing: `firebase functions:secrets:get NAME --project phoenix-cleanhouse` lists versions and their state. `functions:secrets:access NAME` **prints the value**, so use it only when you must, and never in a recorded terminal or a chat.
-- Clean up: once nothing uses the old versions, `firebase functions:secrets:prune --project phoenix-cleanhouse` destroys them. Destroy a single one with `functions:secrets:destroy NAME@<version>`.
+- Clean up: the CLI destroys some unused versions itself when you deploy a new one. `firebase functions:secrets:prune --project phoenix-cleanhouse` removes secrets no deployed function references, and `functions:secrets:destroy NAME@<version>` removes one version. A deployed function whose secret was destroyed fails silently, so check the bindings first.
 
 **Rotating a secret** (a leak, a staff change, or routine):
 
@@ -118,7 +118,8 @@ For a leaked secret, do step 4 as soon as step 3 is green. Assume anything commi
 
 ### Emulators and test suites
 
-- **Manual emulators:** config in `functions/.env.local`, secrets in `functions/.secret.local`. Sandbox or test values only, never live.
+- **Manual emulators:** config in `functions/.env.local` (it overrides `.env` and `.env.<projectId>` in the emulator), secrets in `functions/.secret.local`. Sandbox or test values only, never live.
+- **List every bound secret in `.secret.local`.** For a secret it doesn't list, the Functions emulator reads the deployed project's real value from Secret Manager with your application default credentials. A local run signed in to `phoenix-cleanhouse` could then use production's live Stripe key.
 - **A fresh worktree** has neither file. Copy `functions/.secret.local` in from your main checkout (`regroup/CLAUDE.md`), never the other way round.
 - **Payment suite** (`cd e2e && npm run test:payments`): reads the sandbox key and webhook secrets from `functions/.secret.local` and writes its own `functions/.env.demo-regroup-payments`. It never touches the manual emulators' files.
 - **Maestro emulator flows** (`scripts/test-prep.sh` at the repo root) use the `demo-regroup-e2e` project and the same `.secret.local`.
@@ -171,4 +172,3 @@ The JS bundle gets exactly the names in `BUNDLED_ENV` (`mobile/scripts/bundled-e
 ## Known gaps
 
 - The preflight accepts `functions/.env` alone as deploy config: it blocks only when neither that nor `.env.<projectId>` exists (`loadDeployConfig` and the no-config check in `scripts/preflight-billing.js`). Requiring `.env.<projectId>` would close the fallback for every project; until then, the checklist's first item is the guard.
-- Firebase reserved-name list: the examples above are not exhaustive. If a deploy refuses a key name, check the Firebase docs for "reserved environment variables".
