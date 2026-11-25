@@ -12,8 +12,12 @@
  * file at the exact path replaces them; firebase.json's ignore list therefore
  * keeps `.well-known`.
  * Refuses an unknown project, and any Android fingerprint that is not a real
- * SHA-256 (the production placeholder stays until the owner supplies the Play
- * app-signing key, so a production web build fails loudly until then).
+ * SHA-256, except the owner placeholder (`<OWNER: …>`): a package whose only
+ * fingerprint is the placeholder is left out of assetlinks.json and the CLI
+ * warns. Production keeps that placeholder until the owner supplies the Play
+ * app-signing key, and the production web deploy (Connect rewrites, the
+ * landing pages) must not wait for Play approval. Until then Android App Links
+ * don't verify in production, and the app opens from the landing page instead.
  * firebase.json rewrites the well-known paths to the files in <dir>; <dir> is
  * dot-free because hosting ignores `**` + `/.*`.
  */
@@ -24,11 +28,20 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const SOURCE = path.resolve(HERE, '../../app-links.json');
 const FINGERPRINT = /^([0-9A-F]{2}:){31}[0-9A-F]{2}$/;
+const PLACEHOLDER = /^<OWNER:.*>$/;
 // Paths that must never be claimed: the marketing and account pages stay in the browser.
 export const NEVER_CLAIMED = ['/', '/pricing', '/signup', '/my-account', '/login', '*', '/*'];
 
 export function loadSource(file = SOURCE) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
+}
+
+const isPending = (app) => app.sha256.length > 0 && app.sha256.every((fp) => PLACEHOLDER.test(fp));
+
+/** Android packages left out of assetlinks.json because the owner hasn't supplied their fingerprint. */
+export function pendingAndroid(project, source = loadSource()) {
+  const env = source.environments && source.environments[project];
+  return env ? env.android.filter(isPending).map((app) => app.package) : [];
 }
 
 export function generate(project, source = loadSource()) {
@@ -41,6 +54,7 @@ export function generate(project, source = loadSource()) {
     if (NEVER_CLAIMED.includes(p)) throw new Error(`path "${p}" must never be claimed`);
   }
   for (const app of env.android) {
+    if (isPending(app)) continue;
     for (const fp of app.sha256) {
       if (!FINGERPRINT.test(fp)) {
         throw new Error(
@@ -60,7 +74,7 @@ export function generate(project, source = loadSource()) {
       ],
     },
   };
-  const assetlinks = env.android.map((app) => ({
+  const assetlinks = env.android.filter((app) => !isPending(app)).map((app) => ({
     relation: ['delegate_permission/common.handle_all_urls'],
     target: {
       namespace: 'android_app',
@@ -111,6 +125,12 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     const root = arg(process.argv, '--root');
     const names = writeFiles(project, path.resolve(out), undefined, root && path.resolve(root));
     console.log(`app-links: wrote ${names.join(', ')} for ${project} to ${out}`);
+    for (const pkg of pendingAndroid(project)) {
+      console.warn(
+        `app-links: WARNING ${pkg} left out of assetlinks.json: no Play app-signing SHA-256 in ` +
+          'regroup/app-links.json yet, so Android App Links will not verify for this build',
+      );
+    }
   } catch (err) {
     console.error(`app-links: ${err.message}`);
     process.exit(1);

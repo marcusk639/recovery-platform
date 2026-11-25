@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { generate, loadSource, NEVER_CLAIMED, WELL_KNOWN } from '../generate-app-links.mjs';
+import { generate, loadSource, NEVER_CLAIMED, pendingAndroid, WELL_KNOWN } from '../generate-app-links.mjs';
 import { check, validateOrigin } from '../check-app-links.mjs';
 import { verifyRoot, parseArgs } from '../verify-app-links.mjs';
 
@@ -75,12 +75,27 @@ test('an unknown project is refused', () => {
   assert.throws(() => generate('nope'), /unknown project/);
 });
 
-test('phoenix-cleanhouse with the placeholder fingerprint fails (library and CLI)', () => {
-  assert.throws(() => generate('phoenix-cleanhouse'), /SHA-256/);
+test('phoenix-cleanhouse with the placeholder fingerprint leaves Android out and warns (library and CLI)', () => {
+  const files = generate('phoenix-cleanhouse');
+  assert.deepStrictEqual(files['assetlinks.json'], []);
+  assert.deepStrictEqual(files['apple-app-site-association.json'].applinks.details[0].appIDs, [
+    'D8K3FS4HAX.com.rats.dev',
+  ]);
+  assert.deepStrictEqual(pendingAndroid('phoenix-cleanhouse'), ['com.regroup.app']);
+  assert.deepStrictEqual(pendingAndroid('regroup-e2e'), []);
   const out = fs.mkdtempSync(path.join(os.tmpdir(), 'app-links-'));
   const r = spawnSync(process.execPath, [GEN, '--project', 'phoenix-cleanhouse', '--out', out], { encoding: 'utf8' });
-  assert.notStrictEqual(r.status, 0);
-  assert.deepStrictEqual(fs.readdirSync(out), [], 'nothing written');
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.match(r.stderr, /WARNING com\.regroup\.app left out of assetlinks\.json/);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(out, 'assetlinks.json'), 'utf8')), []);
+});
+
+test('a fingerprint that is neither a SHA-256 nor the owner placeholder is refused', () => {
+  const source = loadSource();
+  source.environments['phoenix-cleanhouse'].android[0].sha256 = ['AB:CD'];
+  assert.throws(() => generate('phoenix-cleanhouse', source), /SHA-256/);
+  source.environments['phoenix-cleanhouse'].android[0].sha256 = [FP, '<OWNER: second key>'];
+  assert.throws(() => generate('phoenix-cleanhouse', source), /SHA-256/);
 });
 
 test('the CLI writes both files for regroup-e2e', () => {
