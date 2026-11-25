@@ -73,6 +73,19 @@ describe('FailedPaymentBanner', () => {
     expect(getByTestId('mark-resolved-pay-001')).toBeTruthy();
   });
 
+  it('lists the payment but offers no "Mark Resolved" when the viewer cannot resolve it', () => {
+    const { getByTestId, queryByTestId } = render(
+      <FailedPaymentBanner
+        failedPayments={[fakePayment]}
+        houseId="house-1"
+        guestNames={guestNames}
+        canResolve={false}
+      />,
+    );
+    expect(getByTestId('failed-payment-row-pay-001')).toBeTruthy();
+    expect(queryByTestId('mark-resolved-pay-001')).toBeNull();
+  });
+
   it('calls useMarkPaymentResolved mutateAsync when "Mark Resolved" is tapped', async () => {
     const mockMutate = jest.fn().mockResolvedValue(undefined);
     const {

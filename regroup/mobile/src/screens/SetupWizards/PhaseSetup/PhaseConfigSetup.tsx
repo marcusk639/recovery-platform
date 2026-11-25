@@ -43,7 +43,7 @@ import {
   withPopover,
   WithPopoverProps,
 } from '../../../components/rats-hoc/withPopover';
-import { Routes } from '../../../navigation/types';
+import { Routes, SetupScreenNavigationProp } from '../../../navigation/types';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 export const WIZARD_BUTTON_CONTAINER: ViewStyle = {
@@ -51,9 +51,13 @@ export const WIZARD_BUTTON_CONTAINER: ViewStyle = {
   right: 0,
 };
 
+// House Settings opens this screen in its form modal with setupProps(), which
+// passes no navigation (there is no navigator there). Only the PhaseSetup
+// route has one.
 type PhaseConfigSetupProps = FormikProps<any> &
-  ManagerSetupProps &
-  WithPopoverProps & { goBack: () => void };
+  Omit<ManagerSetupProps, 'navigation'> & {
+    navigation?: SetupScreenNavigationProp;
+  } & WithPopoverProps & { goBack: () => void };
 
 const PhaseConfigSetupComponent: React.FC<PhaseConfigSetupProps> = props => {
   const {
@@ -128,6 +132,9 @@ const PhaseConfigSetupComponent: React.FC<PhaseConfigSetupProps> = props => {
         {...({} as any)}>
         <PhaseConfigForm
           {...props}
+          // PhaseConfigForm's props type requires navigation (ManagerSetupProps)
+          // but it never reads it.
+          navigation={navigation as SetupScreenNavigationProp}
           phase={phaseConfig || new PhaseConfiguration()}
           dismissModal={dismissModal}
           setCustomPhase={() => {}}
@@ -208,7 +215,7 @@ const PhaseConfigSetupComponent: React.FC<PhaseConfigSetupProps> = props => {
         {renderPhaseSetupModal()}
         <ScreenHeader
           renderBackButton
-          onBackPress={forSettings ? onPrevPress : navigation.pop}
+          onBackPress={forSettings ? onPrevPress : navigation?.pop}
           icon={<HelpIcon helpFn={renderHelp} />}
           header="Customize Phase"
         />

@@ -38,6 +38,17 @@ jest.mock("../../../hooks/useSelectedHouse", () => ({
   useSelectedHouse: () => mockUseSelectedHouse(),
 }));
 
+// #183 item 4: the ADMIN section comes from useAdminsForHouse (admins read by
+// id from house.adminIds). Nothing writes state.admin.houseAdmins, so
+// buildStore leaves it empty, as it is in the app.
+const mockUseAdminsForHouse = jest.fn((..._args: any[]) => ({
+  data: {},
+  isLoading: false,
+}));
+jest.mock("../../../state/queries/adminQueries", () => ({
+  useAdminsForHouse: (...args: any[]) => mockUseAdminsForHouse(...args),
+}));
+
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock("@react-navigation/native-stack", () => ({}));
 
@@ -339,6 +350,7 @@ function buildStore({
     isLoading: guestsLoading,
     isError: false,
   });
+  mockUseAdminsForHouse.mockReturnValue({ data: admins, isLoading: false });
 
   return configureStore({
     reducer: {
@@ -387,7 +399,7 @@ function buildStore({
         customizePhaseStatus: "idle",
       } as any,
       admin: {
-        houseAdmins: admins,
+        houseAdmins: {},
         admins,
         selectedAdmin: null,
         userAsAdmin: admin ?? null,
@@ -511,6 +523,11 @@ describe("ContactScreen", () => {
         admins: { "admin-2": SAMPLE_ADMIN },
       });
       expect(getByText("Carol Admin")).toBeTruthy();
+    });
+
+    it("reads the admins for the selected house", () => {
+      renderScreen();
+      expect(mockUseAdminsForHouse).toHaveBeenCalledWith(BASE_HOUSE);
     });
 
     it("renders guest contact names from Redux state", () => {

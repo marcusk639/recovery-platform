@@ -34,9 +34,13 @@ jest.mock('firebase-admin', () => {
         },
       }),
   });
-  firestore.FieldValue = { serverTimestamp: () => '__serverTimestamp__' };
+  // Like the functions emulator: the namespace's firestore has no FieldValue,
+  // so the callable must take it from firebase-admin/firestore.
   return { firestore };
 });
+jest.mock('firebase-admin/firestore', () => ({
+  FieldValue: { serverTimestamp: () => '__serverTimestamp__' },
+}));
 
 const mockTiers: Record<string, string | null> = {};
 jest.mock('../../util/houseRoleStore', () => ({

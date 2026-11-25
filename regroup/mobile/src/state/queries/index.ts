@@ -60,6 +60,7 @@ export {
 export {
   adminKeys,
   useHouseAdmins,
+  useAdminsForHouse,
   useAdmin,
   useUpdateAdmin,
   useDeleteAdmin,

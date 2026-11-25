@@ -28,6 +28,7 @@ import { PrivacyPolicyComponent } from './components/privacypolicy/privacy-polic
 import { TermsComponent } from './components/terms/privacy-policy/terms.component';
 import { MyAccountComponent } from './components/accounts/my-account/my-account.component';
 import { AuthGuard } from './guards/auth.guard';
+import { RedirectComponent } from './components/redirect/redirect.component';
 
 const routes: Routes = [
   { path: '', component: ThemeTwoComponent },
@@ -56,6 +57,9 @@ const routes: Routes = [
   { path: 'contact', component: ContactPageComponent },
   { path: 'privacy-policy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
+  // Invitation emails link here (functions/src/util/inviteEmails.ts) with the
+  // app link in ?url=; the page opens the app, else the store.
+  { path: 'redirect', component: RedirectComponent },
   { path: 'my-account', component: MyAccountComponent, canActivate: [AuthGuard] },
   // The mobile app's "Manage Subscription" button deep-links to /billing — a
   // literal path, origin-only from env (SubscriptionRequiredScreen.tsx:25). The

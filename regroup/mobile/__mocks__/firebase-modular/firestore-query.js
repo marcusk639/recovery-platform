@@ -122,6 +122,13 @@ function runQuery(path, group, constraints) {
     .forEach(([, ...clause]) => {
       results = results.filter((r) => matches(r.path, r.data, clause));
     });
+  constraints
+    .filter(([kind]) => kind === 'or')
+    .forEach(([, ...filters]) => {
+      results = results.filter((r) =>
+        filters.some(([, ...clause]) => matches(r.path, r.data, clause)),
+      );
+    });
   // Firestore drops documents that lack an ordered field.
   orders.forEach(([field]) => {
     results = results.filter((r) => fieldOf(r.path, r.data, field) !== undefined);

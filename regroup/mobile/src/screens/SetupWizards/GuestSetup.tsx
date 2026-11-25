@@ -3,7 +3,8 @@ import React, { useState, useCallback, useEffect } from "react";
 import { useHouseSetupWizard } from "../../hooks/useHouseSetupWizard";
 
 import { withFormik, FormikProps, FieldArray, FormikBag, Field } from "formik";
-import ManagerSetupProps, { ManagerSetupWithForm } from "./ManagerSetupEntity";
+import ManagerSetupProps from "./ManagerSetupEntity";
+import { SetupScreenNavigationProp } from "../../navigation/types";
 import { View } from "react-native";
 import { renderField, validateEmail } from "../../util/form";
 import RatsTextInput from "../../components/rats-text-input/rats-text-input";
@@ -32,8 +33,16 @@ import { SetupHeader, SetupButtons } from "./OperatorSetupWizard";
 import { ActivityItemWithButtons } from "../../components/card-list/card-list";
 
 const labelColor = "black";
+const noop = () => {};
 
-type GuestSetupFormViewProps = ManagerSetupWithForm &
+// House Settings opens this screen in its form modal with setupProps(), which
+// passes no navigation (there is no navigator there). Only the wizard has one.
+type GuestSetupProps = Omit<ManagerSetupProps, "navigation"> & {
+  navigation?: SetupScreenNavigationProp;
+};
+
+type GuestSetupFormViewProps = FormikProps<ManagerSetupProps> &
+  GuestSetupProps &
   FormikProps<GuestSetupFormValues> &
   GuestSetupScreenProps;
 
@@ -147,24 +156,30 @@ const GuestSetupFormView: React.FC<GuestSetupFormViewProps> = (props) => {
     );
   };
 
+  // The legacy SetupButtons falls back to navigation.goBack when leftPress is
+  // missing, and navigation is undefined in the House Settings modal.
+  const leftPress = onPrevPress ?? navigation?.goBack ?? noop;
+  // It types navigation as required but never reads it with leftPress set.
+  const buttonsNavigation = navigation as SetupScreenNavigationProp;
+
   const renderButtons = () => {
     if (forSettings) {
       return (
         <SetupButtons
-          navigation={navigation}
+          navigation={buttonsNavigation}
           rightLabel="Save"
           leftLabel="Cancel"
           rightButtonContainer={{ ...SAVE_BUTTON, width: "49%" }}
           submit={handleSubmit}
-          leftPress={onPrevPress}
+          leftPress={leftPress}
         />
       );
     }
     return (
       <SetupButtons
-        navigation={navigation}
+        navigation={buttonsNavigation}
         leftLabel="Back"
-        leftPress={onPrevPress}
+        leftPress={leftPress}
         rightButtonContainer={{
           borderColor: color.green,
           backgroundColor: color.green,
@@ -260,7 +275,7 @@ interface GuestSetupScreenProps {
   onSubmit?: (
     values: GuestSetupFormValues,
     formikBag: FormikBag<
-      ManagerSetupProps & GuestSetupScreenProps,
+      GuestSetupProps & GuestSetupScreenProps,
       GuestSetupFormValues
     >
   ) => void;
@@ -275,7 +290,7 @@ const initialValues: GuestSetupFormValues = {
 };
 
 export const GuestSetupForm = withFormik<
-  ManagerSetupProps & GuestSetupScreenProps,
+  GuestSetupProps & GuestSetupScreenProps,
   GuestSetupFormValues
 >({
   mapPropsToValues: (props) => initialValues,
@@ -311,9 +326,9 @@ export const GuestSetupForm = withFormik<
   //@ts-ignore
 })(GuestSetupFormView);
 
-export const GuestSetup: React.FC<
-  ManagerSetupWithForm & GuestSetupScreenProps
-> = (props) => {
+export const GuestSetup: React.FC<GuestSetupProps & GuestSetupScreenProps> = (
+  props
+) => {
   const setupWizard = useHouseSetupWizard();
   return (
     <GuestSetupForm

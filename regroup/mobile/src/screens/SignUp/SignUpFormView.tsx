@@ -1,29 +1,27 @@
-import React from "react";
-import { Field, FormikProps } from "formik";
+import React from 'react';
+import { Field, FormikProps } from 'formik';
 // Phase 3.3: Removed withRats HOC (translation/theme available globally via useTranslation and ThemeProvider)
-import { View, TouchableOpacity, Text, Linking } from "react-native";
-import { useCallback } from "react";
-import RatsTextInput from "../../components/rats-text-input/rats-text-input";
-import styles from "./SignUpStyles";
-import RatsButton from "../../components/rats-button/rats-button";
-import RatsCheckBox from "../../components/rats-checkbox/rats-checkbox";
-import { RatsText } from "../../components/rats-text";
-import { SignUpFormProps, SignUpFormValues } from "./SignUpForm";
-import { loginTextInputStyle } from "../Login/LoginStyles";
+import { View, TouchableOpacity, Text, Linking } from 'react-native';
+import { useCallback } from 'react';
+import RatsTextInput from '../../components/rats-text-input/rats-text-input';
+import styles from './SignUpStyles';
+import RatsButton from '../../components/rats-button/rats-button';
+import RatsCheckBox from '../../components/rats-checkbox/rats-checkbox';
+import { RatsText } from '../../components/rats-text';
+import { SignUpFormProps, SignUpFormValues } from './SignUpForm';
+import { loginTextInputStyle } from '../Login/LoginStyles';
 
-import { IOS } from "../../util/platform";
-import { RatsSwitch } from "../../components/rats-switch";
-import { normalize, color, fontSize, ROW } from "../../styles/theme";
-import { RatsIcon } from "../../components/rats-icon";
-import { Routes } from "../../navigation/types";
-import { fontFamily } from "../../styles/theme";
-import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { useAppSelector } from "../../state/hooks";
+import { IOS } from '../../util/platform';
+import { RatsSwitch } from '../../components/rats-switch';
+import { normalize, color, fontSize, ROW } from '../../styles/theme';
+import { RatsIcon } from '../../components/rats-icon';
+import { Routes } from '../../navigation/types';
+import { fontFamily } from '../../styles/theme';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useAppSelector } from '../../state/hooks';
 import { relaxUiForE2E } from '../../util/e2e';
 
-const SignUpFormView: React.FC<
-  SignUpFormProps & FormikProps<SignUpFormValues>
-> = (props) => {
+const SignUpFormView: React.FC<SignUpFormProps & FormikProps<SignUpFormValues>> = (props) => {
   const {
     isSubmitting,
     handleSubmit,
@@ -44,14 +42,14 @@ const SignUpFormView: React.FC<
       const base = {
         fontSize: fontSize.regular,
         marginVertical: normalize(3),
-        fontWeight: "500" as const,
+        fontWeight: '500' as const,
       };
       if (meetsRequirement(requirement)) {
         return { color: color.green, ...base };
       }
       return { color: color.dark_grey, ...base };
     },
-    [values.password, errors]
+    [values.password, errors],
   );
 
   const meetsRequirement = useCallback(
@@ -61,11 +59,11 @@ const SignUpFormView: React.FC<
       }
       return (errors as Record<string, string>)[req] === undefined;
     },
-    [values.password, errors]
+    [values.password, errors],
   );
 
   const renderErrors = useCallback(() => {
-    if (!errors || typeof errors !== "object") {
+    if (!errors || typeof errors !== 'object') {
       return null;
     }
     const errorKeys = Object.keys(errors).filter(
@@ -74,7 +72,7 @@ const SignUpFormView: React.FC<
         touched &&
         (touched as Record<string, boolean>)[key] &&
         (errors as Record<string, string>)[key] &&
-        typeof (errors as Record<string, string>)[key] === "string"
+        typeof (errors as Record<string, string>)[key] === 'string',
     );
 
     if (errorKeys.length === 0) {
@@ -93,7 +91,7 @@ const SignUpFormView: React.FC<
   const renderRequirement = useCallback(
     (text: string, req: string) => {
       return (
-        <View style={[ROW, { width: "100%", justifyContent: "space-between" }]}>
+        <View style={[ROW, { width: '100%', justifyContent: 'space-between' }]}>
           <RatsText text={text} style={requirementStyle(req)} />
           {meetsRequirement(req) && (
             <RatsIcon name="check" size={20} style={{ color: color.green }} />
@@ -101,17 +99,17 @@ const SignUpFormView: React.FC<
         </View>
       );
     },
-    [requirementStyle, meetsRequirement]
+    [requirementStyle, meetsRequirement],
   );
 
   const renderPasswordRequirements = useCallback(() => {
     if (values.password.length) {
       return (
-        <View style={{ alignSelf: "flex-start" }}>
-          {renderRequirement("Minimum of 8 characters", "characters")}
-          {renderRequirement("Minimum of 1 uppercase letter", "uppercase")}
-          {renderRequirement("Minimum of 1 lowercase letter", "lowercase")}
-          {renderRequirement("Minimum of 1 number", "number")}
+        <View style={{ alignSelf: 'flex-start' }}>
+          {renderRequirement('Minimum of 8 characters', 'characters')}
+          {renderRequirement('Minimum of 1 uppercase letter', 'uppercase')}
+          {renderRequirement('Minimum of 1 lowercase letter', 'lowercase')}
+          {renderRequirement('Minimum of 1 number', 'number')}
         </View>
       );
     }
@@ -123,9 +121,9 @@ const SignUpFormView: React.FC<
   }, [isValid, isSubmitting, errors]);
 
   const isAdmin =
-    signUpRole === "admin" ||
-    signUpRole === "superAdmin" ||
-    (invitation && invitation.type === "admin");
+    signUpRole === 'admin' ||
+    signUpRole === 'superAdmin' ||
+    (invitation && invitation.type === 'admin');
 
   return (
     <View style={styles.signUpForm}>
@@ -162,9 +160,9 @@ const SignUpFormView: React.FC<
             style={{
               fontSize: fontSize.medium,
               color: color.black,
-              fontWeight: "600" as const,
+              fontWeight: '600' as const,
             }}
-            text={`Role: ${isAdmin ? "Manager" : "Guest"}`}
+            text={`Role: ${isAdmin ? 'Manager' : 'Guest'}`}
           />
         </View>
       )}
@@ -205,11 +203,11 @@ const SignUpFormView: React.FC<
         name="lastName"
         testID="signup-last-name-input"
       />
-      {error && typeof error === "object" && error.message && (
+      {error && typeof error === 'object' && error.message && (
         <RatsText
           style={{
-            color: "red",
-            textAlign: "center" as const,
+            color: 'red',
+            textAlign: 'center' as const,
             fontSize: fontSize.large,
           }}
           text={error.nativeErrorMessage || error.message}
@@ -217,30 +215,30 @@ const SignUpFormView: React.FC<
       )}
       <View
         style={{
-          width: "100%",
+          width: '100%',
           paddingHorizontal: normalize(10),
           paddingBottom: normalize(20),
         }}
       >
         <Text
           style={{
-            alignSelf: "flex-start" as const,
+            alignSelf: 'flex-start' as const,
             marginTop: normalize(20),
             marginBottom: normalize(10),
             color: color.dark_grey,
             fontSize: fontSize.regular_medium,
           }}
         >
-          {"By signing up, you agree to our "}
+          {'By signing up, you agree to our '}
           <Text
-            onPress={() => Linking.openURL("https://regroup-app.com/terms")}
+            onPress={() => Linking.openURL('https://regroup-app.com/terms')}
             style={{ color: color.baby_blue }}
           >
             Terms of Service
           </Text>
-          {" and "}
+          {' and '}
           <Text
-            onPress={() => Linking.openURL("https://regroup-app.com/privacy")}
+            onPress={() => Linking.openURL('https://regroup-app.com/privacy-policy')}
             style={{ color: color.baby_blue }}
           >
             Privacy Policy
@@ -260,7 +258,7 @@ const SignUpFormView: React.FC<
         />
         <View
           style={{
-            justifyContent: "center",
+            justifyContent: 'center',
             marginTop: normalize(15),
             ...ROW,
           }}
@@ -272,10 +270,7 @@ const SignUpFormView: React.FC<
             }}
             text="I have an account."
           />
-          <TouchableOpacity
-            testID="login-link"
-            onPress={() => navigation.navigate(Routes.Login)}
-          >
+          <TouchableOpacity testID="login-link" onPress={() => navigation.navigate(Routes.Login)}>
             <RatsText
               style={{
                 fontFamily: fontFamily.roboto,

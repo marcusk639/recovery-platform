@@ -37,6 +37,7 @@ import {
 import { Message } from '../../entities/Message';
 import { DirectMessage } from '../../entities/DirectConversation';
 import { logException } from '../../util/logging';
+import { setCurrentUser } from '../../../__mocks__/firebase-modular/auth';
 
 const HOUSE_CHAT = 'houses/h1/chat';
 const DM_CHAT = 'direct-messages/u1u2/chat';
@@ -44,12 +45,24 @@ const PAGE = [
   ['orderBy', 'sortKey', 'desc'],
   ['limit', 20],
 ];
+// The rules let only a message's sender or recipient read it, so a direct-chat
+// query must filter to the signed-in user's messages (#183 item 2).
+const ME = 'u1';
+const DM_PAGE = [
+  [
+    'or',
+    ['where', 'senderId', '==', ME],
+    ['where', 'recipientId', '==', ME],
+  ],
+  ...PAGE,
+];
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 const msg = (fields: Record<string, unknown>) => fields as unknown as Message;
 
 beforeEach(() => {
   resetOpLog();
+  setCurrentUser({ uid: ME });
 });
 
 describe('sendMessageToHouseChat', () => {
@@ -132,14 +145,26 @@ describe('listeners', () => {
   });
 
   it('subscribeToDirectChat listens on the sorted-id chat and passes the chat id', async () => {
-    seedQuery(DM_CHAT, [{ id: 'm1', text: 'a', sortKey: 1 }]);
+    seedQuery(DM_CHAT, [{ id: 'm1', text: 'a', sortKey: 1, senderId: ME }]);
     const handler = jest.fn();
 
     subscribeToDirectChat(['u2', 'u1'], handler);
     await flush();
 
-    expect(handler).toHaveBeenCalledWith([{ id: 'm1', text: 'a', sortKey: 1 }], 'u1u2');
-    expect(getOpLog()).toEqual([{ op: 'listen', path: DM_CHAT, constraints: PAGE }]);
+    expect(handler).toHaveBeenCalledWith(
+      [{ id: 'm1', text: 'a', sortKey: 1, senderId: ME }],
+      'u1u2',
+    );
+    expect(getOpLog()).toEqual([{ op: 'listen', path: DM_CHAT, constraints: DM_PAGE }]);
+  });
+
+  it('subscribeToDirectChat does not listen when nobody is signed in', () => {
+    setCurrentUser(null);
+
+    const unsubscribe = subscribeToDirectChat(['u1', 'u2'], jest.fn());
+
+    expect(getOpLog()).toEqual([]);
+    expect(() => unsubscribe()).not.toThrow();
   });
 
   it('subscribeToDirectChat routes a listener error to logException', async () => {
@@ -196,29 +221,56 @@ describe('loadChat', () => {
 
 describe('loadDirectChat', () => {
   it('returns the first page and tells the handler it is the initial load', async () => {
-    seedQuery(DM_CHAT, [{ id: 'm1', text: 'a', sortKey: 1 }]);
+    seedQuery(DM_CHAT, [{ id: 'm1', text: 'a', sortKey: 1, recipientId: ME }]);
     const handler = jest.fn();
 
-    expect(await loadDirectChat('u1u2', handler)).toEqual([{ id: 'm1', text: 'a', sortKey: 1 }]);
-    expect(handler).toHaveBeenCalledWith([{ id: 'm1', text: 'a', sortKey: 1 }], 'u1u2', true);
-    expect(getOpLog()).toEqual([{ op: 'getDocs', path: DM_CHAT, constraints: PAGE }]);
+    expect(await loadDirectChat('u1u2', handler)).toEqual([
+      { id: 'm1', text: 'a', sortKey: 1, recipientId: ME },
+    ]);
+    expect(handler).toHaveBeenCalledWith(
+      [{ id: 'm1', text: 'a', sortKey: 1, recipientId: ME }],
+      'u1u2',
+      true,
+    );
+    expect(getOpLog()).toEqual([{ op: 'getDocs', path: DM_CHAT, constraints: DM_PAGE }]);
+  });
+
+  it("reads only the messages the signed-in user sent or received", async () => {
+    seedQuery(DM_CHAT, [
+      { id: 'sent', sortKey: 3, senderId: ME, recipientId: 'u2' },
+      { id: 'received', sortKey: 2, senderId: 'u2', recipientId: ME },
+      { id: 'other', sortKey: 1, senderId: 'u3', recipientId: 'u2' },
+    ]);
+
+    const messages = await loadDirectChat('u1u2', jest.fn());
+
+    expect(messages.map((m) => m.id)).toEqual(['sent', 'received']);
+  });
+
+  it('refuses to load when nobody is signed in', async () => {
+    setCurrentUser(null);
+
+    await expect(loadDirectChat('u1u2', jest.fn())).rejects.toThrow('Failed to load direct chat');
+    expect(getOpLog()).toEqual([]);
   });
 
   it('pages after the cursor doc and flags the load as not initial', async () => {
     seedQuery(DM_CHAT, [
-      { id: 'm1', sortKey: 1 },
-      { id: 'm2', sortKey: 2 },
+      { id: 'm1', sortKey: 1, senderId: ME },
+      { id: 'm2', sortKey: 2, senderId: ME },
     ]);
     const handler = jest.fn();
 
-    expect(await loadDirectChat('u1u2', handler, 'm2')).toEqual([{ id: 'm1', sortKey: 1 }]);
-    expect(handler).toHaveBeenCalledWith([{ id: 'm1', sortKey: 1 }], 'u1u2', false);
+    expect(await loadDirectChat('u1u2', handler, 'm2')).toEqual([
+      { id: 'm1', sortKey: 1, senderId: ME },
+    ]);
+    expect(handler).toHaveBeenCalledWith([{ id: 'm1', sortKey: 1, senderId: ME }], 'u1u2', false);
     expect(getOpLog()).toEqual([
       { op: 'get', path: `${DM_CHAT}/m2` },
       {
         op: 'getDocs',
         path: DM_CHAT,
-        constraints: [...PAGE, ['startAfter', { __snap: `${DM_CHAT}/m2` }]],
+        constraints: [...DM_PAGE, ['startAfter', { __snap: `${DM_CHAT}/m2` }]],
       },
     ]);
   });

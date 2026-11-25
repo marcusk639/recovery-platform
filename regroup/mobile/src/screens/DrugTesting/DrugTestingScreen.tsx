@@ -9,6 +9,7 @@ import { DrugTest, DrugTestResult } from '../../entities/DrugTest';
 import { Routes } from '../../navigation/types';
 import RatsText from '../../components/rats-text/rats-text';
 import RatsLoadingIndicator from '../../components/rats-loading-indicator/rats-loading-indicator';
+import ScreenHeader from '../../components/screen-header';
 
 const RESULT_COLORS: Record<DrugTestResult, string> = {
   negative: '#4CAF50',
@@ -78,16 +79,24 @@ export default function DrugTestingScreen() {
     return tests.filter(t => t.result === filter);
   }, [tests, filter]);
 
+  // The modal group hides the native header, so the screen draws its own
+  // title bar and back button, as DrugTestHistory does (#183 item 12).
+  const header = <ScreenHeader renderBackButton header="Drug Testing" />;
+
   if (isLoading) {
     return (
-      <View style={styles.center} testID="loading-indicator">
-        <RatsLoadingIndicator />
+      <View style={styles.container}>
+        {header}
+        <View style={styles.center} testID="loading-indicator">
+          <RatsLoadingIndicator />
+        </View>
       </View>
     );
   }
 
   return (
     <View style={styles.container}>
+      {header}
       <View style={styles.filterRow}>
         {(
           ['all', 'negative', 'positive', 'inconclusive', 'refused'] as const

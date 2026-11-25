@@ -14,18 +14,22 @@ interface Props {
   guestNames: Record<string, string>;
   /** The failed list couldn't be read: say so rather than show nothing. */
   loadError?: boolean;
+  /** Owners and managers only: resolveFailedPaymentOffline refuses anyone else. */
+  canResolve?: boolean;
 }
 
 interface RowProps {
   payment: RentPayment;
   guestName: string;
   houseId: string;
+  canResolve: boolean;
 }
 
 const FailedPaymentRow: React.FC<RowProps> = ({
   payment,
   guestName,
   houseId,
+  canResolve,
 }) => {
   const { mutateAsync, isPending } = useMarkPaymentResolved(houseId);
 
@@ -55,17 +59,19 @@ const FailedPaymentRow: React.FC<RowProps> = ({
           style={styles.detail}
         />
       </View>
-      <TouchableOpacity
-        style={[styles.resolveBtn, isPending && styles.btnDisabled]}
-        onPress={handleMarkResolved}
-        disabled={isPending}
-        testID={`mark-resolved-${payment.id}`}>
-        <RatsText
-          translate={false}
-          text="Mark Resolved"
-          style={styles.resolveBtnText}
-        />
-      </TouchableOpacity>
+      {canResolve && (
+        <TouchableOpacity
+          style={[styles.resolveBtn, isPending && styles.btnDisabled]}
+          onPress={handleMarkResolved}
+          disabled={isPending}
+          testID={`mark-resolved-${payment.id}`}>
+          <RatsText
+            translate={false}
+            text="Mark Resolved"
+            style={styles.resolveBtnText}
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -75,6 +81,7 @@ const FailedPaymentBanner: React.FC<Props> = ({
   houseId,
   guestNames,
   loadError = false,
+  canResolve = true,
 }) => {
   if (loadError) {
     return (
@@ -104,6 +111,7 @@ const FailedPaymentBanner: React.FC<Props> = ({
           payment={p}
           guestName={guestNames[p.guestId] ?? 'Unknown Resident'}
           houseId={houseId}
+          canResolve={canResolve}
         />
       ))}
     </View>

@@ -405,3 +405,91 @@ describe("rentRoiMetrics — on-time rate (#34)", () => {
     );
   });
 });
+
+describe("rentRoiMetrics — hours saved (#32)", () => {
+  // Owner decisions (2026-11-15): every payment collected through Stripe
+  // (autopay or the resident's own card/bank payment) counts; manual cash/check
+  // records don't. Each counts 10 minutes, and the figure is labelled an estimate.
+  beforeEach(() => {
+    mockGetHouse.mockResolvedValue(baseHouse);
+    mockGetUser.mockResolvedValue(userWithTier("traditional", "professional"));
+    mockGetGuestsForHouse.mockResolvedValue([]);
+  });
+
+  const stripe = (id: string, createdAt = "2026-06-01T10:00:00.000Z") => ({
+    amount: 50000,
+    createdAt,
+    stripePaymentIntentId: id,
+  });
+  const manual = { amount: 50000, createdAt: "2026-06-02T10:00:00.000Z" };
+
+  it("credits 10 minutes per Stripe collection and none for manual payments", async () => {
+    mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
+      stripe("pi_1"),
+      stripe("pi_2"),
+      stripe("pi_3"),
+      manual,
+    ]);
+
+    const result = await call({ houseId: "house-1" });
+    expect(result).toMatchObject({
+      paymentCount: 4,
+      automatedCollectionCount: 3,
+      minutesSavedPerCollection: 10,
+      hoursSavedEstimate: 0.5, // 3 x 10 min
+    });
+  });
+
+  it("counts only collections inside the requested window", async () => {
+    mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
+      stripe("pi_in", "2026-06-10T10:00:00.000Z"),
+      stripe("pi_out", "2026-05-10T10:00:00.000Z"),
+    ]);
+
+    const result = await call({
+      houseId: "house-1",
+      startDate: "2026-06-01",
+      endDate: "2026-06-30",
+    });
+    expect(result).toMatchObject({ automatedCollectionCount: 1, hoursSavedEstimate: 0.2 });
+  });
+
+  it("windows by the caller's instant, not the UTC date (F-795a32)", async () => {
+    // The operator's month starts at local midnight, 2026-06-01T04:00Z (UTC-4).
+    // A payment at 2026-05-31 21:00 local is 2026-06-01T01:00Z: a UTC date inside
+    // June, but before the caller's period start.
+    mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
+      stripe("pi_late_may", "2026-06-01T01:00:00.000Z"),
+      stripe("pi_june", "2026-06-01T05:00:00.000Z"),
+    ]);
+
+    const result = await call({ houseId: "house-1", startAt: "2026-06-01T04:00:00.000Z" });
+    expect(result).toMatchObject({ paymentCount: 1, automatedCollectionCount: 1 });
+  });
+
+  it("rejects a startAt that isn't an ISO instant", async () => {
+    await expect(call({ houseId: "house-1", startAt: "yesterday" })).rejects.toMatchObject({
+      code: "invalid-argument",
+    });
+  });
+
+  it("saves nothing when every payment was recorded by hand", async () => {
+    mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
+      manual,
+      { ...manual, stripePaymentIntentId: "" },
+    ]);
+
+    const result = await call({ houseId: "house-1" });
+    expect(result).toMatchObject({ automatedCollectionCount: 0, hoursSavedEstimate: 0 });
+  });
+
+  it("labels hours saved an estimate and names its constant", async () => {
+    mockGetSuccessfulPaymentsForHouse.mockResolvedValue([stripe("pi_1")]);
+
+    const result = await call({ houseId: "house-1" });
+    const caveat = result.caveats.find((c: string) => c.includes("hours-saved"));
+    expect(caveat).toMatch(/estimate/);
+    expect(caveat).toMatch(/10 minutes/);
+    expect(result.caveats.some((c: string) => c.includes("deferred"))).toBe(false);
+  });
+});

@@ -1,6 +1,22 @@
 {
   "indexes": [
     {
+      "collectionGroup": "chat",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "senderId", "order": "ASCENDING" },
+        { "fieldPath": "sortKey", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "chat",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "recipientId", "order": "ASCENDING" },
+        { "fieldPath": "sortKey", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "guests",
       "queryScope": "COLLECTION",
       "fields": [
