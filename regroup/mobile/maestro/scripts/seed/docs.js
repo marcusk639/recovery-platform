@@ -69,13 +69,13 @@ function operator(id, houseId, oxford, now) {
   };
 }
 
-function resident(id, rentOwed) {
+function resident(id, rentOwed, houseId = HOUSE) {
   const a = account(id);
   const uid = uidOf(id);
   return {
     uid,
     email: a.email,
-    claims: { guest: { [HOUSE]: true } },
+    claims: { guest: { [houseId]: true } },
     user: {
       id: uid,
       uid,
@@ -86,7 +86,7 @@ function resident(id, rentOwed) {
       isAdmin: false,
       isSuperAdmin: false,
       isAnonymous: false,
-      houseId: HOUSE,
+      houseId,
       guestId: id,
       infoEntered: true,
       orgSetupCompleted: false,
@@ -96,7 +96,7 @@ function resident(id, rentOwed) {
     guest: {
       id,
       userId: uid,
-      houseId: HOUSE,
+      houseId,
       firstName: a.firstName,
       lastName: a.lastName,
       displayName: `${a.firstName} ${a.lastName}`,

@@ -417,7 +417,7 @@ These are present in rules and/or indexes, but are outside the strict scope of �
 - Oxford governance collections under `houses/{houseId}/*` (officers, votes, elections, etc.)
 - `drug-tests`, `ees-records`
 - `webhookEvents` (explicitly server-only; denied to clients)
-- `documents/{documentId}` — admin-uploaded files scoped to a house or resident; see entity: `src/entities/Document.ts`; service: `src/services/documents.ts`; access: admin-only writes, admin-only reads (residents have no access); shape: `{ id, houseId, guestId?, fileName, storageUrl, storagePath, fileType, category, uploadedAt, uploadedBy }`; added 2026-05-22
+- `documents/{documentId}` — admin-uploaded files scoped to a house or resident; see entity: `src/entities/Document.ts`; service: `src/services/documents.ts`; access: admin-only writes; admins read the house's, a resident reads only their own (`guestId` is their guest record in that house); files open through `getDocumentLink`; shape: `{ id, houseId, guestId?, fileName, storageUrl, storagePath, fileType, category, uploadedAt, uploadedBy }`; added 2026-05-22
 - `staff-notes/{noteId}` — admin shift log entries; access: admin-only; shape: `{ id, houseId, authorId, authorName, body, createdAt }`; added 2026-05-22
   - **⚠️ No client-side Firestore rule is currently defined for `staff-notes`.** Reads and writes from the mobile app will return `PERMISSION_DENIED` until a rule is added to `firebase/firestore.rules`.
 

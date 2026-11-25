@@ -31,6 +31,7 @@ const { initializeApp } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const d = require('./docs');
+const { LAPSED_HOUSE, lapsedHouse } = require('./lapsedHouse');
 
 const PLACEHOLDER_STRIPE_ACCOUNT = 'acct_e2e_placeholder';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -69,7 +70,9 @@ async function main() {
   const guestB = d.resident('guest-b', 0);
   // Not onboarded yet, for oxford-onboarding.yaml. The other Oxford house has finished.
   const oxfordNew = d.operator('oxford-new-operator', d.OXFORD_NEW, true, now);
-  const people = [manager, oxford, oxfordNew, guestA, guestB];
+  // A blocked house and its resident, for resident-limited-view.yaml.
+  const lapsed = lapsedHouse(now, Timestamp);
+  const people = [manager, oxford, oxfordNew, lapsed.operator, guestA, guestB, lapsed.resident];
 
   // 1. Accounts, claims and users docs, before houses: the subscription trigger reads them.
   for (const p of people) {
@@ -82,7 +85,7 @@ async function main() {
     await auth.setCustomUserClaims(p.uid, p.claims);
     await db.doc(`users/${p.uid}`).set(p.user);
   }
-  for (const p of [manager, oxford, oxfordNew]) {
+  for (const p of [manager, oxford, oxfordNew, lapsed.operator]) {
     await db.doc(`admins/${p.uid}`).set(p.admin);
   }
   await sleep(1500);
@@ -120,9 +123,11 @@ async function main() {
     }),
   );
   await db.doc(`house-roles/${d.OXFORD_NEW}_${oxfordNew.uid}`).set(ownerRole);
+  await db.doc(`houses/${LAPSED_HOUSE}`).set(lapsed.house);
+  await db.doc(`house-roles/${LAPSED_HOUSE}_${lapsed.operator.uid}`).set(ownerRole);
 
   // 3. Residents.
-  for (const g of [guestA, guestB]) {
+  for (const g of [guestA, guestB, lapsed.resident]) {
     await db.doc(`guests/${g.guest.id}`).set(g.guest);
   }
 
@@ -144,8 +149,11 @@ async function main() {
   );
 
   // 5. Payments.
-  for (const p of d.payments(Timestamp, now)) {
+  for (const p of [...d.payments(Timestamp, now), ...lapsed.payments]) {
     await db.doc(`payments/${p.id}`).set(p);
+  }
+  for (const doc of lapsed.documents) {
+    await db.doc(`documents/${doc.id}`).set(doc);
   }
 
   await db.doc(`houses/${d.HOUSE}/applications/test-app-1`).set(d.application(now));
@@ -179,7 +187,7 @@ async function main() {
 
   const payments = await db.collection('payments').get();
   console.log(
-    `Seeded ${target.projectId}: ${people.length} accounts, 2 houses, 3 activities, ` +
+    `Seeded ${target.projectId}: ${people.length} accounts, 4 houses, 3 activities, ` +
       `${payments.size} payments.` +
       (stripeAccountId === PLACEHOLDER_STRIPE_ACCOUNT
         ? ' E2E_STRIPE_ACCOUNT_ID is not set: the payment dashboard and PaymentSheet flows will fail.'

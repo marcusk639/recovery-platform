@@ -43,6 +43,8 @@ import {
   isDocumentExpiringSoon,
 } from '../../entities/Document';
 import { Routes, RootStackParamList } from '../../navigation/types';
+import { useRoleToken } from '../../context/auth';
+import { isAdmin } from '../../util/roles';
 import { DocumentCategory } from '../../entities/Document';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -64,7 +66,8 @@ const CATEGORY_OPTIONS: Array<{ label: string; value: DocumentCategory }> = [
 
 interface DocumentRowProps {
   doc: HouseDocument;
-  onDelete: (doc: HouseDocument) => void;
+  /** Absent for a resident: they read their documents and change nothing. */
+  onDelete?: (doc: HouseDocument) => void;
 }
 
 const DocumentRow: React.FC<DocumentRowProps> = ({ doc, onDelete }) => {
@@ -148,17 +151,19 @@ const DocumentRow: React.FC<DocumentRowProps> = ({ doc, onDelete }) => {
       </TouchableOpacity>
 
       {/* Right: delete */}
-      <TouchableOpacity
-        onPress={() => onDelete(doc)}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        testID={`document-delete-${doc.id}`}>
-        <RatsIcon
-          name="trash-alt"
-          solid
-          size={normalize(18)}
-          style={{ color: color.red }}
-        />
-      </TouchableOpacity>
+      {onDelete && (
+        <TouchableOpacity
+          onPress={() => onDelete(doc)}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          testID={`document-delete-${doc.id}`}>
+          <RatsIcon
+            name="trash-alt"
+            solid
+            size={normalize(18)}
+            style={{ color: color.red }}
+          />
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -169,6 +174,10 @@ const DocumentListScreen: React.FC = () => {
   const navigation = useNavigation();
   const route = useRoute<DocumentsRouteProp>();
   const { houseId, guestId, title } = route.params;
+  // House staff manage documents. Anyone else here is a resident reading their
+  // own (ResidentLimitedView): the rules let them read and nothing more. Until
+  // the role loads, read-only.
+  const canManage = isAdmin(useRoleToken(), houseId);
 
   const [uploading, setUploading] = useState(false);
   const [selectedCategory, setSelectedCategory] =
@@ -281,11 +290,13 @@ const DocumentListScreen: React.FC = () => {
     <View style={styles.container} testID="document-list-screen">
       <ScreenHeader header={title || 'Documents'} />
 
-      <RatsButton
-        title={uploading ? 'Uploading...' : 'Upload Document'}
-        onPress={uploading ? undefined : handleUpload}
-        testID="upload-document-button"
-      />
+      {canManage && (
+        <RatsButton
+          title={uploading ? 'Uploading...' : 'Upload Document'}
+          onPress={uploading ? undefined : handleUpload}
+          testID="upload-document-button"
+        />
+      )}
 
       {(uploadMutation.isLoading || uploading) && (
         <ActivityIndicator
@@ -309,18 +320,20 @@ const DocumentListScreen: React.FC = () => {
             text="No documents yet"
             style={styles.emptyText}
           />
-          <RatsText
-            translate={false}
-            text="Tap Upload Document to add one."
-            style={styles.emptySubtext}
-          />
+          {canManage && (
+            <RatsText
+              translate={false}
+              text="Tap Upload Document to add one."
+              style={styles.emptySubtext}
+            />
+          )}
         </View>
       ) : (
         <FlatList
           data={documents}
           keyExtractor={item => item.id}
           renderItem={({ item }) => (
-            <DocumentRow doc={item} onDelete={handleDelete} />
+            <DocumentRow doc={item} onDelete={canManage ? handleDelete : undefined} />
           )}
           contentContainerStyle={{ paddingBottom: normalize(24) }}
           testID="document-list"

@@ -13,15 +13,39 @@ const GetDocumentLinkSchema = z.object({
 export const DOCUMENT_LINK_LIFETIME_MS = 15 * 60 * 1000;
 
 /**
+ * Whether the caller is the resident a document belongs to: they hold a guest
+ * claim for its house, its guestId is a guest record of that house linked to
+ * their account, and its file is in that resident's own folder. The same test
+ * as the documents read rule, plus the folder.
+ */
+async function isOwnResidentDocument(
+  uid: string,
+  claims: Awaited<ReturnType<typeof liveClaims>>,
+  houseId: string,
+  guestId: unknown,
+  storagePath: string,
+): Promise<boolean> {
+  if (typeof guestId !== "string" || guestId === "" || !holds(claims, "guest", houseId)) {
+    return false;
+  }
+  if (!storagePath.startsWith(`houses/${houseId}/guests/${guestId}/`)) return false;
+  const guest = await admin.firestore().collection("guests").doc(guestId).get();
+  return guest.exists && guest.get("userId") === uid && guest.get("houseId") === houseId;
+}
+
+/**
  * A short-lived read link to a house or resident document, for the house's
- * admins and super-admins only (owner decision 2026-11-09). Documents used to
- * store a permanent download link, which anyone holding it could open whatever
- * the rules said.
+ * admins and super-admins (owner decision 2026-11-09), and for the resident a
+ * document belongs to (launch spec §4.1 item 2: residents keep read-only
+ * access to their own documents, also while their house is blocked). Documents
+ * used to store a permanent download link, which anyone holding it could open
+ * whatever the rules said. Not gated by the paywall: reads aren't.
  *
- * Claims are read live, so a revoked admin can't use a token that still holds
- * the old claim. A missing document, a caller who isn't staff of its house,
- * and a stored path outside that house's folder all get the same not-found,
- * so ids can't be probed and one house's record can't point at another's file.
+ * Claims are read live, so a revoked admin or a resident who moved out can't
+ * use a token that still holds the old claim. A missing document, a caller who
+ * is neither staff of its house nor its resident, and a stored path outside
+ * that house's (or that resident's) folder all get the same not-found, so ids
+ * can't be probed and one record can't point at another's file.
  */
 export const getDocumentLink = onCall(async (request) => {
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
@@ -39,7 +63,18 @@ export const getDocumentLink = onCall(async (request) => {
       (holds(claims, "admin", houseId) || holds(claims, "superAdmin", houseId));
     const inItsHouse =
       typeof storagePath === "string" && storagePath.startsWith(`houses/${houseId}/`);
-    if (!snap.exists || !isStaff || !inItsHouse) {
+    const allowed =
+      snap.exists &&
+      inItsHouse &&
+      (isStaff ||
+        (await isOwnResidentDocument(
+          request.auth.uid,
+          claims,
+          houseId,
+          snap.get("guestId"),
+          storagePath,
+        )));
+    if (!allowed) {
       throw new HttpsError("not-found", "Document not found");
     }
 
