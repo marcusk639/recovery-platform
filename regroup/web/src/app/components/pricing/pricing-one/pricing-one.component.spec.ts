@@ -92,4 +92,37 @@ describe('PricingOneComponent', () => {
     expect(component.effectiveInterval(catalog.tiers[1])).toBe('month');
     expect(component.hasAnnual(catalog.tiers[1])).toBe(false);
   });
+
+  // Launch item M6: the page sells only what the released apps do.
+  describe('feature list', () => {
+    const lists = (): string[] =>
+      Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('ul.plan-features')).map(
+        (ul) => (ul.textContent || '').replace(/\s+/g, ' '),
+      );
+
+    it('renders one list per tier', () => {
+      expect(lists().length).toBe(2);
+    });
+
+    it('never offers autopay or white-label, even when the catalog flags them', () => {
+      for (const text of lists()) {
+        expect(text).not.toContain('Automated rent collection');
+        expect(text).not.toContain('White-label');
+      }
+    });
+
+    it('lists online rent payments on every tier', () => {
+      for (const text of lists()) {
+        expect(text).toContain('Online rent payments by card');
+      }
+    });
+
+    it('marks compliance export and analytics as coming soon, only where the tier has them', () => {
+      const [starter, network] = lists();
+      expect(network).toContain('Compliance export (coming soon)');
+      expect(network).toContain('Analytics & ROI reporting (coming soon)');
+      expect(starter).not.toContain('Compliance export');
+      expect(starter).not.toContain('Analytics');
+    });
+  });
 });
