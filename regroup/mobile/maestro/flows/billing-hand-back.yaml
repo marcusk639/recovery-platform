@@ -1,0 +1,60 @@
+# Checkout hand-back (launch P5 Task 10, LINK-011, guard money): after billing
+# on the web, the app link regroup-app://app/checkout-return?result=success
+# refreshes the plan state and the gate lets the operator in, with no
+# foreground change and no restart.
+# Persona: lapsed-operator (house test-house-lapsed, subscriptionStatus canceled).
+# The webhook's write is simulated in the emulator (set-house-subscription-status.js).
+#
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/billing-hand-back.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - billing
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-lapsed-operator@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+      LANDING_ID: subscription-required-screen
+- runScript:
+    file: ../scripts/maestro-js/set-house-subscription-status.js
+    env:
+      HOUSE_ID: test-house-lapsed
+      STATUS: trialing
+- assertTrue: ${output.statusSet == 'trialing'}
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: regroup-app://app/checkout-return?result=success
+- extendedWaitUntil:
+    visible:
+      id: house-tab
+    timeout: 20000
+- assertNotVisible:
+    id: subscription-required-screen
+# Leave the seed as it was for flows that run after this one, and sign out:
+# the hand-back with result=canceled brings the gate screen back, which also
+# shows that a canceled hand-back lands on the plan screen without an error.
+- runScript:
+    file: ../scripts/maestro-js/set-house-subscription-status.js
+    env:
+      HOUSE_ID: test-house-lapsed
+      STATUS: canceled
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: regroup-app://app/checkout-return?result=canceled
+- extendedWaitUntil:
+    visible:
+      id: subscription-required-screen
+    timeout: 20000
+# Sign out so the next flow starts signed out (clearState keeps the iOS keychain).
+- tapOn:
+    text: "Sign out"
+- extendedWaitUntil:
+    visible:
+      id: initial-landing-screen
+    timeout: 30000

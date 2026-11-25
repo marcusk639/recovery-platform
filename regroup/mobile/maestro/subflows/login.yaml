@@ -7,6 +7,7 @@
 #     env:
 #       EMAIL: test-manager@rats-e2e.com
 #       PASSWORD: ${E2E_TEST_PASSWORD}
+#       LANDING_ID: subscription-required-screen   # optional; default house-tab
 #
 # Selector path ported from e2e/helpers/auth.js (Detox).
 appId: ${APP_ID}
@@ -61,7 +62,8 @@ appId: ${APP_ID}
     text: "Not Now"
     optional: true
 # Login round-trip (auth + initial house data) can take up to a minute.
+# LANDING_ID is for personas the gate stops before the tabs (billing flows).
 - extendedWaitUntil:
     visible:
-      id: "house-tab"
+      id: ${LANDING_ID || "house-tab"}
     timeout: 60000

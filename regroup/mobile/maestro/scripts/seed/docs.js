@@ -10,6 +10,8 @@ const accounts = require('../../../e2e/setup/testAccounts.json').accounts;
 const HOUSE = 'test-house-123';
 const OXFORD = 'test-house-oxford';
 const OXFORD_NEW = 'test-house-oxford-new';
+// A traditional house whose operator's subscription ended (billing flows, launch P5 Tasks 9-10).
+const LAPSED = 'test-house-lapsed';
 const account = (id) => accounts.find((a) => a.id === id);
 const uidOf = (id) => `e2e-${id}`;
 const iso = (now) => new Date(now).toISOString();
@@ -240,4 +242,11 @@ function application(now) {
   };
 }
 
-module.exports = { application, HOUSE, OXFORD, OXFORD_NEW, uidOf, iso, operator, resident, house, activity, payments };
+/** An operator whose subscription ended: the gate shows SubscriptionRequiredScreen. */
+function lapsedOperator(now) {
+  const op = operator('lapsed-operator', LAPSED, false, now);
+  op.user.subscriptionMetadata = { ...op.user.subscriptionMetadata, status: 'canceled' };
+  return op;
+}
+
+module.exports = { application, HOUSE, OXFORD, OXFORD_NEW, LAPSED, uidOf, lapsedOperator, iso, operator, resident, house, activity, payments };

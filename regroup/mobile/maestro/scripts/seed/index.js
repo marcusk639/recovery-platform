@@ -69,7 +69,8 @@ async function main() {
   const guestB = d.resident('guest-b', 0);
   // Not onboarded yet, for oxford-onboarding.yaml. The other Oxford house has finished.
   const oxfordNew = d.operator('oxford-new-operator', d.OXFORD_NEW, true, now);
-  const people = [manager, oxford, oxfordNew, guestA, guestB];
+  const lapsed = d.lapsedOperator(now);
+  const people = [manager, oxford, oxfordNew, lapsed, guestA, guestB];
 
   // 1. Accounts, claims and users docs, before houses: the subscription trigger reads them.
   for (const p of people) {
@@ -82,7 +83,7 @@ async function main() {
     await auth.setCustomUserClaims(p.uid, p.claims);
     await db.doc(`users/${p.uid}`).set(p.user);
   }
-  for (const p of [manager, oxford, oxfordNew]) {
+  for (const p of [manager, oxford, oxfordNew, lapsed]) {
     await db.doc(`admins/${p.uid}`).set(p.admin);
   }
   await sleep(1500);
@@ -120,6 +121,11 @@ async function main() {
     }),
   );
   await db.doc(`house-roles/${d.OXFORD_NEW}_${oxfordNew.uid}`).set(ownerRole);
+
+  await db.doc(`houses/${d.LAPSED}`).set(
+    d.house(d.LAPSED, 'E2E Lapsed House', lapsed.uid, now, { subscriptionStatus: 'canceled' }),
+  );
+  await db.doc(`house-roles/${d.LAPSED}_${lapsed.uid}`).set(ownerRole);
 
   // 3. Residents.
   for (const g of [guestA, guestB]) {
@@ -208,7 +214,7 @@ async function main() {
 
   const payments = await db.collection('payments').get();
   console.log(
-    `Seeded ${target.projectId}: ${people.length} accounts, 2 houses, 3 activities, ` +
+    `Seeded ${target.projectId}: ${people.length} accounts, 4 houses, 3 activities, ` +
       `${payments.size} payments.` +
       (stripeAccountId === PLACEHOLDER_STRIPE_ACCOUNT
         ? ' E2E_STRIPE_ACCOUNT_ID is not set: the payment dashboard and PaymentSheet flows will fail.'

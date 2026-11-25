@@ -203,6 +203,8 @@ identities in `e2e/setup/testAccounts.json` (uids `e2e-<id>`):
 | `test-guest-a`, `test-guest-b` | Residents of `test-house-123` |
 | `test-manager`                 | Operator of `test-house-123`  |
 | `test-oxford-operator`         | Oxford operator               |
+| `test-oxford-new`              | Oxford operator, not onboarded yet (`test-house-oxford-new`) |
+| `test-lapsed-operator`         | Operator whose subscription ended (`test-house-lapsed`, `subscriptionStatus: canceled`); billing flows |
 
 Password for all: `$E2E_TEST_PASSWORD`. It also seeds the test and Oxford
 houses, activities, a dispute, and payments. Each run wipes and recreates
