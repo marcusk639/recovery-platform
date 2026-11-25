@@ -160,7 +160,8 @@ test('the record shows status, phase, room, move-in and money', async ({ page })
   const money = page.getByTestId('record-payments');
   await expect(money).toContainText('$150.00');
   await expect(money).toContainText('$25.00');
-  await expect(money).toContainText('On');
+  // Nothing collects rent automatically, so a stored autoPayEnabled must not show.
+  await expect(money).not.toContainText('Autopay');
 });
 
 test('this week matches the list', async ({ page }) => {

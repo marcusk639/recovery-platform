@@ -750,13 +750,15 @@ describe("guests/{guestId} — self-edit field guard (S1)", () => {
       );
     });
 
-    test("ALLOW guest opting into autoPay (autoPayEnabled)", async () => {
+    // scheduledRentCollection charges every guest with autoPayEnabled == true,
+    // and the app no longer offers auto-pay, so a resident must not set it.
+    test("DENY guest opting into autoPay (autoPayEnabled)", async () => {
       await seedGuestDoc();
       const ctx = testEnv.authenticatedContext(
         GUEST_UID,
         authHouseGuest(GUEST_UID, HOUSE_ID),
       );
-      await assertSucceeds(
+      await assertFails(
         updateDoc(guestDocRef(ctx), { autoPayEnabled: true }),
       );
     });
