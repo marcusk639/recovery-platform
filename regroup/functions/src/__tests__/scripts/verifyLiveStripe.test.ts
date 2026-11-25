@@ -7,7 +7,7 @@ type FakePrice = {
   active: boolean;
   unit_amount: number;
   currency: string;
-  recurring: { interval: string };
+  recurring: { interval: string; interval_count: number };
 };
 
 const fakeStripe = (account: string, prices: Record<string, FakePrice | Error>) => ({
@@ -27,7 +27,7 @@ const live = (unit_amount: number, interval: string): FakePrice => ({
   active: true,
   unit_amount,
   currency: 'usd',
-  recurring: { interval },
+  recurring: { interval, interval_count: 1 },
 });
 
 describe('assertLiveKey', () => {
@@ -69,6 +69,26 @@ describe('verifyLive', () => {
     });
     const r = await verifyLive(stripe as any, ACCOUNT, env, expected);
     expect(r.ok).toBe(true);
+  });
+
+  it('fails a price in another currency, though the amount matches', async () => {
+    const stripe = fakeStripe(ACCOUNT, {
+      price_m: { ...live(6900, 'month'), currency: 'cad' },
+      price_y: live(69000, 'year'),
+    });
+    const r = await verifyLive(stripe as any, ACCOUNT, env, expected);
+    expect(r.ok).toBe(false);
+    expect(r.lines.join('\n')).toMatch(/STRIPE_PRICE_TRAD_STARTER price_m: currency cad, expected usd/);
+  });
+
+  it('fails a price billed every 2 months, though the interval is month', async () => {
+    const stripe = fakeStripe(ACCOUNT, {
+      price_m: { ...live(6900, 'month'), recurring: { interval: 'month', interval_count: 2 } },
+      price_y: live(69000, 'year'),
+    });
+    const r = await verifyLive(stripe as any, ACCOUNT, env, expected);
+    expect(r.ok).toBe(false);
+    expect(r.lines.join('\n')).toMatch(/price_m: every 2 months, expected every 1/);
   });
 
   // The 2026-11-22 incident: production's key belonged to another Stripe account.

@@ -23,8 +23,9 @@ const Stat = ({ label, value, testID }: { label: string; value: string; testID: 
 /**
  * Rent-collection ROI on the Payment Dashboard (#32): collected, on-time rate,
  * outstanding and the hours-saved estimate for the dashboard's period. Shows
- * nothing while loading, when the plan lacks analytics, or for staff other than
- * the owner, whom the server refuses.
+ * nothing while loading, when the plan lacks analytics, or for staff the server
+ * refuses (anyone but the owner and managers). Outstanding is today's balance,
+ * not the period's, hence "now".
  */
 const RentRoiCard: React.FC<Props> = ({ houseId, startAt }) => {
   const { data, error } = useRentRoiMetrics(houseId, startAt);
@@ -60,7 +61,7 @@ const RentRoiCard: React.FC<Props> = ({ houseId, startAt }) => {
       </View>
       <View style={styles.row}>
         <Stat
-          label="Outstanding"
+          label="Outstanding now"
           value={dollars(data.outstandingCents)}
           testID="rent-roi-outstanding"
         />
