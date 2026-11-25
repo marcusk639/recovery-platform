@@ -1,0 +1,17 @@
+<div class="app-link-landing">
+  <div class="card">
+    <h2 *ngIf="isCheckoutReturn">You're done here</h2>
+    <h2 *ngIf="!isCheckoutReturn">Continue in the Regroup app</h2>
+    <p *ngIf="appUrl">
+      {{ isCheckoutReturn ? 'Go back to the app to see your plan.' : 'Tap below to open this link in Regroup.' }}
+    </p>
+    <a *ngIf="appUrl" class="open-app" [href]="appUrl">
+      {{ isCheckoutReturn ? 'Return to Regroup' : 'Open in Regroup' }}
+    </a>
+    <p class="stores-intro">Don't have the app yet? Install it, then open the link again.</p>
+    <div class="stores">
+      <a class="store" [href]="appStoreUrl" target="_blank" rel="noopener">App Store</a>
+      <a class="store" [href]="playStoreUrl" target="_blank" rel="noopener">Google Play</a>
+    </div>
+  </div>
+</div>
