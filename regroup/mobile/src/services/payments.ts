@@ -55,6 +55,8 @@ export interface RentPayment {
   disputed?: boolean;
   /** Lower-case ISO code; usd unless the webhook quarantined the record. */
   currency?: string;
+  /** The record this payment's intake record was linked to (functions' linkIntakeRecord). */
+  linkedTo?: string;
 }
 
 /** Result returned by the 'createPaymentIntent' Cloud Function. */
@@ -319,7 +321,8 @@ export async function getPaymentHistory(
 /**
  * Every payment on a guest record, for house staff. It finds records a resident's
  * uid query can't: those for a guest with no account, and those from before the
- * account linked. The payments rule denies this to residents.
+ * account linked, or from an intake record linked to this one (linkedTo). The
+ * payments rule denies this to residents.
  *
  * Sorted here because sorting on the server needs a composite index that doesn't
  * exist, and unlimited because a limit without that sort could drop the newest.
@@ -334,15 +337,13 @@ export async function getGuestPayments({
   if (!houseId || !guestId) {
     throw new Error('getGuestPayments: houseId and guestId are required');
   }
-  const snapshot = await getDocs(
-    query(
-      paymentsCollection,
-      where('houseId', '==', houseId),
-      where('guestId', '==', guestId)
-    )
-  );
+  const byField = (field: 'guestId' | 'linkedTo') =>
+    getDocs(query(paymentsCollection, where('houseId', '==', houseId), where(field, '==', guestId)));
+  const [own, linked] = await Promise.all([byField('guestId'), byField('linkedTo')]);
+  const records = new Map<string, RentPayment>();
+  [...own.docs, ...linked.docs].map(toRentPayment).forEach((p) => records.set(p.id, p));
   const createdMs = (payment: RentPayment) => toDateSafe(payment.createdAt)?.getTime() ?? 0;
-  return snapshot.docs.map(toRentPayment).sort((a, b) => createdMs(b) - createdMs(a));
+  return [...records.values()].sort((a, b) => createdMs(b) - createdMs(a));
 }
 
 /**

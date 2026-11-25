@@ -22,3 +22,12 @@ export const useMayEditRentMoney = (houseId: string): boolean => {
   });
   return !!houseId && RENT_MONEY_TIERS.has(data?.[houseId] ?? '');
 };
+
+/**
+ * Whether the caller may see the house's payment records: owners and
+ * managers, not peer leaders (owner decision 2026-11-09). The payments read
+ * rule checks the same tiers (callerRank >= 2). False while the tier is
+ * loading or could not be read, so a screen the rules would refuse is never
+ * offered.
+ */
+export const useMayViewHouseMoney = useMayEditRentMoney;

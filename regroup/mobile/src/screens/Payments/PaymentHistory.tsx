@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useCallback } from 'react';
 import {
   View,
   FlatList,
@@ -16,7 +16,7 @@ import ScreenHeader from '../../components/screen-header';
 import { RatsText } from '../../components/rats-text';
 import RatsButton from '../../components/rats-button/rats-button';
 
-import { getGuestPayments, getPaymentHistory, RentPayment } from '../../services/payments';
+import type { RentPayment } from '../../services/payments';
 import { exportPaymentHistoryCSV } from '../../services/reportExport';
 import { logException } from '../../util/logging';
 import {
@@ -30,6 +30,7 @@ import { RootStackParamList } from '../../navigation/types';
 import FontAwesome5 from '../../components/rats-icon/font-awesome-5';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useSelectedHouse } from '../../hooks/useSelectedHouse';
+import { usePaymentHistoryRecords } from './usePaymentHistoryRecords';
 import { useAppSelector } from '../../state/store';
 import { PAYMENT_TONE_COLOR, paymentDisplayStatus } from '../../util/paymentStatus';
 
@@ -43,13 +44,16 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
   // Was reading s.guests.selectedGuest / s.houses.selectedHouse, which the
   // id-only migration left permanently undefined; these hooks resolve the
   // selected ids through React Query instead.
-  const { guest } = useSelectedGuest();
-  const { house } = useSelectedHouse();
+  const { guest, isLoading: loadingGuest } = useSelectedGuest();
+  const { house, isLoading: loadingHouse } = useSelectedHouse();
   const signedInUid = useAppSelector(s => s.user.user?.id);
 
-  const [payments, setPayments] = useState<RentPayment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { payments, loading, error } = usePaymentHistoryRecords(
+    guest,
+    house,
+    signedInUid,
+    loadingGuest || loadingHouse,
+  );
 
   const handleExportCSV = async () => {
     try {
@@ -71,32 +75,6 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
     }
   };
 
-  useEffect(() => {
-    const fetchPayments = async () => {
-      if (!guest?.id || !house?.id) {
-        setLoading(false);
-        return;
-      }
-      try {
-        // Firestore is the history of record (owner decision D4). The rules let a
-        // resident list only by their own uid. Anyone else here is staff, who need
-        // the guest record's full history: cash for a resident with no account, and
-        // payments from before the account linked, carry no uid.
-        const data =
-          guest.userId && guest.userId === signedInUid
-            ? await getPaymentHistory({ houseId: house.id, guestUserId: guest.userId })
-            : await getGuestPayments({ houseId: house.id, guestId: guest.id });
-        setPayments(data);
-      } catch (err: any) {
-        logException(err);
-        setError(err.message || 'Failed to load payment history.');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchPayments();
-  }, [guest?.id, guest?.userId, house?.id, signedInUid]);
 
   const renderItem = useCallback(({ item }: { item: RentPayment }) => {
     const { label, tone } = paymentDisplayStatus(item);
@@ -179,7 +157,7 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
     return (
       <RatsScrollView>
         <ScreenHeader renderBackButton header="Payment History" />
-        <View style={styles.centered}>
+        <View testID="payment-history-loading" style={styles.centered}>
           <ActivityIndicator size="large" color={color.main} />
         </View>
       </RatsScrollView>

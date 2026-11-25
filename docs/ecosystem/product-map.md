@@ -76,7 +76,7 @@ Test recording, result history, and attribution per resident.
 #### 3.7 Security & access
 
 - Firebase Auth with custom claims: `guest`, `admin`, `superAdmin`, `potentialSuperAdmin`.
-- Two-factor setup flow.
+- No multi-factor sign-in yet (post-launch: `regroup/docs/product/specs/RG-SPEC-13-multi-factor-auth.md`).
 - Sentry error reporting via a centralized `logException()` wrapper.
 
 #### 3.8 Billing (web portal)

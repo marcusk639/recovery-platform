@@ -40,6 +40,13 @@ jest.mock('../../../state/queries/houseQueries', () => ({
   useUpdateHouse: () => mockUseUpdateHouse(),
 }));
 
+// Owners and managers see the house's money; peer leaders do not (the rules
+// refuse their reads of the house's payment records).
+let mockMayViewHouseMoney = true;
+jest.mock('../../../state/queries/houseTierQueries', () => ({
+  useMayViewHouseMoney: () => mockMayViewHouseMoney,
+}));
+
 // ─── Firebase mock ────────────────────────────────────────────────────────────
 jest.mock('../../../../firebase-setup', () => ({
   firestore: {
@@ -408,6 +415,18 @@ describe('HouseSettings', () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
       expect(getByText('Payment Dashboard')).toBeTruthy();
+    });
+
+    it('hides the Payment Dashboard from a peer leader, who may not see house money', () => {
+      mockMayViewHouseMoney = false;
+      try {
+        const store = buildStore();
+        const { queryByText, getByText } = renderScreen(store);
+        expect(queryByText('Payment Dashboard')).toBeNull();
+        expect(getByText('Payments')).toBeTruthy();
+      } finally {
+        mockMayViewHouseMoney = true;
+      }
     });
 
     it('renders the Done button', () => {

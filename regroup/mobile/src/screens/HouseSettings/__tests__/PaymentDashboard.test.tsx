@@ -104,6 +104,17 @@ jest.mock("../../../util/platform", () => ({
   },
 }));
 
+// The ROI card has its own tests (RentRoiCard.test.tsx); here, only what it's given.
+jest.mock("../RentRoiCard", () => {
+  const React = require("react");
+  const { Text } = require("react-native");
+  return {
+    __esModule: true,
+    default: (p: { houseId: string; startAt?: string }) =>
+      React.createElement(Text, { testID: "rent-roi-card-props" }, `${p.houseId}|${p.startAt ?? "all"}`),
+  };
+});
+
 import PaymentDashboard from "../PaymentDashboard";
 import { KeyboardToolbar } from "react-native-keyboard-controller";
 import { RatsKeyboardAvoidingView } from "../../../components/rats-keyboard";
@@ -211,6 +222,27 @@ describe("PaymentDashboard", () => {
     expect(queryByTestId("manual-payment-fab")).toBeNull();
   });
 
+  // resolveFailedPaymentOffline refuses anyone below manager, so a peer leader
+  // sees the failed payment but no Mark Resolved that always fails.
+  it("shows a peer leader a failed payment without Mark Resolved", async () => {
+    setupStore({ g1: { id: "g1", userId: "u1", firstName: "Alice", lastName: "Smith" } });
+    mockMayEditRentMoney.mockReturnValue(false);
+    mockGetHousePaymentRecords.mockResolvedValue([
+      {
+        id: "pi_failed_1",
+        guestId: "g1",
+        houseId: "house1",
+        amount: 50000,
+        status: "failed",
+        createdAt: new Date().toISOString(),
+        description: "Rent Payment",
+      },
+    ]);
+    const { findByTestId, queryByTestId } = renderDashboard();
+    await findByTestId("failed-payment-row-pi_failed_1");
+    expect(queryByTestId("mark-resolved-pi_failed_1")).toBeNull();
+  });
+
   it("renders StalePendingBanner when there are stale pending payments", async () => {
     setupStore({
       g1: { id: "g1", userId: "u1", firstName: "Alice", lastName: "Smith" },
@@ -236,6 +268,21 @@ describe("PaymentDashboard", () => {
     const { queryByTestId, findByTestId } = renderDashboard();
     await findByTestId("payment-empty-state");
     expect(queryByTestId("stale-pending-banner")).toBeNull();
+  });
+
+  it("gives the ROI card the period the pills select (#32)", async () => {
+    const { startOfISOWeek, startOfMonth } = require("date-fns");
+    setupStore({});
+    const { findByTestId, getByText } = renderDashboard();
+
+    const card = await findByTestId("rent-roi-card-props");
+    expect(card).toHaveTextContent(`house1|${startOfMonth(new Date()).toISOString()}`);
+    fireEvent.press(getByText("This Week"));
+    expect(await findByTestId("rent-roi-card-props")).toHaveTextContent(
+      `house1|${startOfISOWeek(new Date()).toISOString()}`,
+    );
+    fireEvent.press(getByText("All Time"));
+    expect(await findByTestId("rent-roi-card-props")).toHaveTextContent("house1|all");
   });
 
   describe("ManualPaymentModal", () => {
