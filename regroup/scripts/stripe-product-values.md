@@ -98,8 +98,8 @@ These are still read at module load and used by the legacy code path
 
 | Env Var                  | Price ID                         | Description                                                          |
 | ------------------------ | -------------------------------- | -------------------------------------------------------------------- |
-| `STRIPE_HOUSE_PRICE_ID`  | `price_1TZqF1RuYQlYKoSlRuMJfupT` | Regroup House — $49/month legacy flat-fee plan (prod_UYy6h1eZ5G5WD2) |
-| `STRIPE_OXFORD_PRICE_ID` | `price_1TZqF2RuYQlYKoSl5ZW19Pvk` | Regroup Oxford — $79/month legacy plan (prod_UYy6cF0Ccj8fID)         |
+| `STRIPE_HOUSE_PRICE_ID`  | RETIRED: deliberately unset | The old ID (`price_1TZqF1…`) belongs to another Stripe account (launch plan S3). Do not put it back. |
+| `STRIPE_OXFORD_PRICE_ID` | RETIRED: deliberately unset | The old ID (`price_1TZqF2…`) belongs to another Stripe account (launch plan S3). Do not put it back. |
 | `STRIPE_GUEST_PRICE_ID`  | `plan_HFkh7QvRnNjMy8`            | Legacy per-guest metered plan — retained for existing subscribers    |
 
 ---
