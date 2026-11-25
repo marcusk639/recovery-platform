@@ -11,7 +11,7 @@ npm test                        # Jest unit tests (run in band)
 npm run test:watch              # Jest watch mode
 npm run test:coverage           # Jest with coverage
 npm run serve                   # Build + legacy `firebase serve --only functions`
-npm run preflight:billing       # Billing preflight (also the firebase.json predeploy hook); refuses a deploy with no functions/.env.<project>
+npm run preflight:billing       # Billing preflight (also the firebase.json predeploy hook); refuses a deploy only when neither functions/.env nor functions/.env.<project> exists
 npm run env:write -- --project phoenix-cleanhouse    # Writes the gitignored functions/.env.phoenix-cleanhouse from ../scripts/stripe-prices.env
 npm run stripe:verify-live -- --project phoenix-cleanhouse   # Read-only: the latest STRIPE_SECRET_KEY is Regroup's account and every tier price is live at the right amount
 npm run stripe:listen           # Forward Stripe events to local stripeEvents + handleStripeConnectWebhook
@@ -233,7 +233,7 @@ Never add direct Firestore cross-queries to another product's database — route
 
 ### Secrets
 
-Service key lives in `service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`. Functions read secrets via environment config, not hardcoded values.
+Service key lives in `service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`. Functions read secrets via environment config, not hardcoded values. How to set, rotate and check every env var and secret: `../docs/operations/environment-and-secrets.md`.
 
 The `defineSecret` set (`config.ts`) is nine secrets: `STRIPE_SECRET_KEY`, `STRIPE_CLIENT_ID`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_TEST_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_CONNECT_TEST_WEBHOOK_SECRET`, `SENDGRID_API_KEY`, `RECOVERY_PLATFORM_API_KEY` and `GOOGLE_MAPS_API_KEY`. Plain `process.env` config is templated in `functions/.env.example`; `scripts/preflight-billing.js` (`CONFIG_REQUIRED`) hard-requires `STRIPE_API_VERSION`, the 12 tier price ids (`STRIPE_PRICE_TRAD_*` / `STRIPE_PRICE_OXFORD_*`, monthly and `_ANNUAL`) and `CONNECT_BASE_URL` (`util/connectUrls.ts` throws without it, so no house can connect a bank account). `TIER_BILLING_ENABLED` and `RECOVERY_API_BASE_URL` are read too. The setup runbook (`docs/launch-readiness/billing-go-live-runbook.md`) does set `STRIPE_CONNECT_WEBHOOK_SECRET`.
 
