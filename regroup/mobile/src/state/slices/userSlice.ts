@@ -136,13 +136,18 @@ export const logout = createAsyncThunk(
     await userService.signOut();
     const result = await dispatch(anonymouslyLogin()).unwrap();
 
-    // Reset navigation to landing screen
+    // Reset navigation to the landing screen. InitialLanding lives in the auth
+    // stack (PriorAuth), not the root stack, so the reset names both; a root
+    // reset to InitialLanding alone left callers outside Profile (the
+    // subscription gate's Sign out) in the main stack.
     setTimeout(() => {
       if (navigationRef.current) {
         navigationRef.current.dispatch(
           CommonActions.reset({
             index: 0,
-            routes: [{ name: Routes.InitialLanding }],
+            routes: [
+              { name: Routes.PriorAuth, state: { routes: [{ name: Routes.InitialLanding }] } },
+            ],
           })
         );
       }
