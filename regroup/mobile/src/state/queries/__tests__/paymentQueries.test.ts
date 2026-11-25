@@ -654,4 +654,23 @@ describe('useGuestBalances', () => {
     expect(cara.totalBalance).toBe(0);
     expect(cara.status).toBe('current');
   });
+
+  // An intake record linked to the resident's invite record keeps its own
+  // guestId on its payments and gains linkedTo (functions' linkIntakeRecord).
+  it("counts payments from an intake record linked to the resident's record, once", async () => {
+    const [pat, intake] = await balancesFor(
+      [
+        { id: 'gNew', firstName: 'Pat', lastName: 'Lee', rentOwed: 0, choreFees: 0 },
+        { id: 'gIntake', firstName: 'Pat', lastName: 'Lee', rentOwed: 0, choreFees: 0 },
+      ],
+      [
+        { id: 'p3', guestId: 'gNew', amount: 5000, status: 'succeeded', createdAt: '2026-11-20T00:00:00Z' },
+        { id: 'p4', guestId: 'gIntake', linkedTo: 'gNew', amount: 7000, status: 'succeeded',
+          createdAt: '2026-11-10T00:00:00Z' },
+      ],
+    );
+    expect(pat.totalPaid).toBe(12000);
+    expect(pat.lastPaymentDate).toBe('2026-11-20T00:00:00.000Z');
+    expect(intake.totalPaid).toBe(0);
+  });
 });

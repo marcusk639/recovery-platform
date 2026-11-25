@@ -149,21 +149,30 @@ async function sendFcmToUser(
 // Helper — find a house document by stripeAccountId (used for Connect events)
 // ---------------------------------------------------------------------------
 
+// Throws on a read error. A handler whose only effect is a one-off alert uses
+// this directly, so a transient failure releases the event for Stripe's retry
+// instead of reading as "no house".
+async function lookupHouseByStripeAccountId(
+  accountId: string,
+): Promise<{ id: string; data: HouseDoc } | null> {
+  const db = admin.firestore();
+  const snap = await db
+    .collection("houses")
+    .where("stripeAccountId", "==", accountId)
+    .limit(1)
+    .get();
+
+  if (snap.empty) return null;
+
+  const doc = snap.docs[0];
+  return { id: doc.id, data: doc.data() as HouseDoc };
+}
+
 async function findHouseByStripeAccountId(
   accountId: string,
 ): Promise<{ id: string; data: HouseDoc } | null> {
   try {
-    const db = admin.firestore();
-    const snap = await db
-      .collection("houses")
-      .where("stripeAccountId", "==", accountId)
-      .limit(1)
-      .get();
-
-    if (snap.empty) return null;
-
-    const doc = snap.docs[0];
-    return { id: doc.id, data: doc.data() as HouseDoc };
+    return await lookupHouseByStripeAccountId(accountId);
   } catch (err) {
     logger.error("findHouseByStripeAccountId error", {
       accountId,
@@ -1445,7 +1454,8 @@ async function handlePayoutFailed(
     return;
   }
 
-  const house = await findHouseByStripeAccountId(accountId);
+  // Throws on a read error, so the webhook answers 5xx and Stripe retries.
+  const house = await lookupHouseByStripeAccountId(accountId);
   if (!house) {
     logger.warn("payout.failed: no house found for account", { accountId });
     return;
@@ -2039,6 +2049,16 @@ export const handleStripeConnectWebhook = onRequest(
           // For Connect deauthorization, the connected account ID is on
           // event.account (not the data object, which is a Stripe.Application).
           await handleAccountDeauthorized(event.account ?? "");
+          break;
+
+        // A house's failed bank payout. Only Connect events carry
+        // event.account, so the platform endpoint's case above can only see
+        // the platform's own payouts, which belong to no house.
+        case "payout.failed":
+          await handlePayoutFailed(
+            event.data.object,
+            event.account ?? undefined,
+          );
           break;
 
         default:

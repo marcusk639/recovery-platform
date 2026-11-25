@@ -20,6 +20,8 @@
     "rent:reverse:dry-run": "npm run build && node lib/scripts/reverseRentCharges.js",
     "rent:reverse:apply": "npm run build && node lib/scripts/reverseRentCharges.js --apply",
     "switch:set": "npm run build && node lib/scripts/setServerSwitch.js",
+    "env:write": "npm run build && node lib/scripts/writeFunctionsEnv.js",
+    "stripe:verify-live": "npm run build && node lib/scripts/verifyLiveStripe.js",
     "legacy:cancel": "npm run build && node lib/scripts/cancelLegacySubscriptions.js",
     "migrate:house-roles:dry-run": "npm run build && node lib/scripts/backfillHouseRoles.js",
     "migrate:house-roles:apply": "npm run build && node lib/scripts/backfillHouseRoles.js --apply",

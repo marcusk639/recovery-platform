@@ -12,6 +12,8 @@
  *   regroup-app://checkout-return?result=R
  *   regroup-app://app/checkout-return?result=R
  *   https://<web origin>/checkout-return?result=R    (R: success | canceled | portal)
+ *   https://<web origin>/redirect?url=<custom-scheme link above>   (older invitation
+ *     emails; unwrapped one level, and only to a custom-scheme link)
  *
  * The https origin is the one appLinkPrefixes() accepts, and nothing else.
  *
@@ -42,6 +44,7 @@ type Query = Map<string, string[]>;
 // is skipped.
 const STRICT_KEYS = new Set([
   'token',
+  'url',
   'type',
   'result',
   'invitationType',
@@ -119,6 +122,10 @@ const checkoutReturn = (query: Query): AppLink | null => {
 };
 
 export function parseAppLink(url: string): AppLink | null {
+  return parse(url, true);
+}
+
+function parse(url: string, allowRedirect: boolean): AppLink | null {
   if (typeof url !== 'string') return null;
   const parts = URL_PARTS.exec(url.trim());
   if (!parts) return null;
@@ -149,6 +156,11 @@ export function parseAppLink(url: string): AppLink | null {
       return checkoutReturn(query);
     case 'app/checkout-return':
       return custom ? checkoutReturn(query) : null;
+    case 'redirect': {
+      const inner = custom || !allowRedirect ? null : single(query, 'url');
+      const innerScheme = inner ? URL_PARTS.exec(inner.trim())?.[1]?.toLowerCase() : undefined;
+      return inner && innerScheme && CUSTOM_SCHEMES.includes(innerScheme) ? parse(inner, false) : null;
+    }
     default:
       return null;
   }

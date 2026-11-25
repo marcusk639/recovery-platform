@@ -11,13 +11,15 @@ npm test                        # Jest unit tests (run in band)
 npm run test:watch              # Jest watch mode
 npm run test:coverage           # Jest with coverage
 npm run serve                   # Build + legacy `firebase serve --only functions`
-npm run preflight:billing       # Billing preflight (also the firebase.json predeploy hook)
+npm run preflight:billing       # Billing preflight (also the firebase.json predeploy hook); refuses a deploy only when neither functions/.env nor functions/.env.<project> exists
+npm run env:write -- --project phoenix-cleanhouse    # Writes the gitignored functions/.env.phoenix-cleanhouse from ../scripts/stripe-prices.env
+npm run stripe:verify-live -- --project phoenix-cleanhouse   # Read-only: the latest STRIPE_SECRET_KEY is Regroup's account and every tier price is live at the right amount
 npm run stripe:listen           # Forward Stripe events to local stripeEvents + handleStripeConnectWebhook
 npm run deploy                  # Only `firebase deploy --only functions`: NO build, so it ships lib/ as it is (stale or missing). Don't use it to deploy
-npm run deploy:batched          # Batched fallback for deploy quotas only
+npm run deploy:batched -- --project <id>   # Batched fallback for deploy quotas only; builds first, refuses without --project
 ```
 
-**Deploy** from `regroup/`, building first: `npm --prefix functions ci && npm --prefix functions run build && firebase deploy --only functions`. `package.json` `main` is `lib/index.js`, and the `functions.predeploy` hook in `regroup/firebase.json` runs only `scripts/preflight-billing.js`, never the TypeScript build.
+**Deploy** from `regroup/`, building first: `npm --prefix functions ci && npm --prefix functions run env:write -- --project phoenix-cleanhouse && npm --prefix functions run stripe:verify-live -- --project phoenix-cleanhouse && npm --prefix functions run build && firebase deploy --only functions`. The deploy config lives only in the gitignored `functions/.env.<project>`, so a clean worktree has none until `env:write` writes it, and the preflight refuses the deploy without it. `regroup/firebase.json`'s `functions.ignore` keeps `*.local`, `service-key.json`, `.claude/` session files and `coverage/` out of the upload. `package.json` `main` is `lib/index.js`, and the `functions.predeploy` hook in `regroup/firebase.json` runs only `scripts/preflight-billing.js`, never the TypeScript build.
 
 **One-time IAM, per project, before documents can open:** `getDocumentLink` signs a v4 URL with no private key, through the IAM Credentials `signBlob` API, so the functions' runtime account (`<project number>-compute@developer.gserviceaccount.com`) needs `roles/iam.serviceAccountTokenCreator` on itself. Editor doesn't include it. Without it every call fails as `internal` and the app shows "Couldn't open the document". Grant it with `gcloud iam service-accounts add-iam-policy-binding <number>-compute@developer.gserviceaccount.com --member=serviceAccount:<number>-compute@developer.gserviceaccount.com --role=roles/iam.serviceAccountTokenCreator --project <project>`, and keep `iamcredentials.googleapis.com` enabled. Check with `gcloud iam service-accounts get-iam-policy <number>-compute@developer.gserviceaccount.com --project <project>`. On 2026-11-14 `regroup-e2e` had the API enabled but no grant.
 
@@ -160,7 +162,7 @@ and `onTimeRatePct`/`duePaymentCount`. Refunds are recorded by the
 `charge.refunded` webhook handler as `payments.refundedAmountCents` (cents);
 on-time uses `payments.dueDate`, the guest's `rentDueDate` captured at charge time
 in `handlePaymentIntentSucceeded` (an approximation — no per-charge schedule
-history). Hours-saved remains deferred (#32 caveats).
+history). `hoursSavedEstimate` (#32) credits `MINUTES_SAVED_PER_STRIPE_COLLECTION` (10) minutes per windowed payment with a `stripePaymentIntentId` (autopay or the resident's own Stripe payment; manual records have none), with `automatedCollectionCount`; it is labelled an estimate in `caveats`. The phone's Payment Dashboard shows it in `RentRoiCard` (the owner and money staff, i.e. managers, as `listHousePayments` admits; plan-gated). On-time compares the house-local payment day with `dueDate`.
 
 Oxford Network has `availableForSale: false` (P-8) — `isTierAvailableForSale()`
 blocks it in `createOperatorSubscription` checkout while keeping the tier defined.
@@ -232,7 +234,7 @@ Never add direct Firestore cross-queries to another product's database — route
 
 ### Secrets
 
-Service key lives in `service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`. Functions read secrets via environment config, not hardcoded values.
+Service key lives in `service-key.json` (gitignored). Download from Firebase Console under `phoenix-cleanhouse`. Functions read secrets via environment config, not hardcoded values. How to set, rotate and check every env var and secret: `../docs/operations/environment-and-secrets.md`.
 
 The `defineSecret` set (`config.ts`) is nine secrets: `STRIPE_SECRET_KEY`, `STRIPE_CLIENT_ID`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_TEST_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET`, `STRIPE_CONNECT_TEST_WEBHOOK_SECRET`, `SENDGRID_API_KEY`, `RECOVERY_PLATFORM_API_KEY` and `GOOGLE_MAPS_API_KEY`. Plain `process.env` config is templated in `functions/.env.example`; `scripts/preflight-billing.js` (`CONFIG_REQUIRED`) hard-requires `STRIPE_API_VERSION`, the 12 tier price ids (`STRIPE_PRICE_TRAD_*` / `STRIPE_PRICE_OXFORD_*`, monthly and `_ANNUAL`) and `CONNECT_BASE_URL` (`util/connectUrls.ts` throws without it, so no house can connect a bank account). `TIER_BILLING_ENABLED`, `RECOVERY_API_BASE_URL` and `WEB_BASE_URL` (invitation links, optional) are read too. The setup runbook (`docs/launch-readiness/billing-go-live-runbook.md`) does set `STRIPE_CONNECT_WEBHOOK_SECRET`.
 

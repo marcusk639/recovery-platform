@@ -1,14 +1,13 @@
 import { reportGuest, reportRules, reportStats } from '../src/app/residents/compliance-text';
 
-test('resident text reaches the report as text, not markup', () => {
+// The phone's report builder (regroup/mobile/src/services/weeklyReportHtml.ts)
+// escapes the resident's text itself; its tests are
+// regroup/mobile/src/services/__tests__/reportExport.pdfEscaping.test.ts. So the
+// portal hands it the text as it is: escaping here as well would print "&amp;"
+// for "&" in the exported report.
+test('resident text reaches the report as typed, for the phone to escape once', () => {
   const guest = { id: 'guest-a', firstName: '<img src=x onerror=alert(1)>', lastName: 'O\'Brien & Sons', phase: '<b>1</b>', rentOwed: 5 };
-  expect(reportGuest(guest)).toEqual({
-    id: 'guest-a',
-    firstName: '&lt;img src=x onerror=alert(1)&gt;',
-    lastName: 'O&#39;Brien &amp; Sons',
-    phase: '&lt;b&gt;1&lt;/b&gt;',
-    rentOwed: 5,
-  });
+  expect(reportGuest(guest)).toEqual(guest);
 });
 
 test('an ordinary name is unchanged', () => {
@@ -16,8 +15,11 @@ test('an ordinary name is unchanged', () => {
   expect(reportGuest(guest)).toEqual(guest);
 });
 
-test('a missing name or phase stays missing', () => {
-  expect(reportGuest({ id: 'g' })).toEqual({ id: 'g' });
+test('a missing name or phase stays missing, and the guest is a copy', () => {
+  const guest = { id: 'g' };
+  const copy = reportGuest(guest);
+  expect(copy).toEqual({ id: 'g' });
+  expect(copy).not.toBe(guest);
 });
 
 // Not a number stays not a number, so the phone's comparisons still say FAIL.

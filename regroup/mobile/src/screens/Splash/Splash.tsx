@@ -23,13 +23,12 @@ import {
   anonymouslyLogin,
   autoLogin,
   loginFailedAction,
-  updateUser,
 } from "../../state/slices/userSlice";
+import { addMessagingToken } from "../../state/slices/userMessagingToken";
 import { logException } from "../../util/logging";
 import { subscriptionStatus } from "../../util/subscription";
 import { User } from "../../entities/User";
 import { NativeDeepLink } from "../../services/native-deep-links";
-import isNil from "lodash/isNil";
 import { displayRemoteMessage } from "../../services/notifications/remoteMessage";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
@@ -104,31 +103,17 @@ export const withSplash = <P extends object>(
     const updateTokenIfNecessary = useCallback(
       async (fcmToken: string) => {
         const { user, updating } = latest.current.userState;
-        const token = user?.messagingToken;
-        if (!user) {
+        // iOS reports the current token at every launch, not only on rotation,
+        // so a token already saved is skipped. The write adds to the stored
+        // list (arrayUnion) instead of writing this device's copy of it, which
+        // would drop a token another device saved since that copy was read.
+        if (!user || updating || user.messagingToken?.includes(fcmToken)) {
           return;
         }
         try {
-          // Hardened 2026-07-05: both branches were commented out with a
-          // stale "should be imported if available" note — updateUser was
-          // already a real, working thunk (used elsewhere in this file and
-          // across the app). No other write site for messagingToken exists
-          // anywhere, so push notifications could never reach any user.
-          if (!updating && (isNil(token) || !token.length)) {
-            await latest.current.dispatch(
-              updateUser({
-                user: user as User,
-                updates: { messagingToken: [fcmToken] },
-              }),
-            ).unwrap();
-          } else if (!updating && !token!.includes(fcmToken)) {
-            await latest.current.dispatch(
-              updateUser({
-                user: user as User,
-                updates: { messagingToken: [...token!, fcmToken] },
-              }),
-            ).unwrap();
-          }
+          await latest.current.dispatch(
+            addMessagingToken({ user: user as User, token: fcmToken }),
+          ).unwrap();
         } catch (error) {
           logException(error, "Failed to persist messaging token");
         }
@@ -192,29 +177,9 @@ export const withSplash = <P extends object>(
     const registerMessageTokenListener = useCallback(() => {
       onTokenRefreshListenerRef.current = onTokenRefresh(
         getMessaging(),
-        async (fcmToken) => {
-          const { user, updating } = latest.current.userState;
-          // iOS reports the current token at every launch, not only on rotation;
-          // the server pushes to every stored copy.
-          if (!user || updating || user.messagingToken?.includes(fcmToken)) {
-            return;
-          }
-          const _nextTokens = user.messagingToken
-            ? [...user.messagingToken, fcmToken]
-            : [fcmToken];
-          try {
-            await latest.current.dispatch(
-              updateUser({
-                user: user as User,
-                updates: { messagingToken: _nextTokens },
-              }),
-            ).unwrap();
-          } catch (error) {
-            logException(error, "Failed to persist refreshed messaging token");
-          }
-        },
+        updateTokenIfNecessary,
       );
-    }, []);
+    }, [updateTokenIfNecessary]);
 
     const anonymouslyLoginHandler = useCallback(async () => {
       try {

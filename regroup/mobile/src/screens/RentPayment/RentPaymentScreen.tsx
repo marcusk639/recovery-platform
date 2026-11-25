@@ -34,12 +34,9 @@ import {
   StyleSheet,
   ActivityIndicator,
   TouchableOpacity,
-  Switch,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { collection, doc, updateDoc } from "@react-native-firebase/firestore";
-import { firestore } from "../../../firebase-setup";
 import { useQueryClient } from "@tanstack/react-query";
 import { RootStackParamList } from "../../navigation/types";
 
@@ -120,7 +117,6 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
   // through, so the banner says that instead of announcing a new payment.
   const [alreadyPaid, setAlreadyPaid] = useState(false);
   const [isPaying, setIsPaying] = useState(false);
-  const [saveCard, setSaveCard] = useState(guest.autoPayEnabled ?? false);
   const paymentInProgress = useRef(false);
 
   // guest.rentOwed / guest.choreFees are stored in integer CENTS — see the
@@ -264,21 +260,6 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
         logException(recordError);
       }
 
-      // Persist auto-pay preference to Firestore when it differs from the
-      // currently-persisted value. The scheduled CF reads this flag to
-      // auto-charge the guest when due.
-      const persistedAutoPayEnabled = guest.autoPayEnabled ?? false;
-      if (saveCard !== persistedAutoPayEnabled) {
-        try {
-          await updateDoc(doc(collection(firestore, "guests"), guest.id), {
-            autoPayEnabled: saveCard,
-          });
-        } catch (e) {
-          logException(e);
-          // Non-fatal — payment succeeded, preference save failed
-        }
-      }
-
       cancelRentReminder(guest);
       setPaymentSuccess(true);
       queryClient.invalidateQueries({
@@ -301,7 +282,6 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
     guest,
     house.id,
     rentLabel,
-    saveCard,
     initPaymentSheet,
     presentPaymentSheet,
     queryClient,
@@ -534,33 +514,6 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
           )}
         </View>
 
-        {/* ── Auto-Pay Toggle ────────────────────────────────────────── */}
-        {!allPaidUp && (
-          <View
-            style={[CARD_STYLE, styles.card, styles.autoPayCard]}
-            testID="auto-pay-card"
-          >
-            <View style={styles.autoPayRow}>
-              <RatsText
-                translate={false}
-                text="Enable auto-pay"
-                style={styles.autoPayLabel}
-              />
-              <Switch
-                testID="auto-pay-switch"
-                value={saveCard}
-                onValueChange={setSaveCard}
-                trackColor={{ false: color.light_grey, true: color.main }}
-                thumbColor={color.white}
-              />
-            </View>
-            <RatsText
-              translate={false}
-              text="Your balance will be automatically charged when due."
-              style={styles.autoPayHint}
-            />
-          </View>
-        )}
       </ScrollView>
 
       {/* ── Bottom CTA ──────────────────────────────────────────────────── */}
@@ -786,25 +739,6 @@ const styles = StyleSheet.create({
     fontSize: fontSize.regular,
     color: color.grey,
     textAlign: "center",
-  },
-  autoPayCard: {
-    paddingVertical: normalize(12),
-  },
-  autoPayRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: normalize(4),
-  },
-  autoPayLabel: {
-    fontSize: fontSize.regular,
-    fontFamily: fontFamily.bold,
-    color: color.black,
-    flex: 1,
-  },
-  autoPayHint: {
-    fontSize: fontSize.small,
-    color: color.dark_grey,
   },
 });
 

@@ -168,3 +168,31 @@ describe('parseAppLink with a malformed tracking parameter', () => {
     expect(parseAppLink('regroup-app://invite?token=ab%ZZ&utm_source=x')).toBeNull();
   });
 });
+
+// Invitation emails sent before the https /invite format wrap the app link in
+// the web /redirect page (#286); with app links verified, the app receives it.
+describe('parseAppLink — the web /redirect wrapper', () => {
+  const wrap = (inner: string) => `https://regroup-app.com/redirect?url=${encodeURIComponent(inner)}`;
+
+  it('unwraps a custom-scheme token invitation', () => {
+    expect(parseAppLink(wrap('com.rats.dev://?type=invitation&token=abc'))).toEqual({
+      kind: 'invitation',
+      token: 'abc',
+    });
+  });
+
+  it('refuses a wrapped link that is not a custom-scheme app link', () => {
+    expect(parseAppLink(wrap('https://regroup-app.com/invite?token=abc'))).toBeNull();
+    expect(parseAppLink(wrap('https://evil.example/?type=invitation&token=abc'))).toBeNull();
+  });
+
+  it('unwraps one level only', () => {
+    expect(parseAppLink(wrap(wrap('regroup-app://invite?token=abc')))).toBeNull();
+  });
+
+  it('is not a route on the custom scheme', () => {
+    expect(
+      parseAppLink(`regroup-app://redirect?url=${encodeURIComponent('regroup-app://invite?token=abc')}`),
+    ).toBeNull();
+  });
+});

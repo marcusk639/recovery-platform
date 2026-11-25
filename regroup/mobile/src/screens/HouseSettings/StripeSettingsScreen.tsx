@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef } from "react";
 import {
   View,
   ScrollView,
@@ -6,9 +6,12 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
+  AppState,
+  AppStateStatus,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../../navigation/types";
 import ScreenHeader from "../../components/screen-header";
@@ -27,6 +30,7 @@ import { httpsCallable } from "@react-native-firebase/functions";
 import { functions } from "../../../firebase-setup";
 import { StripeAccountStatus } from "../../entities/House";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { houseKeys } from "../../state/queries/houseQueries";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -169,6 +173,11 @@ type StripeAccountStatusResponse = {
 
 const StripeSettingsScreen: React.FC<Props> = (_props) => {
   const { house } = useSelectedHouse();
+  const queryClient = useQueryClient();
+  const houseId = house?.id;
+  // A ref, not effect state: the effect re-runs when the house changes, and
+  // that can happen while the operator is still in the browser.
+  const leftApp = useRef(false);
 
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
@@ -213,15 +222,33 @@ const StripeSettingsScreen: React.FC<Props> = (_props) => {
     }
   }, [house?.id, house?.stripeAccountId]);
 
-  // useFocusEffect (not useEffect) so returning to this screen re-fetches
-  // status — most importantly after the user completes Stripe Connect
-  // onboarding via an external browser redirect and comes back here. It also
-  // fires on initial mount, so this replaces (not supplements) a plain
-  // useEffect fetch-on-mount.
+  // Fetch on focus (this also covers mount), and while focused, again each
+  // time the app comes back from the background. Stripe Connect onboarding
+  // runs in the system browser, so the operator returns here without this
+  // screen ever losing focus. The house is re-read too: connecting a first
+  // account writes stripeAccountId to the house, and the cached copy lacks
+  // it, so without that this screen would still skip the status call.
   useFocusEffect(
     useCallback(() => {
       fetchStatus();
-    }, [fetchStatus]),
+      const subscription = AppState.addEventListener(
+        "change",
+        (next: AppStateStatus) => {
+          if (next === "background") {
+            leftApp.current = true;
+          } else if (next === "active" && leftApp.current) {
+            leftApp.current = false;
+            if (houseId) {
+              queryClient.invalidateQueries({
+                queryKey: houseKeys.detail(houseId),
+              });
+            }
+            fetchStatus();
+          }
+        },
+      );
+      return () => subscription.remove();
+    }, [fetchStatus, houseId, queryClient]),
   );
 
   const handleConnect = useCallback(async () => {

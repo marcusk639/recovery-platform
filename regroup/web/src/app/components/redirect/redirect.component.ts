@@ -1,10 +1,10 @@
-import { Component, OnInit, Inject, PLATFORM_ID } from "@angular/core";
-import { isPlatformBrowser } from "@angular/common";
-import { ActivatedRoute } from "@angular/router";
-import { environment } from "../../../environments/environment";
+import { Component, OnInit, Inject, PLATFORM_ID } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { ActivatedRoute } from '@angular/router';
+import { environment } from '../../../environments/environment';
 
 @Component({
-  selector: "app-redirect",
+  selector: 'app-redirect',
   template: `
     <div class="redirect-container">
       <div class="redirect-content">
@@ -23,15 +23,9 @@ import { environment } from "../../../environments/environment";
           <p><strong>Platform:</strong> {{ getPlatform() }}</p>
           <p><strong>Current URL:</strong> {{ getCurrentUrl() }}</p>
           <div class="test-buttons">
-            <button (click)="testCustomScheme()" class="test-btn">
-              Test Custom Scheme
-            </button>
-            <button (click)="testUniversalLink()" class="test-btn">
-              Test Universal Link
-            </button>
-            <button (click)="testBundleIdScheme()" class="test-btn">
-              Test Bundle ID
-            </button>
+            <button (click)="testCustomScheme()" class="test-btn">Test Custom Scheme</button>
+            <button (click)="testUniversalLink()" class="test-btn">Test Universal Link</button>
+            <button (click)="testBundleIdScheme()" class="test-btn">Test Bundle ID</button>
           </div>
         </div>
       </div>
@@ -45,8 +39,7 @@ import { environment } from "../../../environments/environment";
         align-items: center;
         min-height: 100vh;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
 
       .redirect-content {
@@ -142,10 +135,10 @@ import { environment } from "../../../environments/environment";
   ],
 })
 export class RedirectComponent implements OnInit {
-  customSchemeUrl = "";
-  fallbackUrl = "";
+  customSchemeUrl = '';
+  fallbackUrl = '';
   showDebugInfo = false;
-  userAgent = "";
+  userAgent = '';
 
   constructor(
     @Inject(PLATFORM_ID) private platformId: Object,
@@ -161,18 +154,18 @@ export class RedirectComponent implements OnInit {
   getPlatform(): string {
     if (isPlatformBrowser(this.platformId)) {
       const userAgent = navigator.userAgent.toLowerCase();
-      if (/iphone|ipad|ipod/.test(userAgent)) return "iOS";
-      if (/android/.test(userAgent)) return "Android";
-      return "Desktop";
+      if (/iphone|ipad|ipod/.test(userAgent)) return 'iOS';
+      if (/android/.test(userAgent)) return 'Android';
+      return 'Desktop';
     }
-    return "Unknown";
+    return 'Unknown';
   }
 
   getCurrentUrl(): string {
     if (isPlatformBrowser(this.platformId)) {
       return window.location.href;
     }
-    return "Unknown";
+    return 'Unknown';
   }
 
   testCustomScheme() {
@@ -184,8 +177,8 @@ export class RedirectComponent implements OnInit {
   testUniversalLink() {
     if (this.customSchemeUrl) {
       const universalLink = this.customSchemeUrl.replace(
-        "regroup-app://",
-        "https://regroup-app.com/",
+        'regroup-app://',
+        'https://regroup-app.com/',
       );
       window.location.href = universalLink;
     }
@@ -193,21 +186,18 @@ export class RedirectComponent implements OnInit {
 
   testBundleIdScheme() {
     if (this.customSchemeUrl) {
-      const bundleIdScheme = this.customSchemeUrl.replace(
-        "regroup-app://",
-        "com.rats.dev://",
-      );
+      const bundleIdScheme = this.customSchemeUrl.replace('regroup-app://', 'com.rats.dev://');
       window.location.href = bundleIdScheme;
     }
   }
 
   private handleRedirect() {
     const urlParams = new URLSearchParams(window.location.search);
-    const redirectUrl = urlParams.get("url");
-    const debug = urlParams.get("debug");
+    const redirectUrl = urlParams.get('url');
+    const debug = urlParams.get('debug');
 
     // Show debug info if debug parameter is present (never in production)
-    this.showDebugInfo = debug === "true" && !environment.production;
+    this.showDebugInfo = debug === 'true' && !environment.production;
     this.userAgent = navigator.userAgent;
 
     if (redirectUrl) {
@@ -219,21 +209,21 @@ export class RedirectComponent implements OnInit {
         this.customSchemeUrl = decoded;
         this.redirectToCustomScheme(this.customSchemeUrl);
       } else {
-        window.location.href = "/";
+        window.location.href = '/';
       }
     } else {
       // Fallback to home page if no redirect URL
-      window.location.href = "/";
+      window.location.href = '/';
     }
   }
 
   // Prefixes accepted from the untrusted `?url=` parameter. Scheme comparison
   // is case-insensitive so e.g. "JavaScript:" cannot slip past the allowlist.
   private static readonly ALLOWED_DEEP_LINK_PREFIXES = [
-    "regroup-app://",
-    "com.rats.dev://",
-    "https://regroup-app.com/",
-    "https://regroup-app.page.link/",
+    'regroup-app://',
+    'com.rats.dev://',
+    'https://regroup-app.com/',
+    'https://regroup-app.page.link/',
   ];
 
   private isAllowedDeepLink(url: string): boolean {
@@ -249,54 +239,19 @@ export class RedirectComponent implements OnInit {
     const isAndroid = /android/.test(userAgent);
 
     if (isIOS) {
-      this.fallbackUrl =
-        "https://apps.apple.com/us/app/regroup-sober-living-app/id1502040260";
+      this.fallbackUrl = 'https://apps.apple.com/us/app/regroup-sober-living-app/id1502040260';
 
-      // For debug mode, try multiple approaches
-      this.attemptAppLaunchWithFallbacks(customSchemeUrl, this.fallbackUrl);
+      // An installed app has already taken the https link (associated domains),
+      // so this page loads when it is missing. Don't navigate to another
+      // regroup-app.com URL here: that unloads the page and its store fallback.
+      this.attemptAppLaunch(customSchemeUrl, this.fallbackUrl);
     } else if (isAndroid) {
-      this.fallbackUrl =
-        "https://play.google.com/store/apps/details?id=com.regroup.app";
+      this.fallbackUrl = 'https://play.google.com/store/apps/details?id=com.regroup.app';
       this.attemptAppLaunch(customSchemeUrl, this.fallbackUrl);
     } else {
       // Desktop - show download options
-      this.fallbackUrl = "/download";
+      this.fallbackUrl = '/download';
     }
-  }
-
-  private attemptAppLaunchWithFallbacks(appUrl: string, fallbackUrl: string) {
-    // Method 1: Try the URL as-is first (should be com.rats.dev:// for debug builds)
-    this.attemptAppLaunch(appUrl, fallbackUrl);
-
-    // Method 2: If it's regroup-app://, try converting to bundle ID scheme
-    if (appUrl.startsWith("regroup-app://")) {
-      setTimeout(() => {
-        const bundleIdScheme = appUrl.replace(
-          "regroup-app://",
-          "com.rats.dev://",
-        );
-        this.attemptAppLaunch(bundleIdScheme, fallbackUrl);
-      }, 500);
-    }
-
-    // Method 3: Try universal link as final fallback
-    setTimeout(() => {
-      let universalLink;
-      if (appUrl.startsWith("regroup-app://")) {
-        universalLink = appUrl.replace(
-          "regroup-app://",
-          "https://regroup-app.com/",
-        );
-      } else if (appUrl.startsWith("com.rats.dev://")) {
-        universalLink = appUrl.replace(
-          "com.rats.dev://",
-          "https://regroup-app.com/",
-        );
-      } else {
-        universalLink = appUrl;
-      }
-      this.attemptAppLaunch(universalLink, fallbackUrl);
-    }, 1000);
   }
 
   private attemptAppLaunch(appUrl: string, fallbackUrl: string) {
@@ -308,15 +263,15 @@ export class RedirectComponent implements OnInit {
     }
 
     // Method 2: Create a hidden iframe
-    const iframe = document.createElement("iframe");
-    iframe.style.display = "none";
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
     iframe.src = appUrl;
     document.body.appendChild(iframe);
 
     // Method 3: Try opening in a new window/tab
     setTimeout(() => {
       try {
-        window.open(appUrl, "_blank");
+        window.open(appUrl, '_blank');
       } catch (error) {
         // Swallow: handled by the fallback redirect below.
       }

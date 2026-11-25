@@ -18,7 +18,6 @@
 | --- | --- | --- |
 | Live store IDs confirmed: iOS bundle `com.rats.dev` (team `D8K3FS4HAX`, the ID in `ios/rats.xcodeproj/project.pbxproj`), Android `com.regroup.app` (spec §4.2, §8.1) | Owner | Task 5 |
 | The Play **app-signing** key's SHA-256 (Play Console → Setup → App signing) | Owner | Task 5 (production `assetlinks.json` only; staging uses the debug keystore) |
-| Decision D1 (below): how a signed-out prospective resident applies | Owner | Task 16 |
 | PR #279 merged (it changes the `linking.ts` prefix, item 18) | Owner merges | Task 2 (rebase onto it) |
 
 ## Decisions this plan makes (builder's calls, owner may overrule)
@@ -31,13 +30,9 @@
 - **#196's remaining collections (`organizations`, `userDeviceTokens`) get no rules and no code change.** Their only client code has no caller (dead code, a spec §2 non-goal), and the server reads neither. Task 21 closes #196 with that evidence.
 - **Old `/redirect?url=` links are not kept working.** Nobody holds a live invitation (spec §3.4: no active users), and the route never existed.
 
-## Open for the owner
+## Decisions resolved by the owner
 
-- **D1, in-app application (spec §4.2: "If the designs conflict, ask the owner").** `IntroHouseSummary` is signed out (AuthStack). `submitApplication` requires a signed-in user and stores `applicantUid`, and the app already signs in anonymously. The options are:
-  - **(a) Recommended.** APPLY opens `Apply` directly on the anonymous session. `ApplicationStatus` shows it on that device. When the operator approves and runs intake, the resident joins through the normal invitation, and the application stays linked to the house, not to a login.
-  - **(b)** APPLY asks the person to create an account first, then opens `Apply`.
-
-  Task 16 is written for (a) and lists what changes for (b).
+- **D1, in-app application: option (a), recorded 2026-11-25 (spec §4.2: "If the designs conflict, ask the owner").** `IntroHouseSummary` is signed out (AuthStack). `submitApplication` requires a signed-in user and stores `applicantUid`, and the app already signs in anonymously. APPLY opens `Apply` directly on the anonymous session. `ApplicationStatus` shows it on that device. When the operator approves and runs intake, the resident joins through the normal invitation, and the application stays linked to the house, not to a login. Task 16 implements this. (Rejected: (b), asking the person to create an account before `Apply`.)
 
 ## Global Constraints
 
@@ -480,7 +475,7 @@
 - [ ] **Step 4: Run** the test and the flow on both platforms (PASS).
 - [ ] **Step 5: Commit.** `fix(regroup-mobile): Oxford business meetings open their detail`
 
-### Task 16: In-app application (needs D1)
+### Task 16: In-app application (D1 = option (a))
 
 **Files:**
 - Modify:
@@ -508,8 +503,8 @@
   - the Apply submit navigates to `ApplicationStatus`;
   - Intake pre-fills from the application;
   - an anonymous submit is accepted by the rules (the existing `applications` rules test gains an anonymous-auth case);
-  - under D1 (b), submit refuses an anonymous user, and APPLY routes to Signup first.
-- [ ] **Step 3: Implement** per D1.
+  - a create carrying a field outside the allowlist is refused (deny test).
+- [ ] **Step 3: Implement.** Under (a), any anonymous session can write to any house's `applications`: today's create rule (`match /applications/{appId}` in `regroup/mobile/firebase/firestore.rules`) checks only `signedIn()` and `applicantUid`, with no field allowlist. Add `request.resource.data.keys().hasOnly([...])`, listing exactly the fields `submitApplication` (`services/applications.ts:33`) writes. Follow-up, out of scope: rate limiting and spam control for anonymous applications.
 - [ ] **Step 4: Run** the tests, the rules suite and the flow, on both platforms (PASS).
 - [ ] **Step 5: Docs and commit.** Update `regroup/docs/product/requirements.md` (the application path).
   `feat(regroup-mobile): prospective residents apply in the app, and approval opens a pre-filled intake`

@@ -255,6 +255,11 @@ jest.mock("../../../state/slices/userSlice", () => ({
     return (global as any).__splashTestUpdateUser;
   },
 }));
+jest.mock("../../../state/slices/userMessagingToken", () => ({
+  get addMessagingToken() {
+    return (global as any).__splashTestAddMessagingToken;
+  },
+}));
 
 // ─── Redux store mock (useAppSelector / useAppDispatch) ───────────────────────
 jest.mock("../../../state/store", () => ({
@@ -292,6 +297,11 @@ const mockUpdateUser = jest.fn((arg: any) => ({
   arg,
   unwrap: jest.fn().mockResolvedValue({}),
 }));
+const mockAddMessagingToken = jest.fn((arg: any) => ({
+  type: "user/addMessagingToken",
+  arg,
+  unwrap: jest.fn().mockResolvedValue("token"),
+}));
 const mockLoginFailed = jest.fn(() => ({ type: "user/loginFailed" }));
 const mockInitInvitation = jest.fn((inv: any) => ({
   type: "user/initializeInvitation",
@@ -314,6 +324,7 @@ const mockDispatch = jest.fn();
 (global as any).__splashTestAutoLogin = mockAutoLogin;
 (global as any).__splashTestAnonLogin = mockAnonLogin;
 (global as any).__splashTestUpdateUser = mockUpdateUser;
+(global as any).__splashTestAddMessagingToken = mockAddMessagingToken;
 (global as any).__splashTestLoginFailed = mockLoginFailed;
 (global as any).__splashTestInitInvitation = mockInitInvitation;
 (global as any).__splashTestDispatch = mockDispatch;
@@ -392,6 +403,7 @@ describe("Splash (withSplash HOC)", () => {
     (global as any).__splashTestAutoLogin = mockAutoLogin;
     (global as any).__splashTestAnonLogin = mockAnonLogin;
     (global as any).__splashTestUpdateUser = mockUpdateUser;
+    (global as any).__splashTestAddMessagingToken = mockAddMessagingToken;
     (global as any).__splashTestLoginFailed = mockLoginFailed;
     (global as any).__splashTestInitInvitation = mockInitInvitation;
     (global as any).__splashTestDispatch = mockDispatch;
@@ -632,19 +644,19 @@ describe("Splash (withSplash HOC)", () => {
     // note, so no messaging token was ever persisted anywhere — push
     // notifications could never reach any user.
     describe("messaging token persistence", () => {
-      it("dispatches updateUser with the token when the user has no messagingToken yet", async () => {
+      it("saves the token when the user has no messagingToken yet", async () => {
         renderSplash({
           user: { uid: "user-123", email: "test@example.com" } as any,
         });
         await act(async () => {});
 
-        expect(mockUpdateUser).toHaveBeenCalledWith({
+        expect(mockAddMessagingToken).toHaveBeenCalledWith({
           user: { uid: "user-123", email: "test@example.com" },
-          updates: { messagingToken: ["mock-fcm-token"] },
+          token: "mock-fcm-token",
         });
       });
 
-      it("dispatches updateUser appending the token when the user has a different token", async () => {
+      it("saves the token when the user has a different token", async () => {
         renderSplash({
           user: {
             uid: "user-123",
@@ -654,17 +666,17 @@ describe("Splash (withSplash HOC)", () => {
         });
         await act(async () => {});
 
-        expect(mockUpdateUser).toHaveBeenCalledWith({
+        expect(mockAddMessagingToken).toHaveBeenCalledWith({
           user: {
             uid: "user-123",
             email: "test@example.com",
             messagingToken: ["old-token"],
           },
-          updates: { messagingToken: ["old-token", "mock-fcm-token"] },
+          token: "mock-fcm-token",
         });
       });
 
-      it("does not dispatch updateUser when the token is already persisted", async () => {
+      it("does not save the token when it is already persisted", async () => {
         renderSplash({
           user: {
             uid: "user-123",
@@ -674,17 +686,17 @@ describe("Splash (withSplash HOC)", () => {
         });
         await act(async () => {});
 
-        expect(mockUpdateUser).not.toHaveBeenCalled();
+        expect(mockAddMessagingToken).not.toHaveBeenCalled();
       });
 
-      it("does not dispatch updateUser while a user update is already in progress", async () => {
+      it("does not save the token while a user update is already in progress", async () => {
         renderSplash({
           user: { uid: "user-123", email: "test@example.com" } as any,
           updating: true,
         });
         await act(async () => {});
 
-        expect(mockUpdateUser).not.toHaveBeenCalled();
+        expect(mockAddMessagingToken).not.toHaveBeenCalled();
       });
 
       // Regression coverage (2026-11-11, found by push.sh on the staging
@@ -705,14 +717,14 @@ describe("Splash (withSplash HOC)", () => {
         it("persists the FCM token for that user", async () => {
           const { rerender } = renderSplash({ user: null });
           await act(async () => {});
-          expect(mockUpdateUser).not.toHaveBeenCalled();
+          expect(mockAddMessagingToken).not.toHaveBeenCalled();
 
           signInAfterMount(rerender);
           await act(async () => {});
 
-          expect(mockUpdateUser).toHaveBeenCalledWith({
+          expect(mockAddMessagingToken).toHaveBeenCalledWith({
             user: signedIn,
-            updates: { messagingToken: ["mock-fcm-token"] },
+            token: "mock-fcm-token",
           });
         });
 
@@ -723,14 +735,14 @@ describe("Splash (withSplash HOC)", () => {
 
           signInAfterMount(rerender);
           await act(async () => {});
-          mockUpdateUser.mockClear();
+          mockAddMessagingToken.mockClear();
           await act(async () => {
             await onRefresh("refreshed-token");
           });
 
-          expect(mockUpdateUser).toHaveBeenCalledWith({
+          expect(mockAddMessagingToken).toHaveBeenCalledWith({
             user: signedIn,
-            updates: { messagingToken: ["refreshed-token"] },
+            token: "refreshed-token",
           });
         });
       });
@@ -740,7 +752,7 @@ describe("Splash (withSplash HOC)", () => {
       it("persists the token when the user signs in after Splash mounted", async () => {
         const { mockNavigation, rerender } = renderSplash();
         await act(async () => {});
-        expect(mockUpdateUser).not.toHaveBeenCalled();
+        expect(mockAddMessagingToken).not.toHaveBeenCalled();
 
         (global as any).__splashTestUserState = {
           ...baseUserState,
@@ -749,9 +761,9 @@ describe("Splash (withSplash HOC)", () => {
         rerender(<SplashHOC navigation={mockNavigation as any} />);
         await act(async () => {});
 
-        expect(mockUpdateUser).toHaveBeenCalledWith({
+        expect(mockAddMessagingToken).toHaveBeenCalledWith({
           user: { uid: "user-123", email: "test@example.com" },
-          updates: { messagingToken: ["mock-fcm-token"] },
+          token: "mock-fcm-token",
         });
       });
 
@@ -772,9 +784,9 @@ describe("Splash (withSplash HOC)", () => {
           await onRefresh("refreshed-token");
         });
 
-        expect(mockUpdateUser).toHaveBeenLastCalledWith({
+        expect(mockAddMessagingToken).toHaveBeenLastCalledWith({
           user,
-          updates: { messagingToken: ["old-token", "refreshed-token"] },
+          token: "refreshed-token",
         });
       });
 
@@ -787,14 +799,14 @@ describe("Splash (withSplash HOC)", () => {
           } as any,
         });
         await act(async () => {});
-        mockUpdateUser.mockClear();
+        mockAddMessagingToken.mockClear();
 
         const onRefresh = (mockOnTokenRefresh.mock.calls[0] as any)[0];
         await act(async () => {
           await onRefresh("tok-a");
         });
 
-        expect(mockUpdateUser).not.toHaveBeenCalled();
+        expect(mockAddMessagingToken).not.toHaveBeenCalled();
       });
     });
   });

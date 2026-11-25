@@ -89,10 +89,13 @@
                 <li class="border-top py-3">
                   {{ tier.maxProperties === null ? "Unlimited properties" : (tier.maxProperties === 1 ? "1 property" : "Up to " + tier.maxProperties + " properties") }}
                 </li>
-                <li class="border-top py-3" *ngIf="tier.features.automatedRentCollection">Automated rent collection</li>
-                <li class="border-top py-3" *ngIf="tier.features.complianceExport">Compliance export</li>
-                <li class="border-top py-3" *ngIf="tier.features.analytics">Analytics &amp; ROI reporting</li>
-                <li class="border-top border-bottom py-3" *ngIf="tier.features.whiteLabel">White-label branding</li>
+                <!-- Only what the released apps do (launch item M6). Autopay and
+                     white-label aren't built, whatever the catalog flags say. -->
+                <li class="border-top py-3"
+                    [class.border-bottom]="!tier.features.complianceExport && !tier.features.analytics">Online rent payments by card</li>
+                <li class="border-top py-3" *ngIf="tier.features.complianceExport"
+                    [class.border-bottom]="!tier.features.analytics">Compliance export (coming soon)</li>
+                <li class="border-top border-bottom py-3" *ngIf="tier.features.analytics">Analytics &amp; ROI reporting (coming soon)</li>
               </ul>
             </div>
             <div class="plan-button">
@@ -145,10 +148,13 @@
                 <li class="border-top py-3">
                   {{ tier.maxProperties === null ? "Unlimited properties" : (tier.maxProperties === 1 ? "1 house" : "Up to " + tier.maxProperties + " houses") }}
                 </li>
-                <li class="border-top py-3" *ngIf="tier.features.automatedRentCollection">Automated rent collection</li>
-                <li class="border-top py-3" *ngIf="tier.features.complianceExport">Compliance export</li>
-                <li class="border-top py-3" *ngIf="tier.features.analytics">Analytics &amp; ROI reporting</li>
-                <li class="border-top border-bottom py-3" *ngIf="tier.features.whiteLabel">White-label branding</li>
+                <!-- Only what the released apps do (launch item M6). Autopay and
+                     white-label aren't built, whatever the catalog flags say. -->
+                <li class="border-top py-3"
+                    [class.border-bottom]="!tier.features.complianceExport && !tier.features.analytics">Online rent payments by card</li>
+                <li class="border-top py-3" *ngIf="tier.features.complianceExport"
+                    [class.border-bottom]="!tier.features.analytics">Compliance export (coming soon)</li>
+                <li class="border-top border-bottom py-3" *ngIf="tier.features.analytics">Analytics &amp; ROI reporting (coming soon)</li>
               </ul>
             </div>
             <div class="plan-button">

@@ -26,6 +26,7 @@ import {
 } from "../../state/queries/paymentQueries";
 import FailedPaymentBanner from "../Payments/FailedPaymentBanner";
 import StalePendingBanner from "../Payments/StalePendingBanner";
+import RentRoiCard from "./RentRoiCard";
 import { logException } from "../../util/logging";
 import { toDateSafe } from "../../util/firestore";
 import {
@@ -171,6 +172,13 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
     [guestList],
   );
 
+  // The ROI card's period, the same as the pills': this week or month so far, or all time.
+  // Sent as an instant, so the server windows on the same local boundary as the list below.
+  const periodStart =
+    dateFilter === "all"
+      ? undefined
+      : (dateFilter === "week" ? startOfISOWeek(new Date()) : startOfMonth(new Date())).toISOString();
+
   const filteredPayments = useMemo(() => {
     if (dateFilter === "all") return allPayments;
     const cutoff =
@@ -305,6 +313,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
           houseId={house?.id ?? ""}
           guestNames={guestNames}
           loadError={failedPaymentsError}
+          canResolve={canRecordPayments}
         />
         <StalePendingBanner
           stalePendingPayments={stalePendingPayments}
@@ -335,6 +344,8 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
           ))}
         </View>
+
+        <RentRoiCard houseId={house?.id ?? ""} startAt={periodStart} />
 
         {overdueGuests.length > 0 && (
           <View

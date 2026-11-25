@@ -7,11 +7,30 @@
 # (functions/src/__tests__/deployList.test.ts checks it): a function left off
 # is silently never deployed. A failed batch stops the script with a non-zero
 # exit.
+#
+# Usage: npm run deploy:batched -- --project <firebase project id>
+# The project is required (no .firebaserc default, which is production), and the
+# script builds functions/ first so it never ships a stale or missing lib/.
 set -euo pipefail
+
+PROJECT=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --project) PROJECT="${2:-}"; shift; [[ $# -gt 0 ]] && shift ;;
+    --project=*) PROJECT="${1#--project=}"; shift ;;
+    *) echo "unknown argument: $1" >&2; exit 1 ;;
+  esac
+done
+if [[ -z "$PROJECT" ]]; then
+  echo "usage: deploy-batched.sh --project <firebase project id> (required; there is no default)" >&2
+  exit 1
+fi
 
 # Navigate to project root (parent of scripts/) so firebase.json is found
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR/.."
+
+npm --prefix functions run build
 
 ALL_FUNCTIONS=(
   stripeEvents handleStripeConnectWebhook
@@ -54,7 +73,7 @@ for ((i=0; i<TOTAL; i+=BATCH_SIZE)); do
 
   echo ""
   echo "=== Batch $BATCH_NUM / $TOTAL_BATCHES: ${batch[*]} ==="
-  if ! firebase deploy --only "$only_arg"; then
+  if ! firebase deploy --project "$PROJECT" --only "$only_arg"; then
     echo "✗ Batch $BATCH_NUM failed; stopping. Re-run after fixing (deploys are idempotent)." >&2
     exit 1
   fi

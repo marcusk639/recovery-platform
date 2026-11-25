@@ -11,6 +11,7 @@ import { CommonActions } from "@react-navigation/native";
 import { Routes } from "../../navigation/types";
 import { retrySetupRecovery } from "./setupRecoveryThunk";
 import type { AppLink } from "../../services/appLinks/parseAppLink";
+import { addMessagingToken } from "./userMessagingToken";
 
 /**
  * User State Interface
@@ -381,6 +382,13 @@ const userSlice = createSlice({
         state.updatingFailed = true;
         state.error = action.error;
       });
+
+    builder.addCase(addMessagingToken.fulfilled, (state, action) => {
+      const tokens = state.user?.messagingToken ?? [];
+      if (state.user && !tokens.includes(action.payload)) {
+        state.user.messagingToken = [...tokens, action.payload];
+      }
+    });
 
     // Create User
     builder
