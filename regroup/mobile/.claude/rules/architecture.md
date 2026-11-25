@@ -41,6 +41,7 @@ There is no `uiSlice`, `navigationSlice` or `cacheSlice`.
 | `oxfordQueries`            | `useOfficers`, `useBusinessMeetings`, `useMeetingVotes`, `useElections`, `useEESTransactions`         |
 | `paymentQueries`           | `usePaymentHistory`, `useCreateRentPayment`                                                           |
 | `phaseAdvancementQueries`  | Phase advancement eligibility hooks                                                                   |
+| `rentChargeQueries`        | `useRentPreview` (the House Settings → Rent turn-on preview)                                         |
 | `reportingQueries`         | Admin report and analytics hooks                                                                      |
 | `staffNoteQueries`         | Resident notes and shift log hooks                                                                    |
 | `treasuryQueries`          | Financial record hooks (Oxford treasury)                                                              |
@@ -58,7 +59,7 @@ React Navigation 7 native stack. Route names: `Routes` enum in `src/navigation/t
 - `MainTabParamList` — bottom tabs: House, Guest, Activities, Contacts, HouseChat, Personal
 - `RootStackParamList` — everything else pushed as full-screen modals from any tab
 
-Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetings, OxfordVoting, CharterCompliance, TreasuryDashboard, ResidentPayment, PaymentHistory, PaymentDashboard, RentPayment, HouseSettings, StripeSettings, Notifications, DrugTesting, DrugTestForm, DrugTestHistory, StaffNotes, ResidentIntake, Documents, BalanceDashboard, ApplicationList, ApplicationDetail, GuestImport, AdminReport, PhaseSetup. (`ChoreRotationSetupScreen` exists in `src/screens/HouseSettings/` but is not registered as a route.)
+Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetings, OxfordVoting, CharterCompliance, TreasuryDashboard, ResidentPayment, PaymentHistory, PaymentDashboard, RentPayment, HouseSettings, StripeSettings, RentSettings, Notifications, DrugTesting, DrugTestForm, DrugTestHistory, StaffNotes, ResidentIntake, Documents, BalanceDashboard, ApplicationList, ApplicationDetail, GuestImport, AdminReport, PhaseSetup. (`ChoreRotationSetupScreen` exists in `src/screens/HouseSettings/` but is not registered as a route.)
 
 ## Service Layer
 
@@ -93,6 +94,7 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 | `paywall.ts`                    | `paywallConfigRef` only (the `paywall/config` kill switch) |
 | `phaseAdvancement.ts`           | Phase advancement eligibility + automation                |
 | `receiptService.ts`             | Payment receipt generation                                |
+| `rentCharges.ts`                | `previewRentCharges` callable (price in dollars, rows in cents) |
 | `reportExport.ts`               | PDF/CSV export for activity and compliance reports        |
 | `reportingService.ts`           | Admin analytics and reporting aggregation                 |
 | `setup-wizard.ts`               | House onboarding wizard steps                             |

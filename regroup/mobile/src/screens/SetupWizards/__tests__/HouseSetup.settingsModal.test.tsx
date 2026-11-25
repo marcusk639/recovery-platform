@@ -24,6 +24,12 @@ jest.mock('react-native-modal', () => {
   return ({ children, isVisible }: any) => (isVisible ? <View>{children}</View> : null);
 });
 
+// Only a manager or owner sets rent (rules: rank >= 2); peer leaders open Details too.
+let mockMayEditRent = true;
+jest.mock('../../../state/queries/houseTierQueries', () => ({
+  useMayEditRentMoney: () => mockMayEditRent,
+}));
+
 import { HouseSetup } from '../HouseSetup';
 
 describe('HouseSetup in the House Settings modal (no navigation)', () => {
@@ -65,6 +71,68 @@ describe('HouseSetup in the House Settings modal (no navigation)', () => {
     // Formik validates asynchronously: wait for the error to show.
     await waitFor(() => expect(view.getByText(/required/i)).toBeTruthy());
     expect(props.handleSubmit).not.toHaveBeenCalled();
+  });
+
+  // Rent spec §4.1: the wizard offers the same choice as House Settings → Rent.
+  // 'both' is how the house stores Off (charging off).
+  it('offers Weekly, Monthly and Off for rent', () => {
+    const view = renderInSettingsModal(<HouseSetup {...buildSetupProps(buildSettingsHouse())} />);
+    expect(view.getByTestId('house-rent-weekly')).toBeTruthy();
+    expect(view.getByTestId('house-rent-monthly')).toBeTruthy();
+    expect(view.getByTestId('house-rent-off')).toBeTruthy();
+  });
+
+  it('choosing Weekly saves rentFrequency weekly with the weekly price in dollars', async () => {
+    const props = buildSetupProps(buildSettingsHouse({ weeklyRent: 175 as any }));
+    const view = renderInSettingsModal(<HouseSetup {...props} />);
+    fireEvent.press(view.getByText('Weekly'));
+    fireEvent.press(view.getByTestId('next-step-button'));
+    await waitFor(() => expect(props.handleSubmit).toHaveBeenCalledTimes(1));
+    expect(props.handleSubmit.mock.calls[0][0]).toMatchObject({
+      rentFrequency: 'weekly',
+      weeklyRent: 175,
+    });
+  });
+
+  it('choosing Off saves rentFrequency both', async () => {
+    const props = buildSetupProps(buildSettingsHouse({ rentFrequency: 'monthly' }));
+    const view = renderInSettingsModal(<HouseSetup {...props} />);
+    fireEvent.press(view.getByText('Off'));
+    fireEvent.press(view.getByTestId('next-step-button'));
+    await waitFor(() => expect(props.handleSubmit).toHaveBeenCalledTimes(1));
+    expect(props.handleSubmit.mock.calls[0][0]).toMatchObject({ rentFrequency: 'both' });
+  });
+
+  it('an Oxford house cannot choose Weekly or Monthly (the rules refuse it)', async () => {
+    const props = buildSetupProps(buildSettingsHouse({ houseType: 'oxford' }));
+    const view = renderInSettingsModal(<HouseSetup {...props} />);
+    fireEvent.press(view.getByText('Weekly'));
+    fireEvent.press(view.getByTestId('next-step-button'));
+    await waitFor(() => expect(props.handleSubmit).toHaveBeenCalledTimes(1));
+    expect(props.handleSubmit.mock.calls[0][0]).toMatchObject({ rentFrequency: 'both' });
+  });
+
+  it('a $6,000 monthly price, which the rules allow, still saves', async () => {
+    const props = buildSetupProps(buildSettingsHouse({ monthlyRent: 6000 as any }));
+    const view = renderInSettingsModal(<HouseSetup {...props} />);
+    fireEvent.press(view.getByTestId('next-step-button'));
+    await waitFor(() => expect(props.handleSubmit).toHaveBeenCalledTimes(1));
+    expect(props.handleSubmit.mock.calls[0][0]).toMatchObject({ monthlyRent: 6000 });
+  });
+
+  it("hides the rent fields from a peer leader, and saves the house's rent unchanged", async () => {
+    mockMayEditRent = false;
+    try {
+      const props = buildSetupProps(buildSettingsHouse({ rentFrequency: 'weekly', weeklyRent: 175 as any }));
+      const view = renderInSettingsModal(<HouseSetup {...props} />);
+      expect(view.queryByTestId('house-rent-weekly')).toBeNull();
+      expect(view.queryByText('Weekly Rent')).toBeNull();
+      fireEvent.press(view.getByTestId('next-step-button'));
+      await waitFor(() => expect(props.handleSubmit).toHaveBeenCalledTimes(1));
+      expect(props.handleSubmit.mock.calls[0][0]).toMatchObject({ rentFrequency: 'weekly', weeklyRent: 175 });
+    } finally {
+      mockMayEditRent = true;
+    }
   });
 
   it('still renders, with an inert Cancel, when a caller drops onPrevPress', () => {

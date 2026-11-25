@@ -218,6 +218,17 @@ const HouseSettings: React.FC<Props> = (props) => {
         iconName: 'user',
         color: color.medium_grey,
       },
+      // Rent spec §4.1: with charging off, the entry prompts the manager to set it up.
+      rent: {
+        action: () => navigation.navigate(Routes.RentSettings),
+        label: 'Rent',
+        description:
+          house?.rentFrequency === 'weekly' || house?.rentFrequency === 'monthly'
+            ? 'Rent schedule and price'
+            : 'Not set up: residents are not charged rent',
+        iconName: 'money-bill',
+        color: color.medium_grey,
+      },
       payments: {
         action: () => navigation.navigate(Routes.StripeSettings),
         label: 'Payments',
@@ -265,6 +276,7 @@ const HouseSettings: React.FC<Props> = (props) => {
       setupProps,
       navigation,
       mayViewHouseMoney,
+      house?.rentFrequency,
     ],
   );
 
@@ -307,7 +319,9 @@ const HouseSettings: React.FC<Props> = (props) => {
                   ? 'managers-section'
                   : key === 'guests'
                     ? 'manage-guests-button'
-                    : undefined
+                    : key === 'rent'
+                      ? 'rent-settings-section'
+                      : undefined
               }
             />
           );
