@@ -11,6 +11,8 @@ import {
 import { tierAllows } from "../util/tierPricing";
 import { parseInput } from "../validation";
 import { Cents } from "../util/money";
+import { isHouseMoneyStaff } from "../util/houseAuth";
+import { localDateString, resolveTimeZone } from "../activities/weekSummaryMath";
 
 const rentRoiMetricsSchema = z.object({
   houseId: z.string().min(1),
@@ -102,6 +104,14 @@ function toInstantMs(v: unknown): number | null {
   return null;
 }
 
+// The house-local day a payment was made, to compare with its dueDate (the
+// house-local rent day). A date-only string is already a day and is kept.
+function localPaidDate(v: unknown, timeZone: string): string {
+  if (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) return v;
+  const ms = toInstantMs(v);
+  return ms === null ? "" : localDateString(new Date(ms), timeZone);
+}
+
 // Inclusive [start, end] window check on a YYYY-MM-DD string. Empty bounds are
 // treated as open-ended.
 function inWindow(dateStr: string, start?: string, end?: string): boolean {
@@ -135,10 +145,15 @@ export const rentRoiMetrics = onCall(async (request) => {
   const house = await getHouse(houseId);
   if (!house) throw new HttpsError("not-found", "House not found");
 
-  if (house.superAdminId !== request.auth.uid) {
+  // The owner, or the money staff listHousePayments admits (owner decision
+  // 2026-11-25). Peer leaders see no house money.
+  if (
+    house.superAdminId !== request.auth.uid &&
+    !(await isHouseMoneyStaff(request.auth.uid, houseId, house))
+  ) {
     throw new HttpsError(
       "permission-denied",
-      "Only the house owner can view rent ROI metrics",
+      "Only the house owner and managers can view rent ROI metrics",
     );
   }
 
@@ -221,14 +236,16 @@ export const rentRoiMetrics = onCall(async (request) => {
   const collectedNetCents = Math.max(0, collectedGrossCents - refundedCents);
 
   // #34 on-time rate: only payments with a recorded dueDate are considered. A
-  // payment is on-time when its payment date (createdAt) is on or before the
+  // payment is on-time when its house-local payment day is on or before the
   // due date (YYYY-MM-DD lexical compare — ISO sorts chronologically).
+  const houseZone = resolveTimeZone(house.timezone).timeZone;
   const duePayments = filteredPayments.filter(
     (p) => typeof p.dueDate === "string" && p.dueDate.length > 0,
   );
-  const onTimePayments = duePayments.filter(
-    (p) => toDateStr(p.createdAt) <= (p.dueDate as string).slice(0, 10),
-  );
+  const onTimePayments = duePayments.filter((p) => {
+    const paid = localPaidDate(p.createdAt, houseZone);
+    return paid !== "" && paid <= (p.dueDate as string).slice(0, 10);
+  });
   const duePaymentCount = duePayments.length;
   const onTimeRatePct =
     duePaymentCount > 0

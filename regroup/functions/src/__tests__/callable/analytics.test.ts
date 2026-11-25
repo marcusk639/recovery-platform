@@ -17,12 +17,17 @@ const mockGetHouse = jest.fn();
 const mockGetUser = jest.fn();
 const mockGetGuestsForHouse = jest.fn();
 const mockGetSuccessfulPaymentsForHouse = jest.fn();
+const mockReadRoleTier = jest.fn();
 
 jest.mock("../../api/firestore", () => ({
   getHouse: mockGetHouse,
   getUser: mockGetUser,
   getGuestsForHouse: mockGetGuestsForHouse,
   getSuccessfulPaymentsForHouse: mockGetSuccessfulPaymentsForHouse,
+}));
+
+jest.mock("../../util/houseRoleStore", () => ({
+  readRoleTier: mockReadRoleTier,
 }));
 
 import { rentRoiMetrics } from "../../callable/analytics";
@@ -58,8 +63,30 @@ describe("rentRoiMetrics — auth guards", () => {
     });
   });
 
-  it("throws permission-denied when caller is not the house owner", async () => {
+  it("throws permission-denied when caller is neither the owner nor money staff", async () => {
     mockGetHouse.mockResolvedValue({ ...baseHouse, superAdminId: "other" });
+    mockReadRoleTier.mockResolvedValue(null);
+    await expect(call({ houseId: "house-1" })).rejects.toMatchObject({
+      code: "permission-denied",
+    });
+  });
+
+  // Owner decision 2026-11-25: the same money staff as listHousePayments.
+  it("lets a manager see the owner's metrics, on the owner's plan", async () => {
+    mockGetHouse.mockResolvedValue({ ...baseHouse, superAdminId: "other" });
+    mockReadRoleTier.mockResolvedValue("manager");
+    mockGetUser.mockResolvedValue(userWithTier("traditional", "professional"));
+    mockGetSuccessfulPaymentsForHouse.mockResolvedValue([]);
+    mockGetGuestsForHouse.mockResolvedValue([]);
+    const result = await call({ houseId: "house-1" });
+    expect(result.available).toBe(true);
+    expect(mockReadRoleTier).toHaveBeenCalledWith("house-1", "op-1");
+    expect(mockGetUser).toHaveBeenCalledWith("other");
+  });
+
+  it("refuses a peer leader (no house money for peer leaders)", async () => {
+    mockGetHouse.mockResolvedValue({ ...baseHouse, superAdminId: "other" });
+    mockReadRoleTier.mockResolvedValue("peerLeader");
     await expect(call({ houseId: "house-1" })).rejects.toMatchObject({
       code: "permission-denied",
     });
@@ -363,6 +390,21 @@ describe("rentRoiMetrics — on-time rate (#34)", () => {
     expect(
       result.caveats.some((c: string) => c.includes("recorded due date")),
     ).toBe(true);
+  });
+
+  // dueDate is the house-local rent day, so the payment's day must be too.
+  it("counts a late-evening payment on the due date as on time, in the house's zone", async () => {
+    mockGetHouse.mockResolvedValue({ ...baseHouse, timezone: "America/Los_Angeles" });
+    mockGetUser.mockResolvedValue(userWithTier("traditional", "professional"));
+    mockGetGuestsForHouse.mockResolvedValue([]);
+    mockGetSuccessfulPaymentsForHouse.mockResolvedValue([
+      // 2026-06-05 21:30 in Los Angeles is 2026-06-06 04:30 UTC.
+      { amount: 10000, createdAt: "2026-06-06T04:30:00.000Z", dueDate: "2026-06-05" },
+    ]);
+
+    const result = await call({ houseId: "house-1" });
+    expect(result.duePaymentCount).toBe(1);
+    expect(result.onTimeRatePct).toBe(100);
   });
 
   it("returns onTimeRatePct null when no payment has a dueDate", async () => {

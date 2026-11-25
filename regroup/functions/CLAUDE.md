@@ -162,7 +162,7 @@ and `onTimeRatePct`/`duePaymentCount`. Refunds are recorded by the
 `charge.refunded` webhook handler as `payments.refundedAmountCents` (cents);
 on-time uses `payments.dueDate`, the guest's `rentDueDate` captured at charge time
 in `handlePaymentIntentSucceeded` (an approximation — no per-charge schedule
-history). `hoursSavedEstimate` (#32) credits `MINUTES_SAVED_PER_STRIPE_COLLECTION` (10) minutes per windowed payment with a `stripePaymentIntentId` (autopay or the resident's own Stripe payment; manual records have none), with `automatedCollectionCount`; it is labelled an estimate in `caveats`. The phone's Payment Dashboard shows it in `RentRoiCard` (owner only, plan-gated).
+history). `hoursSavedEstimate` (#32) credits `MINUTES_SAVED_PER_STRIPE_COLLECTION` (10) minutes per windowed payment with a `stripePaymentIntentId` (autopay or the resident's own Stripe payment; manual records have none), with `automatedCollectionCount`; it is labelled an estimate in `caveats`. The phone's Payment Dashboard shows it in `RentRoiCard` (the owner and money staff, i.e. managers, as `listHousePayments` admits; plan-gated). On-time compares the house-local payment day with `dueDate`.
 
 Oxford Network has `availableForSale: false` (P-8) — `isTierAvailableForSale()`
 blocks it in `createOperatorSubscription` checkout while keeping the tier defined.

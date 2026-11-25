@@ -29,7 +29,7 @@ describe('RentRoiCard', () => {
     expect(mockQuery).toHaveBeenCalledWith('h1', '2026-11-01T05:00:00.000Z');
     expect(getByTestId('rent-roi-collected')).toHaveTextContent('$1,250.00Collected');
     expect(getByTestId('rent-roi-on-time')).toHaveTextContent('80%On time');
-    expect(getByTestId('rent-roi-outstanding')).toHaveTextContent('$300.50Outstanding');
+    expect(getByTestId('rent-roi-outstanding')).toHaveTextContent('$300.50Outstanding now');
     expect(getByTestId('rent-roi-hours')).toHaveTextContent('0.5Hours saved (est.)');
     expect(
       getByText(
