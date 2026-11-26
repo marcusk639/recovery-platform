@@ -41,7 +41,7 @@ There is no `uiSlice`, `navigationSlice` or `cacheSlice`.
 | `oxfordQueries`            | `useOfficers`, `useBusinessMeetings`, `useMeetingVotes`, `useElections`, `useEESTransactions`         |
 | `paymentQueries`           | `usePaymentHistory`, `useCreateRentPayment`                                                           |
 | `phaseAdvancementQueries`  | Phase advancement eligibility hooks                                                                   |
-| `rentChargeQueries`        | `useRentPreview` (the House Settings → Rent turn-on preview)                                         |
+| `rentChargeQueries`        | `useRentPreview` (the House Settings → Rent turn-on preview), `useResidentCharges` (own charges)     |
 | `reportingQueries`         | Admin report and analytics hooks                                                                      |
 | `staffNoteQueries`         | Resident notes and shift log hooks                                                                    |
 | `treasuryQueries`          | Financial record hooks (Oxford treasury)                                                              |

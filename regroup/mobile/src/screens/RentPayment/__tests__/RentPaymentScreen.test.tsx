@@ -18,7 +18,7 @@
  */
 
 import React from "react";
-import { render, fireEvent, waitFor, act } from "@testing-library/react-native";
+import { render, fireEvent, waitFor, act, within } from "@testing-library/react-native";
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────
 
@@ -93,6 +93,12 @@ jest.mock("../../../state/queries/paymentQueries", () => ({
     history: (guestId: string) => ["payments", "history", guestId],
     guestBalances: (houseId: string) => ["payments", "guest-balances", houseId],
   },
+}));
+
+// Rent charges beside the payments (owner decision 2026-11-26, rent spec §4.5).
+const mockUseResidentCharges = jest.fn();
+jest.mock("../../../state/queries/rentChargeQueries", () => ({
+  useResidentCharges: (...args: any[]) => mockUseResidentCharges(...args),
 }));
 
 jest.mock("@tanstack/react-query", () => ({
@@ -172,6 +178,7 @@ const mockNavigation = {
 
 // Default happy-path setup
 function setupDefaultMocks() {
+  mockUseResidentCharges.mockReturnValue({ data: [], isError: false });
   mockUsePaymentHistory.mockReturnValue({
     data: [],
     isLoading: false,
@@ -485,6 +492,76 @@ describe("RentPaymentScreen", () => {
     const { getAllByTestId } = renderScreen();
     const rows = getAllByTestId("payment-history-row");
     expect(rows).toHaveLength(2);
+  });
+
+  // ── Rent charges in the history (owner decision 2026-11-26) ──────────────────
+  const rentCharge = (fields: Record<string, unknown> = {}) => ({
+    id: "guest-1_2026-11-16",
+    guestId: "guest-1",
+    houseId: "house-1",
+    amountCents: 17500,
+    daysCovered: 7,
+    daysInPeriod: 7,
+    firstDay: "2026-11-16",
+    lastDay: "2026-11-22",
+    rateSource: "house",
+    ...fields,
+  });
+  const paid = (id: string, createdAt: string): RentPayment =>
+    ({ id, guestId: "guest-1", houseId: "house-1", amount: 10000, status: "succeeded", createdAt }) as RentPayment;
+
+  it("asks for the resident's own charges by house and account", () => {
+    renderScreen();
+    expect(mockUseResidentCharges).toHaveBeenCalledWith({ houseId: "house-1", guestUserId: "user-1" });
+  });
+
+  it('shows "Rent, Nov 16–22" $175.00 between the payments around it, by date', () => {
+    mockUsePaymentHistory.mockReturnValue({
+      data: [paid("late", "2026-11-20T15:00:00.000Z"), paid("early", "2026-11-10T15:00:00.000Z")],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+    mockUseResidentCharges.mockReturnValue({ data: [rentCharge()], isError: false });
+    const view = renderScreen();
+    const row = view.getByTestId("charge-row-guest-1_2026-11-16");
+    expect(within(row).getByText("Rent, Nov 16–22")).toBeTruthy();
+    expect(within(row).getByText("$175.00")).toBeTruthy();
+    const order = view
+      .getAllByTestId(/^(payment-history-row|charge-row-.*)$/)
+      .map((n) => n.props.testID);
+    expect(order).toEqual(["payment-history-row", "charge-row-guest-1_2026-11-16", "payment-history-row"]);
+  });
+
+  it('shows a prorated charge as "5 of 7 days"', () => {
+    mockUseResidentCharges.mockReturnValue({
+      data: [rentCharge({ id: "c5", firstDay: "2026-11-18", daysCovered: 5, amountCents: 12500 })],
+      isError: false,
+    });
+    const view = renderScreen();
+    const row = view.getByTestId("charge-row-c5");
+    expect(within(row).getByText("5 of 7 days")).toBeTruthy();
+    expect(within(row).getByText("$125.00")).toBeTruthy();
+  });
+
+  it("lists charges when there are no payments yet", () => {
+    mockUseResidentCharges.mockReturnValue({ data: [rentCharge()], isError: false });
+    const view = renderScreen();
+    expect(view.queryByTestId("payment-history-empty")).toBeNull();
+    expect(view.getByTestId("charge-row-guest-1_2026-11-16")).toBeTruthy();
+  });
+
+  it("keeps the payments and says so when the charges can't be read", () => {
+    mockUsePaymentHistory.mockReturnValue({
+      data: [paid("p1", "2026-11-20T15:00:00.000Z")],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+    mockUseResidentCharges.mockReturnValue({ data: undefined, isError: true });
+    const view = renderScreen();
+    expect(view.getAllByTestId("payment-history-row")).toHaveLength(1);
+    expect(view.getByText("Couldn't load rent charges.")).toBeTruthy();
   });
 
   it("shows correct status badge for succeeded payment", () => {

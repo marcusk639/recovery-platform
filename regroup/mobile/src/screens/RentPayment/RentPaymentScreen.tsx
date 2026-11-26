@@ -73,6 +73,9 @@ import {
   formatCentsAsCurrency,
 } from "./rentPaymentHelpers";
 import PaymentRow from "./PaymentRow";
+import ChargeRow from "../Payments/ChargeRow";
+import { buildHistoryItems } from "../Payments/paymentHistoryItems";
+import { useResidentCharges } from "../../state/queries/rentChargeQueries";
 export { formatCurrency };
 
 // ─── Stripe import — wrapped defensively, matching ResidentPayment.tsx, so
@@ -153,6 +156,13 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
     houseId: house.id,
     guestUserId: guest.userId,
   });
+  // Rent charges sit between the payments by date (rent spec §4.5), so the resident
+  // sees why the balance went up. A failed read leaves the payments and says so.
+  const { data: charges, isError: chargesError } = useResidentCharges({
+    houseId: house.id,
+    guestUserId: guest.userId,
+  });
+  const historyItems = buildHistoryItems(paymentHistory ?? [], charges ?? []);
 
   const queryClient = useQueryClient();
   const {
@@ -499,7 +509,7 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
                 />
               </TouchableOpacity>
             </View>
-          ) : !paymentHistory || paymentHistory.length === 0 ? (
+          ) : historyItems.length === 0 ? (
             <View testID="payment-history-empty">
               <RatsText
                 translate={false}
@@ -508,10 +518,23 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
               />
             </View>
           ) : (
-            paymentHistory.map((payment) => (
-              <PaymentRow key={payment.id} payment={payment} />
-            ))
+            historyItems.map((item) =>
+              item.kind === "charge" ? (
+                <ChargeRow key={item.key} charge={item.charge} />
+              ) : (
+                <PaymentRow key={item.key} payment={item.payment} />
+              )
+            )
           )}
+          {chargesError ? (
+            <View testID="rent-charges-error">
+              <RatsText
+                translate={false}
+                text="Couldn't load rent charges."
+                style={styles.historyErrorText}
+              />
+            </View>
+          ) : null}
         </View>
 
       </ScrollView>
