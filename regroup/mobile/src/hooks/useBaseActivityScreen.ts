@@ -154,10 +154,15 @@ export const useBaseActivityScreen = (
   const challengeDispute = useCallback(
     async (activity: Activity, message: string): Promise<void> => {
       const _user = guests[user.guestId] || userAsAdmin;
+      // Until the guest or admin record loads there is no one to sign the
+      // challenge with (P5 Task 19); handleDisputeSubmission shows the error.
+      if (!_user?.id) {
+        throw new Error('Your account is still loading. Try again in a moment.');
+      }
       const dispute = disputes[activity.disputeId!];
 
       const challenge: DisputeChallenge = {
-        challenger: _user?.id || '',
+        challenger: _user.id,
         message,
       };
 

@@ -169,7 +169,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import housesReducer from "../../../state/slices/housesSlice";
 import guestsReducer from "../../../state/slices/guestsSlice";
 import userReducer from "../../../state/slices/userSlice";
-import adminReducer from "../../../state/slices/adminSlice";
+import adminReducer, { setUserAsAdmin } from "../../../state/slices/adminSlice";
 import authReducer from "../../../state/slices/authSlice";
 import themeReducer from "../../../state/slices/themeSlice";
 import chatReducer from "../../../state/slices/chatSlice";
@@ -572,7 +572,6 @@ describe("PersonalScreen", () => {
   // ─── Admin-gated options ───────────────────────────────────────────────────
   describe("admin-gated options", () => {
     it('hides "Add Home" when no admin entity exists (guest user)', () => {
-      // disabled: !admin || !admin.superAdmin — when admin is null, disabled = true
       const { queryByText } = renderScreen({
         user: BASE_USER_GUEST,
         admin: null,
@@ -581,14 +580,43 @@ describe("PersonalScreen", () => {
       expect(queryByText("Add Home")).toBeNull();
     });
 
-    it('shows "Add Home" when an admin entity exists (superAdmin property present)', () => {
-      // disabled: !admin || !admin.superAdmin — admin.superAdmin = [] is truthy, so disabled = false
-      const { getByText } = renderScreen({ admin: BASE_ADMIN });
+    // P5 Task 19, an intended behaviour change: `superAdmin: []` is a manager
+    // or peer leader, who owns no house and can't add one. It used to show,
+    // because an empty array is truthy.
+    it('hides "Add Home" from a manager (superAdmin: [])', () => {
+      const { queryByText } = renderScreen({ admin: BASE_ADMIN });
+      expect(queryByText("Add Home")).toBeNull();
+    });
+
+    it('shows "Add Home" to the owner of a house', () => {
+      const { getByText } = renderScreen({ admin: SUPER_ADMIN });
       expect(getByText("Add Home")).toBeTruthy();
     });
 
-    it('shows "Add Home" for super-admin', () => {
-      const { getByText } = renderScreen({ admin: SUPER_ADMIN });
+    it('shows "Add Home" to a new operator with no house yet', () => {
+      const { getByText } = renderScreen({
+        user: { ...BASE_USER_ADMIN, potentialSuperAdmin: true },
+        admin: null,
+      });
+      expect(getByText("Add Home")).toBeTruthy();
+    });
+
+    it('hides "Add Home" until the admin record loads, then shows it to an owner', () => {
+      const store = buildStore({ admin: null });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      const { queryByText, getByText } = render(
+        <QueryClientProvider client={queryClient}>
+          <Provider store={store}>
+            <PersonalScreen navigation={mockNavigation} />
+          </Provider>
+        </QueryClientProvider>
+      );
+      expect(queryByText("Add Home")).toBeNull();
+      act(() => {
+        store.dispatch(setUserAsAdmin(SUPER_ADMIN));
+      });
       expect(getByText("Add Home")).toBeTruthy();
     });
 
