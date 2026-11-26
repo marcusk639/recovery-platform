@@ -13,22 +13,17 @@ import { logException } from '../util/logging';
  */
 export type WebBillingPage = 'pricing' | 'my-account';
 
-export const webBillingUrl = (page: WebBillingPage, opts: { email?: string } = {}): string => {
-  const email = opts.email?.trim();
-  const emailParam = email ? `&email=${encodeURIComponent(email)}` : '';
-  return `${webBaseUrl()}/${page}?from=app${emailParam}`;
-};
+// Only from=app: nothing about the user (an email, say) goes into the URL,
+// where it would land in browser history.
+export const webBillingUrl = (page: WebBillingPage): string => `${webBaseUrl()}/${page}?from=app`;
 
 /** Opens a billing page in the browser. Returns false, after an alert, when it can't. */
-export const openWebBilling = async (
-  page: WebBillingPage,
-  opts: { email?: string } = {},
-): Promise<boolean> => {
+export const openWebBilling = async (page: WebBillingPage): Promise<boolean> => {
   try {
-    await Linking.openURL(webBillingUrl(page, opts));
+    await Linking.openURL(webBillingUrl(page));
     return true;
   } catch {
-    // Not the caught error: it can carry the URL, and the URL the email.
+    // A fixed message, not the caught error, which can carry the URL.
     logException(new Error(`openWebBilling: the browser did not open ${page}`));
     Alert.alert('Unable to open browser', `Please visit ${webBaseUrl()}/${page}.`);
     return false;

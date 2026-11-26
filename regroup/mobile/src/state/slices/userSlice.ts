@@ -146,7 +146,7 @@ export const logout = createAsyncThunk(
           CommonActions.reset({
             index: 0,
             routes: [
-              { name: Routes.PriorAuth, state: { routes: [{ name: Routes.InitialLanding }] } },
+              { name: Routes.PriorAuth, state: { index: 0, routes: [{ name: Routes.InitialLanding }] } },
             ],
           })
         );
