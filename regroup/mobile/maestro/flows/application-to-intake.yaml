@@ -1,0 +1,140 @@
+# XROLE-002 — Cross-role: a prospective resident applies in the app, and the
+# operator's approval opens intake pre-filled (P5 Task 16, D1 = option (a)).
+#   1. Signed out (the app's anonymous session): house search → E2E Test House →
+#      APPLY → the 3 steps → submit → the status screen shows it pending, and
+#      the application is in Firestore under the house.
+#   2. The manager: Applications → that application → Approve → intake opens
+#      with the applicant's name filled in.
+# Known blocker (EMU-009): the rules let only a house's own members read it, so
+# a signed-out visitor's house search lists nothing and step 1 stops at the
+# house card. This flow is the acceptance test for that fix too.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/application-to-intake.yaml
+appId: ${APP_ID}
+tags:
+  - cross-role
+  - applications
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+# 1. The prospective resident, from a cold signed-out launch.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - launchApp:
+          clearState: true
+          permissions:
+            location: inuse
+          arguments:
+            IS_E2E_TEST: "1"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - launchApp:
+          clearState: true
+          permissions:
+            location: allow
+          arguments:
+            IS_E2E_TEST: "1"
+- setLocation:
+    latitude: 30.2672
+    longitude: -97.7431
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "landing-role-guest"
+- tapOn:
+    id: "nav-house-search"
+- extendedWaitUntil:
+    visible:
+      id: "house-search-screen"
+    timeout: 20000
+- extendedWaitUntil:
+    visible:
+      id: "house-card-test-house-123"
+    timeout: 30000
+- tapOn:
+    id: "house-details-button-test-house-123"
+- extendedWaitUntil:
+    visible:
+      id: "apply-button"
+    timeout: 30000
+- tapOn:
+    id: "apply-button"
+- extendedWaitUntil:
+    visible:
+      id: "input-name"
+    timeout: 15000
+- tapOn:
+    id: "input-name"
+- inputText: "Jordan Applicant"
+- tapOn:
+    id: "input-email"
+- inputText: "e2e-applicant@rats-e2e.com"
+- hideKeyboard
+- tapOn:
+    id: "btn-next"
+- tapOn:
+    id: "btn-next"
+- tapOn:
+    id: "btn-submit"
+- extendedWaitUntil:
+    visible:
+      id: "application-status-screen"
+    timeout: 30000
+- assertVisible:
+    id: "application-status-badge"
+- assertVisible: "Pending Review"
+- runScript:
+    file: ../scripts/maestro-js/count-where.js
+    env:
+      PARENT: houses/test-house-123
+      COLLECTION: applications
+      FIELD: applicantEmail
+      VALUE: e2e-applicant@rats-e2e.com
+- assertTrue:
+    condition: ${output.count === 1}
+    label: the application is stored once, under the house
+# 2. The operator approves it and intake opens pre-filled.
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: ".*Review resident applications.*"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    text: ".*Review resident applications.*"
+- extendedWaitUntil:
+    visible: "Jordan Applicant"
+    timeout: 30000
+- tapOn: "Jordan Applicant"
+- tapOn:
+    id: "btn-approve"
+- extendedWaitUntil:
+    visible:
+      text: "Approve"
+    timeout: 15000
+- tapOn:
+    text: "Approve"
+- extendedWaitUntil:
+    visible:
+      id: "intake-form-screen"
+    timeout: 30000
+- assertVisible:
+    id: "intake-first-name-input"
+    text: "Jordan"
+- assertVisible:
+    id: "intake-last-name-input"
+    text: "Applicant"
+- runFlow:
+    file: ../subflows/logout.yaml

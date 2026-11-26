@@ -15,6 +15,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { color } from '../../styles/theme';
 import { useSubmitApplication } from '../../state/queries/applicationQueries';
 import { ProgramType } from '../../entities/Application';
+import { Routes } from '../../navigation/types';
 
 type Step = 'contact' | 'sobriety' | 'review';
 const STEPS: Step[] = ['contact', 'sobriety', 'review'];
@@ -69,9 +70,17 @@ export default function ApplyScreen() {
       return;
     }
     try {
-      await submitMutation.mutateAsync({ houseId, data: form });
-      // Routes.ApplicationStatus will be added in Task 9 navigation wiring
-      navigation.navigate('applicationStatus', { houseId, houseName });
+      const applicationId = await submitMutation.mutateAsync({
+        houseId,
+        data: form,
+      });
+      // replace, not navigate: Back from the status screen must not reopen a
+      // submitted form.
+      navigation.replace(Routes.ApplicationStatus, {
+        houseId,
+        houseName,
+        applicationId,
+      });
     } catch {
       Alert.alert('Error', 'Could not submit application. Please try again.');
     }

@@ -420,6 +420,62 @@ describe("houses/{houseId}/applications/{appId}", () => {
         }),
       );
     });
+
+    // P5 Task 16 (D1 = option (a)): a prospective resident applies on the
+    // app's anonymous session, so the create is pinned to what
+    // submitApplication writes.
+    const submitted = (uid: string, extra: Record<string, unknown> = {}) => ({
+      id: APP_ID,
+      houseId: HOUSE_ID,
+      applicantUid: uid,
+      applicantName: "Pat Lee",
+      applicantEmail: "pat@rats-e2e.com",
+      applicantPhone: "512-555-0100",
+      sobrietyDate: "2026-01-01",
+      programType: "AA",
+      currentSituation: "Looking for a bed.",
+      references: "None",
+      status: "pending",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      ...extra,
+    });
+
+    it("allows an anonymous session to submit an application", async () => {
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {
+        firebase: { sign_in_provider: "anonymous" },
+      });
+      await assertSucceeds(setDoc(appDoc(ctx), submitted(APPLICANT_UID)));
+    });
+
+    it("denies a create carrying a field outside the allowlist", async () => {
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {
+        firebase: { sign_in_provider: "anonymous" },
+      });
+      await assertFails(
+        setDoc(appDoc(ctx), submitted(APPLICANT_UID, { operatorNote: "approve me" })),
+      );
+      await assertFails(
+        setDoc(appDoc(ctx), submitted(APPLICANT_UID, { reviewedBy: ADMIN_UID })),
+      );
+    });
+
+    it("denies an applicant approving their own application at create", async () => {
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
+      await assertFails(
+        setDoc(appDoc(ctx), submitted(APPLICANT_UID, { status: "approved" })),
+      );
+    });
+
+    it("denies a create naming another house or another id", async () => {
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
+      await assertFails(
+        setDoc(appDoc(ctx), submitted(APPLICANT_UID, { houseId: HOUSE_ID_OTHER })),
+      );
+      await assertFails(
+        setDoc(appDoc(ctx), submitted(APPLICANT_UID, { id: "some-other-id" })),
+      );
+    });
   });
 
   describe("read", () => {

@@ -2,6 +2,7 @@ import {
   collection,
   collectionGroup,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -69,6 +70,24 @@ export async function listHouseApplications(
   } catch (error) {
     logException(error);
     throw new Error('Failed to load applications.');
+  }
+}
+
+/**
+ * One application, read by its path. The applicant reads their own and house
+ * admins read their house's (the applications read rule). Null when it does
+ * not exist.
+ */
+export async function getApplication(
+  houseId: string,
+  appId: string,
+): Promise<HouseApplication | null> {
+  try {
+    const snap = await getDoc(doc(applicationsCollection(houseId), appId));
+    return snap.exists() ? (snap.data() as HouseApplication) : null;
+  } catch (error) {
+    logException(error);
+    throw new Error('Failed to load the application.');
   }
 }
 

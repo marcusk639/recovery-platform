@@ -19,6 +19,8 @@ import { color, normalize, fontSize, fontFamily } from '../../styles/theme';
 import { Guest } from '../../entities/Guest';
 import { useCreateGuest } from '../../state/queries/guestQueries';
 import { useData } from '../../context/DataContext';
+import { useApplication } from '../../state/queries/applicationQueries';
+import { prefillFromApplication } from './prefillFromApplication';
 import { logException } from '../../util/logging';
 
 const STEP_LABELS = [
@@ -83,6 +85,22 @@ const IntakeFormScreen = () => {
   // could admit the same person twice (#217). The ref is set synchronously.
   const submittingRef = useRef(false);
   const houseId = route.params?.houseId ?? '';
+  // Opened from an approved application (ApplicationDetail): start from what
+  // the applicant entered. Fills only fields staff have not typed in yet.
+  const applicationId: string = route.params?.applicationId ?? '';
+  const { data: application } = useApplication(houseId, applicationId);
+  const [prefilledFrom, setPrefilledFrom] = useState<string | null>(null);
+  if (application && prefilledFrom !== application.id) {
+    setPrefilledFrom(application.id);
+    const prefill = prefillFromApplication(application);
+    setValues(prev => {
+      const next = { ...prev };
+      (Object.keys(prefill) as (keyof typeof prefill)[]).forEach(key => {
+        if (!next[key].trim()) next[key] = prefill[key];
+      });
+      return next;
+    });
+  }
 
   const updateField = (field: keyof IntakeFormValues, value: string) => {
     setValues(prev => ({ ...prev, [field]: value }));

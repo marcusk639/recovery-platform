@@ -264,7 +264,11 @@ export type RootStackParamList = {
 
   // Application screens
   [Routes.Apply]: { houseId: string; houseName: string };
-  [Routes.ApplicationStatus]: { houseId: string; houseName?: string };
+  [Routes.ApplicationStatus]: {
+    houseId: string;
+    houseName?: string;
+    applicationId?: string;
+  };
   [Routes.ApplicationList]: undefined;
   [Routes.ApplicationDetail]: { houseId: string; appId: string };
 };

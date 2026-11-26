@@ -8,7 +8,10 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { color } from '../../styles/theme';
-import { useMyApplications } from '../../state/queries/applicationQueries';
+import {
+  useApplication,
+  useMyApplications,
+} from '../../state/queries/applicationQueries';
 import { ApplicationStatus } from '../../entities/Application';
 import { Routes } from '../../navigation/types';
 
@@ -29,10 +32,17 @@ const STATUS_COLOR: Record<ApplicationStatus, string> = {
 export default function ApplicationStatusScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { houseId, houseName } = route.params ?? {};
+  const { houseId, houseName, applicationId } = route.params ?? {};
 
-  const { data: applications, isLoading } = useMyApplications();
-  const thisApp = applications?.find(a => a.houseId === houseId);
+  // Read the submitted application by its path when we have its id (ApplyScreen
+  // passes it). The collection-group list is the fallback only: no rule covers
+  // a collection-group read of applications, so it is refused.
+  const byId = useApplication(houseId ?? '', applicationId ?? '');
+  const mine = useMyApplications(!applicationId);
+  const thisApp = applicationId
+    ? byId.data ?? undefined
+    : mine.data?.find(a => a.houseId === houseId);
+  const isLoading = applicationId ? byId.isLoading : mine.isLoading;
 
   if (isLoading) {
     return (
@@ -43,7 +53,7 @@ export default function ApplicationStatusScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="application-status-screen">
       <Text style={styles.title}>
         {thisApp ? 'Your Application' : 'Application Submitted'}
       </Text>
@@ -52,6 +62,7 @@ export default function ApplicationStatusScreen() {
       {thisApp ? (
         <>
           <View
+            testID="application-status-badge"
             style={[
               styles.badge,
               { backgroundColor: STATUS_COLOR[thisApp.status] },
@@ -82,7 +93,9 @@ export default function ApplicationStatusScreen() {
 
       <TouchableOpacity
         style={styles.secondaryBtn}
-        onPress={() => navigation.navigate(Routes.HouseSearch)}>
+        onPress={() =>
+          navigation.navigate(Routes.PriorAuth, { screen: Routes.HouseSearch })
+        }>
         <Text style={styles.secondaryBtnText}>Apply to Another House</Text>
       </TouchableOpacity>
     </View>

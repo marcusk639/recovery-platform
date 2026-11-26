@@ -651,9 +651,21 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // Resident applications: applicant creates own; admin reads + updates status
+      // Resident applications: applicant creates own; admin reads + updates status.
+      // Any session may apply, the app's anonymous one included (P5 D1 = option
+      // (a)), so a create carries exactly the fields submitApplication writes
+      // (services/applications.ts), for this house, as pending: no operator
+      // fields (operatorNote, reviewedBy, ...) and no self-approval.
       match /applications/{appId} {
-        allow create: if signedIn() && request.resource.data.applicantUid == request.auth.uid;
+        allow create: if signedIn()
+          && request.resource.data.applicantUid == request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'id', 'houseId', 'applicantUid', 'applicantName', 'applicantEmail',
+            'applicantPhone', 'sobrietyDate', 'programType', 'currentSituation',
+            'references', 'status', 'createdAt', 'updatedAt'])
+          && request.resource.data.houseId == houseId
+          && request.resource.data.get('id', appId) == appId
+          && request.resource.data.status == 'pending';
         allow read: if signedIn() && (resource.data.applicantUid == request.auth.uid || isAdmin([houseId]));
         allow update: if isAdmin([houseId]);
         allow delete: if false;
