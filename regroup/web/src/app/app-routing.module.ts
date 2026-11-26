@@ -60,11 +60,9 @@ export const routes: Routes = [
   { path: 'checkout-return', component: AppLinkLandingComponent },
   { path: 'app', children: [{ path: '**', component: AppLinkLandingComponent }] },
   { path: 'my-account', component: MyAccountComponent, canActivate: [AuthGuard] },
-  // The mobile app's "Manage Subscription" button deep-links to /billing — a
-  // literal path, origin-only from env (SubscriptionRequiredScreen.tsx:25). The
-  // route was specified in regroup/mobile/docs/superpowers/specs/
-  // 2026-05-19-subscription-paywall-design.md but never built. my-account hosts
-  // the Stripe billing portal (my-account.component.ts:76).
+  // Store builds before launch P5 open /billing from "Manage Subscription";
+  // current builds open /my-account?from=app (mobile services/webBilling.ts).
+  // my-account hosts the Stripe billing portal.
   { path: 'billing', redirectTo: 'my-account', pathMatch: 'full' },
   // Catch-all, and it MUST stay last. Without it the router throws "Cannot match
   // any routes" on any unknown URL. Client-side that is a blank page; under SSR

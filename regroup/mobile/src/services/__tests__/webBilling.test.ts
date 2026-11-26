@@ -28,12 +28,11 @@ describe('webBillingUrl', () => {
     expect(webBillingUrl('pricing')).toBe('https://regroup-e2e.web.app/pricing?from=app');
   });
 
-  it('adds an encoded email when given, and nothing for a blank one', () => {
+  it('carries nothing but from=app in the query', () => {
     delete process.env.RATS_WEB_URL;
-    expect(webBillingUrl('pricing', { email: ' a+b@rats-e2e.com ' })).toBe(
-      'https://regroup-app.com/pricing?from=app&email=a%2Bb%40rats-e2e.com',
-    );
-    expect(webBillingUrl('pricing', { email: '  ' })).toBe('https://regroup-app.com/pricing?from=app');
+    for (const page of PAGES) {
+      expect([...new URL(webBillingUrl(page)).searchParams.keys()]).toEqual(['from']);
+    }
   });
 
   // Review Focus 1: a claimed path would reopen the app instead of the browser.
@@ -60,15 +59,15 @@ describe('openWebBilling', () => {
     expect(open).toHaveBeenCalledWith('https://regroup-app.com/my-account?from=app');
   });
 
-  it('alerts and returns false when the browser does not open, logging no URL or email', async () => {
+  it('alerts and returns false when the browser does not open, logging no URL', async () => {
     delete process.env.RATS_WEB_URL;
     jest.spyOn(Linking, 'openURL').mockRejectedValueOnce(
-      new Error('cannot open https://regroup-app.com/pricing?from=app&email=x%40rats-e2e.com'),
+      new Error('cannot open https://regroup-app.com/pricing?from=app'),
     );
     const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-    await expect(openWebBilling('pricing', { email: 'x@rats-e2e.com' })).resolves.toBe(false);
+    await expect(openWebBilling('pricing')).resolves.toBe(false);
     expect(alert).toHaveBeenCalledWith('Unable to open browser', 'Please visit https://regroup-app.com/pricing.');
     const logged = String((logException as jest.Mock).mock.calls[0][0]);
-    expect(logged).not.toMatch(/rats-e2e|email|https?:/);
+    expect(logged).not.toMatch(/https?:/);
   });
 });

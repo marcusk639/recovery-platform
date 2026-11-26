@@ -10,13 +10,10 @@ interface Props {
 }
 
 /**
- * Hosts the sign-up WebView was allowed to load (kept as a tested guard
- * for any future in-app page; the screen itself now links out). This screen only ever loads the
- * Regroup pricing/signup page; a hardcoded dev URL (rats-dev.web.app) used
- * to sit here unconditionally, meaning any release build accidentally
- * pointed at it would load an unvetted page with no restriction on what it
- * could send back via postMessage. Adding hosts here is a security-impacting
- * change — review with care.
+ * Origins the operator sign-up page may come from. The screen below links out
+ * to the browser and loads nothing itself; this fail-closed check is kept, with
+ * its tests, for any future in-app page. Adding hosts here is a
+ * security-impacting change: review with care.
  */
 const SIGNUP_ORIGIN_ALLOWLIST = ["https://regroup-app.com"];
 
