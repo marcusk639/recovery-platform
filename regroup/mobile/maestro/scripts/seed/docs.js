@@ -221,6 +221,33 @@ function payments(Timestamp, now) {
   ];
 }
 
+/**
+ * One rent charge for resident A, as chargeResident writes it (functions
+ * src/rent/chargeResident.ts): a full week at $175.00, in CENTS. Fixed dates, so
+ * guest-payment-history.yaml can assert "Rent, Nov 16–22" on any run day. Only the
+ * record: rentOwed is left as the payment flows expect it.
+ */
+function rentCharges(now) {
+  return [
+    {
+      // The server's id: `${guestId}_${from}` (chargeDocId).
+      id: 'guest-a_2026-11-16',
+      guestId: 'guest-a',
+      houseId: HOUSE,
+      guestUserId: uidOf('guest-a'),
+      from: '2026-11-16',
+      through: '2026-11-22',
+      daysCovered: 7,
+      daysInPeriod: 7,
+      amountCents: 17500,
+      rateCents: 17500,
+      rateSource: 'house',
+      frequency: 'weekly',
+      createdAtMs: now,
+    },
+  ];
+}
+
 /** A pending application, for operator-applications.yaml. */
 function application(now) {
   return {
@@ -240,4 +267,17 @@ function application(now) {
   };
 }
 
-module.exports = { application, HOUSE, OXFORD, OXFORD_NEW, uidOf, iso, operator, resident, house, activity, payments };
+module.exports = {
+  application,
+  HOUSE,
+  OXFORD,
+  OXFORD_NEW,
+  uidOf,
+  iso,
+  operator,
+  resident,
+  house,
+  activity,
+  payments,
+  rentCharges,
+};

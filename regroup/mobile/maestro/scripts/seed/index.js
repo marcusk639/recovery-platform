@@ -147,6 +147,10 @@ async function main() {
   for (const p of d.payments(Timestamp, now)) {
     await db.doc(`payments/${p.id}`).set(p);
   }
+  // Server-written in the app (rentCharges is client read-only); the Admin SDK may.
+  for (const c of d.rentCharges(now)) {
+    await db.doc(`rentCharges/${c.id}`).set(c);
+  }
 
   await db.doc(`houses/${d.HOUSE}/applications/test-app-1`).set(d.application(now));
 

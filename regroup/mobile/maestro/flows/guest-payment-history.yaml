@@ -31,9 +31,13 @@ tags:
     visible:
       id: "payment-history-screen"
     timeout: 30000
-# This resident's two seeded payments, and not another resident's.
-- assertVisible:
-    id: "payment-row-e2e-pay-a-latest"
+# This resident's two seeded payments, and not another resident's. Wait for the
+# first: on Android the list can show "No payments found." for a moment before
+# the records arrive (seen 2026-11-25), so an immediate assert raced it.
+- extendedWaitUntil:
+    visible:
+      id: "payment-row-e2e-pay-a-latest"
+    timeout: 20000
 - assertVisible:
     text: ".*22[.]22.*"
 - assertVisible:
@@ -44,5 +48,16 @@ tags:
     id: "payment-row-e2e-pay-b"
 - assertNotVisible:
     id: "payment-history-empty"
+# The seeded rent charge (seed docs.js rentCharges) shows beside the payments,
+# so the resident sees why the balance went up (rent spec §4.5, launch plan Task 24).
+- scrollUntilVisible:
+    element:
+      id: "charge-row-guest-a_2026-11-16"
+    direction: DOWN
+    timeout: 10000
+- assertVisible:
+    text: "Rent, Nov 16–22"
+- assertVisible:
+    text: ".*175[.]00.*"
 - runFlow:
     file: ../subflows/logout.yaml
