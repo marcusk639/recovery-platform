@@ -28,21 +28,69 @@ const REQUIRED_HEADERS = [
   'drugOfChoice',
 ];
 
+/** A problem with the CSV itself, worded for the operator (P5 Task 17). */
+export class GuestCsvError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'GuestCsvError';
+  }
+}
+
+/**
+ * Splits CSV text into records of fields: the RFC 4180 subset a spreadsheet
+ * export uses. A field in double quotes may hold commas, line breaks and
+ * doubled quotes (""); CRLF and LF both end a record. Blank records are dropped.
+ */
+function splitCsvRecords(text: string): string[][] {
+  const records: string[][] = [];
+  let record: string[] = [];
+  let field = '';
+  let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (quoted) {
+      if (ch === '"' && text[i + 1] === '"') {
+        field += '"';
+        i++;
+      } else if (ch === '"') {
+        quoted = false;
+      } else {
+        field += ch;
+      }
+    } else if (ch === '"') {
+      quoted = true;
+    } else if (ch === ',') {
+      record.push(field);
+      field = '';
+    } else if (ch === '\n' || ch === '\r') {
+      if (ch === '\r' && text[i + 1] === '\n') i++;
+      record.push(field);
+      records.push(record);
+      record = [];
+      field = '';
+    } else {
+      field += ch;
+    }
+  }
+  record.push(field);
+  records.push(record);
+  return records.filter(r => r.some(v => v.trim() !== ''));
+}
+
 export function parseGuestCsv(csvText: string): GuestImportRow[] {
-  const lines = csvText.trim().split('\n');
+  const lines = splitCsvRecords(csvText);
   if (lines.length < 2) return [];
 
-  const headers = lines[0].split(',').map(h => h.trim());
+  const headers = lines[0].map(h => h.trim());
   const missingHeaders = REQUIRED_HEADERS.filter(h => !headers.includes(h));
   if (missingHeaders.length > 0) {
-    throw new Error(
-      `CSV is missing required columns: ${missingHeaders.join(', ')}`,
-    );
+    const plural = missingHeaders.length > 1 ? 's' : '';
+    throw new GuestCsvError(`Missing column${plural}: ${missingHeaders.join(', ')}`);
   }
 
   const rows: GuestImportRow[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(',').map(v => v.trim());
+    const values = lines[i].map(v => v.trim());
     const record: Record<string, string> = {};
     headers.forEach((h, idx) => {
       record[h] = values[idx] ?? '';

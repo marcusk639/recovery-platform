@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render as rtlRender, fireEvent, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import GuestImportScreen from '../GuestImportScreen';
 import * as DocumentPicker from '@react-native-documents/picker';
 import * as importService from '../../../services/guestImport';
@@ -18,7 +19,20 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: mockGoBack }),
 }));
 
-(useData as jest.Mock).mockReturnValue({ house: { id: 'house-1' } });
+// The screen reads DataContext's currentHouse; DataContext has no `house` (P5 Task 17).
+(useData as jest.Mock).mockReturnValue({ currentHouse: { id: 'house-1' } });
+
+let queryClient: QueryClient;
+const render = (ui: React.ReactElement) => {
+  queryClient = new QueryClient();
+  return rtlRender(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+};
+jest.mock('../../../components/screen-header', () => {
+  const { Text } = require('react-native');
+  return ({ header, renderBackButton }: any) => (
+    <Text testID={renderBackButton ? 'header-with-back' : 'header'}>{header}</Text>
+  );
+});
 (importService.parseGuestCsv as jest.Mock).mockReturnValue([
   {
     firstName: 'Jane',
@@ -129,4 +143,46 @@ it('reports a failed local copy', async () => {
 
   expect(RNFS.readFile).not.toHaveBeenCalled();
   expect(logException).toHaveBeenCalledWith(expect.any(Error), 'GuestImportScreen: keepLocalCopy');
+});
+
+// ─── P5 Task 17 ──────────────────────────────────────────────────────────────
+
+it('imports into the selected house and refreshes its guest list', async () => {
+  (DocumentPicker.pick as jest.Mock).mockResolvedValue([{ uri: 'content://csv/1', name: 'guests.csv' }]);
+  const RNFS = require('@dr.pogodin/react-native-fs');
+  RNFS.readFile.mockResolvedValue(CSV);
+  (importService.importGuestsFromRows as jest.Mock).mockClear();
+
+  const { getByTestId, getByText } = render(<GuestImportScreen />);
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries');
+  fireEvent.press(getByTestId('pick-csv-button'));
+  await waitFor(() => getByTestId('import-button'));
+  fireEvent.press(getByTestId('import-button'));
+  await waitFor(() => expect(getByText(/1 resident/i)).toBeTruthy());
+
+  expect(importService.importGuestsFromRows).toHaveBeenCalledWith('house-1', [
+    expect.objectContaining({ firstName: 'Jane', lastName: 'Smith' }),
+  ]);
+  expect(invalidate).toHaveBeenCalledWith({ queryKey: ['guests'] });
+});
+
+it("shows the parser's missing-column message", async () => {
+  (DocumentPicker.pick as jest.Mock).mockResolvedValue([{ uri: 'content://csv/1', name: 'guests.csv' }]);
+  const RNFS = require('@dr.pogodin/react-native-fs');
+  RNFS.readFile.mockResolvedValue('firstName,lastName,email,sobrietyDate\nJane,Smith,j@x.com,2025-01-15');
+  const { GuestCsvError } = jest.requireActual('../../../services/guestImport');
+  (importService.parseGuestCsv as jest.Mock).mockImplementationOnce(() => {
+    throw new GuestCsvError('Missing column: drugOfChoice');
+  });
+
+  const { getByTestId, getByText, queryByText } = render(<GuestImportScreen />);
+  fireEvent.press(getByTestId('pick-csv-button'));
+  await waitFor(() => expect(getByText('Missing column: drugOfChoice')).toBeTruthy());
+  expect(queryByText(/Could not read file/)).toBeNull();
+});
+
+it('has a header with a back button', () => {
+  const { getByTestId } = render(<GuestImportScreen />);
+  expect(getByTestId('header-with-back')).toBeTruthy();
+  expect(getByTestId('guest-import-screen')).toBeTruthy();
 });

@@ -218,6 +218,13 @@ const HouseSettings: React.FC<Props> = (props) => {
         iconName: 'user',
         color: color.medium_grey,
       },
+      guestImport: {
+        action: () => navigation.navigate(Routes.GuestImport),
+        label: 'Import residents from CSV',
+        description: 'Add current residents from a spreadsheet',
+        iconName: 'file-import',
+        color: color.medium_grey,
+      },
       payments: {
         action: () => navigation.navigate(Routes.StripeSettings),
         label: 'Payments',
@@ -234,6 +241,13 @@ const HouseSettings: React.FC<Props> = (props) => {
               label: 'Payment Dashboard',
               description: 'View all resident payment activity',
               iconName: 'chart-bar',
+              color: color.medium_grey,
+            },
+            balances: {
+              action: () => navigation.navigate(Routes.BalanceDashboard),
+              label: 'Balances',
+              description: 'What each resident owes now',
+              iconName: 'balance-scale',
               color: color.medium_grey,
             },
           }
@@ -307,7 +321,11 @@ const HouseSettings: React.FC<Props> = (props) => {
                   ? 'managers-section'
                   : key === 'guests'
                     ? 'manage-guests-button'
-                    : undefined
+                    : key === 'guestImport'
+                      ? 'guest-import-section'
+                      : key === 'balances'
+                        ? 'balances-section'
+                        : undefined
               }
             />
           );
