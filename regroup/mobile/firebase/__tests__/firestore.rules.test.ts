@@ -467,6 +467,30 @@ describe("houses/{houseId}/applications/{appId}", () => {
       );
     });
 
+    // Review: an anonymous session can apply, so the create is bounded.
+    it("denies an application to a house that does not exist", async () => {
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
+      await assertFails(
+        setDoc(
+          doc(ctx.firestore(), `houses/no-such-house/applications/${APP_ID}`),
+          submitted(APPLICANT_UID, { houseId: "no-such-house" }),
+        ),
+      );
+    });
+
+    it("denies an oversized or non-text field", async () => {
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
+      await assertFails(
+        setDoc(appDoc(ctx), submitted(APPLICANT_UID, { currentSituation: "x".repeat(2001) })),
+      );
+      await assertFails(
+        setDoc(appDoc(ctx), submitted(APPLICANT_UID, { applicantName: { first: "Pat" } })),
+      );
+      await assertSucceeds(
+        setDoc(appDoc(ctx), submitted(APPLICANT_UID, { currentSituation: "x".repeat(2000) })),
+      );
+    });
+
     it("denies a create naming another house or another id", async () => {
       const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
       await assertFails(
