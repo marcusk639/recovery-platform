@@ -10,13 +10,6 @@ import RatsButton from '../../components/rats-button/rats-button';
 import { color, fontSize, normalize } from '../../styles/theme';
 import { openWebBilling } from '../../services/webBilling';
 
-// RATS_WEB_URL is a BASE url (e.g. https://regroup-app.com), per the 2026-05-19
-// paywall design spec. SubscriptionUpdateModal builds its own /my-account link
-// from this export.
-export const WEB_BASE_URL = (
-  (process.env.RATS_WEB_URL as string | undefined) ?? 'https://regroup-app.com'
-).replace(/\/+$/, '');
-
 /**
  * Shown to operators (admin / superAdmin) whose subscription has lapsed.
  *
