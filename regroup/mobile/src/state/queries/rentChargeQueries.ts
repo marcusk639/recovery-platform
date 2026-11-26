@@ -3,10 +3,6 @@ import { previewRentCharges, RentPreview, RentFrequency } from '../../services/r
 import { Dollars } from '../../util/money';
 import { logException } from '../../util/logging';
 
-export const rentChargeKeys = {
-  all: ['rentCharges'] as const,
-};
-
 /**
  * The turn-on preview, asked for when the manager presses Preview. A mutation
  * because it is an on-demand read of what a save would do, not cached data.

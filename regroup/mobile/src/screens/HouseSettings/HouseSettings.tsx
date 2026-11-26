@@ -20,6 +20,7 @@ import {
 } from '../../state/slices/setupSlice';
 import map from 'lodash/map';
 import cloneDeep from 'lodash/cloneDeep';
+import omit from 'lodash/omit';
 import ChoreSetup from '../SetupWizards/ChoreSetup';
 import ManagerSettings from './ManagerSettings';
 import AdminManagement from './AdminManagement';
@@ -104,9 +105,11 @@ const HouseSettings: React.FC<Props> = (props) => {
     async (values: House) => {
       dismissFormModal();
       dispatch(updateSetupHouse(values));
+      // Rent is the Rent screen's alone (it previews charges first). These whole-house
+      // saves start from a cached copy, which would write an older schedule back.
       await updateHouseMutation.mutateAsync({
         houseId: values.id,
-        values,
+        values: omit(values, ['rentFrequency', 'weeklyRent', 'monthlyRent']),
       });
       initializeHouseSetup();
     },
@@ -174,6 +177,8 @@ const HouseSettings: React.FC<Props> = (props) => {
     showFormModal(<HouseSetup {...setupProps()} />, null, true);
   }, [showFormModal, setupProps]);
 
+  const rentOn = house?.rentFrequency === 'weekly' || house?.rentFrequency === 'monthly';
+
   const SETTINGS = useMemo(
     () => ({
       details: {
@@ -222,10 +227,9 @@ const HouseSettings: React.FC<Props> = (props) => {
       rent: {
         action: () => navigation.navigate(Routes.RentSettings),
         label: 'Rent',
-        description:
-          house?.rentFrequency === 'weekly' || house?.rentFrequency === 'monthly'
-            ? 'Rent schedule and price'
-            : 'Not set up: residents are not charged rent',
+        description: rentOn
+          ? 'Rent schedule and price'
+          : 'Not set up: residents are not charged rent',
         iconName: 'money-bill',
         color: color.medium_grey,
       },
@@ -276,7 +280,7 @@ const HouseSettings: React.FC<Props> = (props) => {
       setupProps,
       navigation,
       mayViewHouseMoney,
-      house?.rentFrequency,
+      rentOn,
     ],
   );
 

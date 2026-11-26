@@ -74,7 +74,7 @@ beforeEach(() => {
   mockMayEdit = true;
   mockGuests = {};
   mockUseSelectedHouse.mockReturnValue({ house: house(), houseId: 'h1', isLoading: false });
-  mockPreview.mockResolvedValue({ residents: [row()] });
+  mockPreview.mockResolvedValue({ residents: [row()], skipped: 0 });
 });
 
 describe('RentSettingsScreen', () => {
@@ -189,6 +189,19 @@ describe('RentSettingsScreen', () => {
     expect(await view.findByText("Couldn't load the preview. Try again.")).toBeTruthy();
     expect(view.queryByTestId('rent-confirm-button')).toBeNull();
     expect(mockUpdateHouse).not.toHaveBeenCalled();
+  });
+
+  it('says how many residents the preview could not price', async () => {
+    mockPreview.mockResolvedValue({ residents: [row()], skipped: 1 });
+    const view = renderScreen();
+    fireEvent.press(view.getByTestId('rent-schedule-weekly'));
+    fireEvent.changeText(view.getByTestId('rent-price-input'), '175');
+    fireEvent.press(view.getByTestId('rent-preview-button'));
+    expect(
+      await view.findByText(
+        "1 resident has an own rate above the limit and won't be charged until it is set again.",
+      ),
+    ).toBeTruthy();
   });
 
   it('an Oxford house cannot choose weekly or monthly', () => {

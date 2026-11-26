@@ -3,9 +3,11 @@
  * CENTS with the schedule it was set for, so $600/month can never be read as
  * $600/week. Managers and above set it; a peer leader and the resident never do.
  */
+// The shared check (houseTierQueries.test.ts pins rank and own record).
 let mockMayEdit = true;
+let mockSignedIn = 'manager-uid';
 jest.mock('../../../state/queries/houseTierQueries', () => ({
-  useMayEditRentMoney: () => mockMayEdit,
+  useMayEditGuestMoney: (guest: { userId?: string }) => mockMayEdit && guest.userId !== mockSignedIn,
 }));
 
 const mockUpdateGuest = jest.fn((..._args: any[]) => Promise.resolve());
@@ -34,8 +36,10 @@ const house = (fields: Record<string, unknown> = {}) =>
 const guest = (fields: Record<string, unknown> = {}) =>
   ({ id: 'g1', houseId: 'h1', userId: 'resident-uid', customRent: null, ...fields }) as any;
 
-const renderField = (g = guest(), h = house(), currentUserId = 'manager-uid') =>
-  render(<CustomRentField guest={g} house={h} currentUserId={currentUserId} />);
+const renderField = (g = guest(), h = house(), signedIn = 'manager-uid') => {
+  mockSignedIn = signedIn;
+  return render(<CustomRentField guest={g} house={h} />);
+};
 
 beforeEach(() => {
   jest.clearAllMocks();

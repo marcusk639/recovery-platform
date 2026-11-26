@@ -27,6 +27,8 @@ export interface RentPreviewRow {
 
 export interface RentPreview {
   residents: RentPreviewRow[];
+  /** Residents the server can't charge (an own rate above the limit), left out of the list. */
+  skipped: number;
 }
 
 /**
@@ -41,7 +43,7 @@ export async function previewRentCharges(input: {
 }): Promise<RentPreview> {
   const result = await httpsCallable(functions, 'previewRentCharges')(input);
   const data = result.data as Partial<RentPreview> | null;
-  return { residents: data?.residents ?? [] };
+  return { residents: data?.residents ?? [], skipped: Number(data?.skipped ?? 0) };
 }
 
 /**

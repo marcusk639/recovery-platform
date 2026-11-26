@@ -42,6 +42,9 @@ export const previewRentCharges = onCall(async (request) => {
   const uid = request.auth.uid;
   const { houseId, frequency, price } = parseInput(previewSchema, request.data);
 
+  // houseTierOf, not assertHouseMoneyStaff: the price fields' rule is callerRank >= 2,
+  // which the live tier matches. assertHouseMoneyStaff also admits anyone listed in
+  // the house doc's admin fields, which a peer leader can be.
   const tier = await houseTierOf(uid, houseId);
   if (tier !== 'owner' && tier !== 'manager') {
     throw new HttpsError('permission-denied', 'Only a house manager or owner can set rent');
@@ -109,5 +112,6 @@ export const previewRentCharges = onCall(async (request) => {
   });
 
   logger.info('rent.preview', { houseId, frequency, residents: residents.length, skipped });
-  return { frequency, firstChargeable: start.startDate, residents };
+  // skipped: residents the job won't charge either (an own rate above the limit).
+  return { frequency, firstChargeable: start.startDate, residents, skipped };
 });

@@ -205,6 +205,7 @@ const RentSettingsScreen: React.FC<Props> = ({ navigation }) => {
               <>
                 <RentPreviewList
                   residents={shown.residents}
+                  skipped={shown.skipped}
                   stale={staleCustomRates(guests, schedule)}
                   schedule={schedule}
                 />

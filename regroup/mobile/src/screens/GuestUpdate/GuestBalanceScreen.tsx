@@ -5,9 +5,8 @@ import ScreenHeader from '../../components/screen-header';
 import { RatsText } from '../../components/rats-text';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { RootStackParamList } from '../../navigation/types';
-import { useMayEditRentMoney } from '../../state/queries/houseTierQueries';
+import { useMayEditGuestMoney } from '../../state/queries/houseTierQueries';
 import { color, fontSize, normalize } from '../../styles/theme';
-import { auth } from '../../../firebase-setup';
 import GuestUpdateForm from './GuestUpdateForm';
 
 interface Props {
@@ -24,13 +23,12 @@ interface Props {
  */
 const GuestBalanceScreen: React.FC<Props> = ({ navigation }) => {
   const { guest } = useSelectedGuest();
-  const mayEdit = useMayEditRentMoney(guest?.houseId ?? '');
-  const ownRecord = !!guest?.userId && guest.userId === auth.currentUser?.uid;
+  const mayEdit = useMayEditGuestMoney(guest);
 
   return (
     <View style={styles.container} testID="guest-balance-screen">
       <ScreenHeader header="Balance" />
-      {guest && mayEdit && !ownRecord ? (
+      {guest && mayEdit ? (
         <GuestUpdateForm navigation={navigation} moneyOnly onSaved={navigation.goBack} />
       ) : (
         <View testID="guest-balance-not-allowed" style={styles.note}>

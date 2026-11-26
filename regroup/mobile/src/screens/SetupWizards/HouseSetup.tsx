@@ -31,7 +31,6 @@ import { phoneFormatter } from "../../util/formatters";
 import { IOS, ANDROID } from "../../util/platform";
 import RatsImagePicker from "../../components/rats-image-picker";
 import isEmpty from "lodash/isEmpty";
-import { useMayEditRentMoney } from "../../state/queries/houseTierQueries";
 
 const labelColor = "black";
 const noop = () => {};
@@ -62,10 +61,11 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
     navigation,
   } = props;
   const effectiveSelectedHouse = selectedHouse;
-  // In House Settings a peer leader opens Details too, but only a manager or owner
-  // sets rent (rules: rank >= 2). The operator's own wizard is never locked.
-  const mayEditRent = useMayEditRentMoney(forSettings ? selectedHouse?.id ?? "" : "");
-  const rentLocked = !!forSettings && !mayEditRent;
+  // Rent is set here only in the operator's first-time wizard. In House Settings
+  // the Rent screen is its one writer: it previews the charges before saving
+  // (rent spec §4.1, §5), and HouseSettings leaves rent out of a Details save.
+  const rentLocked = !!forSettings;
+  const oxford = effectiveSelectedHouse?.houseType === "oxford";
 
   const [height, setHeight] = useState(ANDROID ? normalize(95) : 0);
   const [focused, setFocused] = useState("");
@@ -268,8 +268,12 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
               wrapStyle={{ marginHorizontal: 0, marginRight: normalize(15) }}
               selectedButtonColor={color.black}
               radioButtons={[
-                { label: "Weekly", value: "weekly", testID: "house-rent-weekly", disabled: effectiveSelectedHouse?.houseType === "oxford" },
-                { label: "Monthly", value: "monthly", testID: "house-rent-monthly", disabled: effectiveSelectedHouse?.houseType === "oxford" },
+                ...(oxford
+                  ? []
+                  : [
+                      { label: "Weekly", value: "weekly", testID: "house-rent-weekly" },
+                      { label: "Monthly", value: "monthly", testID: "house-rent-monthly" },
+                    ]),
                 { label: "Off", value: "both", testID: "house-rent-off" },
               ]}
             />

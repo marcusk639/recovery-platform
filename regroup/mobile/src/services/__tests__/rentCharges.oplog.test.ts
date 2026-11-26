@@ -60,6 +60,13 @@ describe('previewRentCharges', () => {
       price: asDollars(175),
     });
     expect(out.residents).toEqual([row]);
+    expect(out.skipped).toBe(0);
+  });
+
+  it('passes on how many residents the server could not price', async () => {
+    seedCall('previewRentCharges', { residents: [], skipped: 2 });
+    const out = await previewRentCharges({ houseId: 'h1', frequency: 'weekly', price: asDollars(175) });
+    expect(out.skipped).toBe(2);
   });
 
   it('reads a reply with no residents as none', async () => {

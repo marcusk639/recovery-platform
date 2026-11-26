@@ -5,17 +5,15 @@ import RatsButton from '../rats-button/rats-button';
 import { Guest } from '../../entities/Guest';
 import { House } from '../../entities/House';
 import { useUpdateGuest } from '../../state/queries/guestQueries';
-import { useMayEditRentMoney } from '../../state/queries/houseTierQueries';
+import { useMayEditGuestMoney } from '../../state/queries/houseTierQueries';
 import { MAX_RENT_DOLLARS, scheduleOf } from '../../screens/HouseSettings/rentSettingsHelpers';
 import { color, fontSize, normalize } from '../../styles/theme';
-import { asCents, dollarsToCents, formatCents, parseDollarsField } from '../../util/money';
+import { asCents, asDollars, dollarsToCents, formatCents, parseDollarsField } from '../../util/money';
 import { logException } from '../../util/logging';
 
 interface Props {
   guest: Guest;
   house: House;
-  /** The signed-in account: nobody sets their own rate (rules: ownMoneyUnchanged). */
-  currentUserId: string;
 }
 
 const per = (f: 'weekly' | 'monthly') => (f === 'weekly' ? 'week' : 'month');
@@ -33,14 +31,15 @@ const Line = ({ text, testID, style }: { text: string; testID?: string; style?: 
  * schedule. $0 is allowed (a scholarship bed); clearing writes null. Shown only to
  * a manager or above, and never on their own record (rules: rentMoneyByManager).
  */
-const CustomRentField: React.FC<Props> = ({ guest, house, currentUserId }) => {
-  const mayEdit = useMayEditRentMoney(house.id);
+const CustomRentField: React.FC<Props> = ({ guest, house }) => {
+  // A manager or above, never on their own record.
+  const mayEdit = useMayEditGuestMoney(guest);
   const { mutateAsync: updateGuest } = useUpdateGuest();
   const [text, setText] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  if (!mayEdit || (!!guest.userId && guest.userId === currentUserId)) return null;
+  if (!mayEdit) return null;
   if (house.houseType === 'oxford') return null;
 
   const schedule = scheduleOf(house);
@@ -90,7 +89,7 @@ const CustomRentField: React.FC<Props> = ({ guest, house, currentUserId }) => {
     status =
       schedule === 'off'
         ? 'Pays the house price'
-        : `Pays the house price: ${formatCents(dollarsToCents(housePrice))} a ${per(schedule)}`;
+        : `Pays the house price: ${formatCents(dollarsToCents(housePrice ?? asDollars(0)))} a ${per(schedule)}`;
   }
 
   return (

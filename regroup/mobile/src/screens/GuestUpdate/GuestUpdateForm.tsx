@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { withFormik } from 'formik';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useGuests, useUpdateGuest } from '../../state/queries/guestQueries';
-import { useMayEditRentMoney } from '../../state/queries/houseTierQueries';
+import { useMayEditGuestMoney } from '../../state/queries/houseTierQueries';
 import GuestUpdateFormView from './GuestUpdateFormView';
 import { Guest } from '../../entities/Guest';
 import {
@@ -15,7 +15,6 @@ import { Guests } from '../../types';
 import type { MoneyEdits } from '../../services/guest';
 import { logException } from '../../util/logging';
 import { asCents, formatCents } from '../../util/money';
-import { auth } from '../../../firebase-setup';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -166,10 +165,8 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
   // available in this wrapper.
   const { data: guests = {} } = useGuests(guest?.houseId ?? '');
   const { mutateAsync: updateGuestMutation } = useUpdateGuest();
-  // Nobody edits their own balance (rules: ownMoneyUnchanged), a manager included.
-  const userId = auth.currentUser?.uid;
-  const ownRecord = !!guest?.userId && guest.userId === userId;
-  const canEditMoney = useMayEditRentMoney(guest?.houseId ?? '') && !ownRecord;
+  // A manager or above, never on their own record (rules: ownMoneyUnchanged).
+  const canEditMoney = useMayEditGuestMoney(guest);
 
   const updateGuest = useCallback(
     async (

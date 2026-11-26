@@ -7,7 +7,10 @@ import { View, TouchableOpacity, Share, Alert } from "react-native";
 
 // Hooks
 import { useGuest, useGuests } from "../../state/queries";
-import { useMayViewHouseMoney } from "../../state/queries/houseTierQueries";
+import {
+  useMayEditGuestMoney,
+  useMayViewHouseMoney,
+} from "../../state/queries/houseTierQueries";
 import { useAppSelector } from "../../state/store";
 import { useModal } from "../../context";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
@@ -238,8 +241,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
     mayViewHouseMoney || (!!user?.id && currentGuest?.userId === user.id);
   // A resident's rate and balance: managers and above, never on their own
   // record (rules: rentMoneyByManager, ownMoneyUnchanged; rent spec §4.6).
-  const maySetRentMoney =
-    mayViewHouseMoney && !(!!currentGuest?.userId && currentGuest.userId === user?.id);
+  const maySetRentMoney = useMayEditGuestMoney(currentGuest);
 
   // Activity system: pre-fetch week summary (hooks must be called before early returns).
   // React Query is the sole source of truth — the prior `hooks/activity/useWeekSummary`
@@ -563,11 +565,7 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
         />
       )}
       {maySetRentMoney && (
-        <CustomRentField
-          guest={currentGuest!}
-          house={house}
-          currentUserId={user?.id ?? ""}
-        />
+        <CustomRentField guest={currentGuest!} house={house} />
       )}
 
       {/******************************* MAKE A PAYMENT (guest only) *******************************/}

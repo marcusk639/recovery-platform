@@ -12,11 +12,6 @@ import { fireEvent, render } from '@testing-library/react-native';
 import { normalize } from '../../../styles/theme';
 import { KEYBOARD_TOOLBAR_SPACE } from '../../../components/rats-keyboard';
 
-// HouseSetup reads the caller's house tier (rent fields); this suite renders no QueryClient.
-jest.mock('../../../state/queries/houseTierQueries', () => ({
-  useMayEditRentMoney: () => true,
-}));
-
 let mockIOS = true;
 jest.mock('../../../util/platform', () => ({
   ...jest.requireActual('../../../util/platform'),

@@ -245,6 +245,45 @@ describe('previewRentCharges', () => {
     ).rejects.toMatchObject({ code: 'not-found' });
   });
 
+  // Rent spec §4.3: "Weekly, charged through Sun Nov 15, switches to $800/month:
+  // Nov 16 to 30, 15 of 30, $400.00 on Nov 16".
+  it('a weekly house charged through Sun Nov 15 switching to $800/month: $400.00 for Nov 16-30', async () => {
+    jest.setSystemTime(new Date('2026-11-16T15:00:00.000Z'));
+    mockDocs['houses/h1'] = { ...mockDocs['houses/h1'], rentFrequency: 'weekly', weeklyRent: 175 };
+    mockDocs['rentHouseStates/h1'] = {
+      startDate: '2026-11-02',
+      startedAtMs: Date.parse('2026-11-02T15:00:00.000Z'),
+    };
+    guest('gA', { moveInDate: '2026-10-01' });
+    mockDocs['rentAccounts/gA'] = {
+      guestId: 'gA',
+      houseId: 'h1',
+      houseJoinedAtMs: LONG_AGO,
+      joinedOn: '2026-10-01',
+      reactivatedOn: null,
+      anchoredTo: '2026-11-02',
+      chargeFrom: '2026-11-09',
+      chargedThrough: '2026-11-15',
+      chargedHouseId: 'h1',
+    };
+    const out = await call('manager', { houseId: 'h1', frequency: 'monthly', price: 800 });
+    expect(out.residents[0]).toMatchObject({
+      firstDay: '2026-11-16',
+      amountCents: 40000,
+      daysCovered: 15,
+      daysInPeriod: 30,
+      nowCents: 40000,
+    });
+  });
+
+  it('counts, without listing, a resident whose own rate is above the limit (the job skips them too)', async () => {
+    guest('gA', { moveInDate: '2026-10-01' });
+    guest('gBad', { moveInDate: '2026-10-01', customRent: { amountCents: 300000, frequency: 'weekly' } });
+    const out = await call('manager', { houseId: 'h1', frequency: 'weekly', price: 175 });
+    expect(out.residents.map((r: Data) => r.guestId)).toEqual(['gA']);
+    expect(out.skipped).toBe(1);
+  });
+
   it('while charging is already on, keeps the existing start: a resident charged through Sunday is next charged Monday', async () => {
     mockDocs['houses/h1'] = { ...mockDocs['houses/h1'], rentFrequency: 'weekly', weeklyRent: 150 };
     mockDocs['rentHouseStates/h1'] = {

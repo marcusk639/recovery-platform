@@ -78,22 +78,24 @@ function paymentDate(createdAt: unknown): string {
 /**
  * Generates a CSV string for a payment history export.
  * guestNames maps guestId → display name for the name column.
- * Rent charges (optional) are rows in the same columns, in the other direction:
- * a negative Amount and Net (money owed, not paid), Status "Rent charge", dated
- * by the first day charged. With charges, rows run newest first by date.
+ * With `charges` (Payment History passes them), a "Charged ($)" column is added and
+ * each rent charge is a row with its amount there, Status "Rent charge", dated by
+ * the first day charged; Amount and Net stay what was paid, so they still sum to
+ * money received. Rows then run newest first by date.
  */
 export function exportPaymentHistoryCSV(
   payments: RentPayment[],
   guestNames: Record<string, string>,
-  charges: RentCharge[] = [],
+  charges?: RentCharge[],
 ): string {
-  const header = ['Date', 'Guest', 'Amount ($)', 'Refunded ($)', 'Net ($)', 'Status', 'Description'].join(',');
-  const chargeRows = charges.map((c) => {
-    const owed = `-${(c.amountCents / 100).toFixed(2)}`;
+  const columns = ['Date', 'Guest', 'Amount ($)', 'Refunded ($)', 'Net ($)', 'Status', 'Description'];
+  const header = (charges ? [...columns, 'Charged ($)'] : columns).join(',');
+  const chargeRows = (charges ?? []).map((c) => {
     const detail = chargeDetail(c);
     const description = escapeCsvField(detail ? `${chargeLabel(c)} (${detail})` : chargeLabel(c));
     const guest = escapeCsvField(guestNames[c.guestId] ?? c.guestId);
-    return [c.firstDay, guest, owed, '', owed, 'Rent charge', description].join(',');
+    const charged = (c.amountCents / 100).toFixed(2);
+    return [c.firstDay, guest, '', '', '', 'Rent charge', description, charged].join(',');
   });
   const paymentRows = payments.map((p) => {
     const date = paymentDate(p.createdAt);
@@ -103,7 +105,8 @@ export function exportPaymentHistoryCSV(
     const net = recordNetCsv(p);
     const status = escapeCsvField(paymentDisplayStatus(p).label);
     const description = escapeCsvField(p.description ?? '');
-    return [date, guest, amount, refunded, net, status, description].join(',');
+    const row = [date, guest, amount, refunded, net, status, description];
+    return (charges ? [...row, ''] : row).join(',');
   });
   if (chargeRows.length === 0) return [header, ...paymentRows].join('\n');
   // yyyy-MM-dd sorts as text; a stable sort keeps same-day rows as given.

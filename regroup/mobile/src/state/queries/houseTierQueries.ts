@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { auth } from '../../../firebase-setup';
 import { getMyHouseTiers } from '../../services/houseTiers';
 
 export const houseTierKeys = {
@@ -31,3 +32,16 @@ export const useMayEditRentMoney = (houseId: string): boolean => {
  * offered.
  */
 export const useMayViewHouseMoney = useMayEditRentMoney;
+
+/**
+ * Whether the caller may change this resident's rent rate or balance: a
+ * manager or above in their house, and never on their own record, whatever
+ * their rank (the rules' rentMoneyByManager and ownMoneyUnchanged).
+ */
+export const useMayEditGuestMoney = (
+  guest: { houseId?: string; userId?: string } | null | undefined,
+): boolean => {
+  const mayEdit = useMayEditRentMoney(guest?.houseId ?? '');
+  const own = !!guest?.userId && guest.userId === auth.currentUser?.uid;
+  return mayEdit && !own;
+};

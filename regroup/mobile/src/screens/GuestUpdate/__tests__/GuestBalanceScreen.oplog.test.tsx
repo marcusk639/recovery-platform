@@ -25,7 +25,14 @@ jest.mock('../../../hooks/useSelectedGuest', () => ({
 }));
 let mockMayEdit = true;
 jest.mock('../../../state/queries/houseTierQueries', () => ({
-  useMayEditRentMoney: () => mockMayEdit,
+  // Rank as the test sets it; the own-record check as the hook makes it, against the
+  // signed-in account (houseTierQueries.test.ts pins the hook itself).
+  useMayEditGuestMoney: (guest: { userId?: string } | null) =>
+    mockMayEdit &&
+    !(
+      !!guest?.userId &&
+      guest.userId === require('../../../../__mocks__/firebase-modular/auth').instance.currentUser?.uid
+    ),
 }));
 jest.mock('../../../components/screen-header', () => {
   const React = require('react');

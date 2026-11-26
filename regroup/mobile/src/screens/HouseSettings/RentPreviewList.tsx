@@ -15,12 +15,14 @@ export function previewLine(r: RentPreviewRow): string {
 
 interface Props {
   residents: RentPreviewRow[];
+  /** Residents the server can't charge: their own rate is above the limit. */
+  skipped?: number;
   stale: StaleCustomRate[];
   schedule: 'weekly' | 'monthly';
 }
 
 /** What saving would charge each current resident, and whose own rate won't apply. */
-const RentPreviewList: React.FC<Props> = ({ residents, stale, schedule }) => (
+const RentPreviewList: React.FC<Props> = ({ residents, skipped = 0, stale, schedule }) => (
   <View testID="rent-preview-list">
     <RatsText translate={false} text="What residents will be charged" style={styles.title} />
     {residents.length === 0 ? (
@@ -36,6 +38,15 @@ const RentPreviewList: React.FC<Props> = ({ residents, stale, schedule }) => (
         </View>
       ))
     )}
+    {skipped > 0 ? (
+      <View style={styles.stale} testID="rent-preview-skipped">
+        <RatsText
+          translate={false}
+          text={`${skipped} ${skipped === 1 ? 'resident has' : 'residents have'} an own rate above the limit and won't be charged until it is set again.`}
+          style={styles.detail}
+        />
+      </View>
+    ) : null}
     {stale.length > 0 ? (
       <View style={styles.stale} testID="rent-stale-custom-rates">
         <RatsText

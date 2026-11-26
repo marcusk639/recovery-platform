@@ -44,7 +44,7 @@ jest.mock('../../../state/queries/guestQueries', () => ({
 // The money fields are shown only to a manager or above
 // (GuestUpdateForm.money.test.tsx); these tests edit them as one.
 jest.mock('../../../state/queries/houseTierQueries', () => ({
-  useMayEditRentMoney: () => true,
+  useMayEditGuestMoney: () => true,
 }));
 
 jest.mock('../../../util/logging', () => ({ logException: jest.fn(), logDebug: jest.fn() }));

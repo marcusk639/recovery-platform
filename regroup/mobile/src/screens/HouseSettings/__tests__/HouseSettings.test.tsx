@@ -602,10 +602,32 @@ describe('HouseSettings', () => {
       const houseSetupElement = mockShowFormModal.mock.calls[0][0];
       await houseSetupElement.props.handleSubmit(BASE_HOUSE);
 
+      // Rent is left to the Rent screen (see below).
+      const { rentFrequency, weeklyRent, monthlyRent, ...withoutRent } = BASE_HOUSE;
       expect(defaultUpdateHouseMutation.mutateAsync).toHaveBeenCalledWith({
         houseId: BASE_HOUSE.id,
-        values: BASE_HOUSE,
+        values: withoutRent,
       });
+    });
+
+    // A Details, Chores or Guests save starts from a cached copy of the house. Sending its
+    // rent back would undo a schedule or price the Rent screen saved meanwhile.
+    it('never writes rentFrequency, weeklyRent or monthlyRent from a whole-house save', async () => {
+      const store = buildStore();
+      const { getByText } = renderScreen(store);
+      fireEvent.press(getByText('Details'));
+      const houseSetupElement = mockShowFormModal.mock.calls[0][0];
+      await houseSetupElement.props.handleSubmit({
+        ...BASE_HOUSE,
+        rentFrequency: 'weekly',
+        weeklyRent: 175,
+        monthlyRent: 800,
+      });
+      const { values } = (defaultUpdateHouseMutation.mutateAsync as jest.Mock).mock.calls[0][0];
+      expect(values).not.toHaveProperty('rentFrequency');
+      expect(values).not.toHaveProperty('weeklyRent');
+      expect(values).not.toHaveProperty('monthlyRent');
+      expect(values).toMatchObject({ name: BASE_HOUSE.name });
     });
 
     it('submits phase updates through the real update-house mutation', async () => {

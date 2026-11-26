@@ -74,6 +74,9 @@ jest.mock("../../../util/roles", () => ({
 let mockMayViewHouseMoney = true;
 jest.mock("../../../state/queries/houseTierQueries", () => ({
   useMayViewHouseMoney: () => mockMayViewHouseMoney,
+  // Its own rules (own record, rank) are pinned in houseTierQueries.test.ts.
+  useMayEditGuestMoney: (guest: any) =>
+    mockMayViewHouseMoney && guest?.userId !== "admin-1",
 }));
 
 // The rate field has its own suite (components/custom-rent); here only whether it shows.
