@@ -60,10 +60,20 @@ tags:
       # the thumbnail does. e2e-guests.csv sorts first.
       - tapOn:
           point: "18%,29%"
+# Android's picker opens on Recent, which may not list a pushed CSV: go to Downloads.
 - runFlow:
     when:
       platform: Android
     commands:
+      - extendedWaitUntil:
+          visible: "Recent|Downloads|e2e-guests.csv"
+          timeout: 15000
+      - runFlow:
+          when:
+            notVisible: "e2e-guests.csv"
+          commands:
+            - tapOn: "Show roots"
+            - tapOn: "Downloads"
       - tapOn: "e2e-guests.csv"
 # The preview has both rows, the quoted comma kept in one field.
 - extendedWaitUntil:

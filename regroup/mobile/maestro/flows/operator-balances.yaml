@@ -44,16 +44,23 @@ tags:
     visible:
       id: "outstanding-stat"
     timeout: 60000
+# The dashboard renders while its modal is still sliding in; a tap then is lost.
+- waitForAnimationToEnd
 - tapOn:
     id: "outstanding-stat"
+    retryTapIfNoChange: true
 - extendedWaitUntil:
     visible:
       id: "balance-stats-card"
     timeout: 30000
+# The Outstanding stat: under its label, above the per-resident list (whose
+# rows show amounts too). childOf the stats card doesn't resolve on iOS.
 - assertVisible:
     text: ${output.outstandingPattern}
-    childOf:
-      id: "balance-stats-card"
+    below:
+      text: "Outstanding"
+    above:
+      text: "Outstanding Balances"
 # 2. House Settings → Balances opens the same screen. A relaunch keeps the
 # session and closes the modals.
 - stopApp
@@ -82,9 +89,13 @@ tags:
     visible:
       id: "balance-stats-card"
     timeout: 30000
+# The Outstanding stat: under its label, above the per-resident list (whose
+# rows show amounts too). childOf the stats card doesn't resolve on iOS.
 - assertVisible:
     text: ${output.outstandingPattern}
-    childOf:
-      id: "balance-stats-card"
+    below:
+      text: "Outstanding"
+    above:
+      text: "Outstanding Balances"
 - runFlow:
     file: ../subflows/logout.yaml
