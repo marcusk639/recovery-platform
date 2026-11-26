@@ -4,6 +4,7 @@ import {
   NavigatorScreenParams,
 } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { BusinessMeeting } from '../entities/oxford/BusinessMeeting';
 
 // Define all route names as constants
 export enum Routes {
@@ -62,6 +63,7 @@ export enum Routes {
   OfficerManagement = 'officerManagement',
   EESTracker = 'eesTracker',
   BusinessMeetings = 'businessMeetings',
+  BusinessMeetingDetail = 'businessMeetingDetail',
   OxfordVoting = 'oxfordVoting',
   CharterCompliance = 'charterCompliance',
 
@@ -217,6 +219,7 @@ export type RootStackParamList = {
   [Routes.OfficerManagement]: undefined;
   [Routes.EESTracker]: undefined;
   [Routes.BusinessMeetings]: undefined;
+  [Routes.BusinessMeetingDetail]: { meeting: BusinessMeeting };
   [Routes.OxfordVoting]: undefined;
   [Routes.CharterCompliance]: undefined;
 
