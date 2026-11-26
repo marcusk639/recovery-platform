@@ -684,10 +684,12 @@ service cloud.firestore {
 
     // Rent charges (functions src/rent/chargeResident): one record per resident
     // and period, written only by the server in the same transaction as the
-    // rentOwed increment. Read like payments: the house's admins, or the
-    // resident the charge is for.
+    // rentOwed increment. Read like payments (owner decision 2026-11-26): the
+    // house's managers and owners (rank >= 2), or the resident the charge is for.
+    // A peer leader also owes rent here, so they read only their own.
     match /rentCharges/{chargeId} {
-      allow read: if isAdmin([resource.data.houseId]) ||
+      allow read: if (isAdmin([resource.data.houseId]) &&
+          callerRank(resource.data.houseId) >= 2) ||
         (isGuest([resource.data.houseId]) && isSameUser(resource.data.guestUserId));
       allow write: if false;
     }
