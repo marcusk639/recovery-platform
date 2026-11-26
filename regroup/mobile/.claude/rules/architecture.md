@@ -138,6 +138,8 @@ The gate is `SubscriptionGate` (`src/components/subscription/SubscriptionGate.ts
 - **Guests:** 7-day grace window after operator lapses → dismissible banner → `ResidentLimitedView` (`grace_expired`, which a plan-required house also gives): only their own Payment History (with CSV export) and their own Documents, read-only, plus sign out. Modal routes sit outside the gate, so none may be deep-linkable (the `linking` allowlist; `limitedViewLinks.test.ts` pins these two).
 - **potentialSuperAdmin / setup-incomplete users:** not gated (routed to SetupStack before gate runs)
 
+A resident's document access (owner decision 2026-11-26): their own documents only, read-only, from GuestHome's **My Documents** card (`my-documents-card`) in an active house or from `ResidentLimitedView` in a blocked one; staff keep the **Documents** card. The rules read the ID token's guest claim, so a resident who moved out still sees their own document list (names only) for up to an hour, until the token refreshes; accepted for launch. `getDocumentLink` reads live claims, so the files don't open.
+
 Oxford features are additionally gated by `houseOxfordActive()` in Firestore rules (requires `oxfordEnabled == true` AND `subscriptionStatus ∈ {active, trialing}`).
 
 ## Domain Entities
@@ -156,7 +158,7 @@ TypeScript interfaces in `src/entities/` define Firestore document shapes. Newer
 | `Notification`             | userId, subject, message, type, read, date                                                                         | Written by Cloud Functions                                   |
 | `Dispute`                  | id, guestId, activityId, status, challenges[]                                                                      | Immutable resolution chain                                   |
 | `Application`              | id, houseId, applicantUid, status, profile data                                                                    | Stored in `houses/{id}/applications` subcollection           |
-| `Document`                 | id, houseId, name, url, uploadedBy, createdAt                                                                      | Staff manage; a resident reads their own (`guestId` = their guest record). Top-level `documents` |
+| `Document`                 | id, houseId, name, url, uploadedBy, createdAt                                                                      | Staff manage; a resident reads their own (`guestId` = their guest record): GuestHome's My Documents card, or the limited view. Top-level `documents` |
 | `DrugTest`                 | id, houseId, guestId, result, observedBy, testedAt                                                                 | Immutable audit trail; admin-only write                      |
 | `Room`                     | id, houseId, name, capacity, beds[]                                                                                | Embedded in house document                                   |
 | `StaffNote`                | id, houseId, guestId?, type (resident_note/shift_log), body, authorId                                              | Shift logs have no guestId                                   |

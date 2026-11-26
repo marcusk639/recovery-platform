@@ -152,7 +152,7 @@ async function main() {
   for (const p of [...d.payments(Timestamp, now), ...lapsed.payments]) {
     await db.doc(`payments/${p.id}`).set(p);
   }
-  for (const doc of lapsed.documents) {
+  for (const doc of [...d.documents(now), ...lapsed.documents]) {
     await db.doc(`documents/${doc.id}`).set(doc);
   }
 
