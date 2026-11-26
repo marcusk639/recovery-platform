@@ -41,9 +41,14 @@ export const NoAccessScreen: React.FC = () => {
   );
 };
 
+// A header with back, so a check that never settles (offline, say) is not a
+// dead end.
 const Checking: React.FC = () => (
-  <View style={[styles.screen, styles.centered]} testID="role-check-pending">
-    <ActivityIndicator size="large" color={color.main} />
+  <View style={styles.screen} testID="role-check-pending">
+    <ScreenHeader renderBackButton header="" />
+    <View style={[styles.screen, styles.centered]}>
+      <ActivityIndicator size="large" color={color.main} />
+    </View>
   </View>
 );
 

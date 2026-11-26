@@ -20,7 +20,9 @@ jest.mock('@react-navigation/native', () => ({
 
 jest.mock('../../screen-header', () => {
   const { Text: T } = require('react-native');
-  return ({ header }: { header: string }) => <T>{header}</T>;
+  return ({ header, renderBackButton }: { header: string; renderBackButton?: boolean }) => (
+    <T testID={renderBackButton ? 'header-with-back' : 'header'}>{header}</T>
+  );
 });
 
 const renderGuard = (minRank: 'admin' | 'manager', houseId: string | null = 'h1') =>
@@ -73,5 +75,7 @@ describe('RequireHouseRole', () => {
     const { getByTestId, queryByTestId } = renderGuard('admin');
     expect(getByTestId('role-check-pending')).toBeTruthy();
     expect(queryByTestId('the-screen')).toBeNull();
+    // ...with a back button, so a check that never settles is not a dead end.
+    expect(getByTestId('header-with-back')).toBeTruthy();
   });
 });
