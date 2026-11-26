@@ -19,6 +19,19 @@ tags:
       EMAIL: test-lapsed-operator@rats-e2e.com
       PASSWORD: ${E2E_TEST_PASSWORD}
       LANDING_ID: subscription-required-screen
+# The link alone unlocks nothing: result=success while the house is still
+# canceled leaves the gate in place (the app re-reads the plan, it doesn't
+# trust the link).
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: regroup-app://app/checkout-return?result=success
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible:
+    id: subscription-required-screen
+- assertNotVisible:
+    id: house-tab
 - runScript:
     file: ../scripts/maestro-js/set-house-subscription-status.js
     env:

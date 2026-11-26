@@ -107,6 +107,15 @@ describe('deliverAppLink, signed in', () => {
     },
   );
 
+  // The link's result is never trusted: the app only re-reads server state,
+  // and the gate decides. A success link must not change any state itself.
+  it('changes no app state for a success hand-back beyond asking for the refresh', () => {
+    const store = makeStore();
+    const before = store.getState().user;
+    deliverAppLink({ kind: 'checkout-return', result: 'success' }, { signedIn: true, dispatch: store.dispatch, onCheckoutReturn: jest.fn() });
+    expect(store.getState().user).toEqual(before);
+  });
+
   it('does not refresh the plan state for an invitation', () => {
     const store = makeStore();
     const onCheckoutReturn = jest.fn();

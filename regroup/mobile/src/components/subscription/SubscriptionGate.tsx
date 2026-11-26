@@ -8,7 +8,6 @@ import GracePeriodBanner from './GracePeriodBanner';
 import SubscriptionRequiredScreen from '../../screens/Subscription/SubscriptionRequiredScreen';
 import GraceExpiredScreen from '../../screens/Subscription/GraceExpiredScreen';
 import { refreshPlanState } from '../../services/planState';
-import { guestKeys } from '../../state/queries/guestQueries';
 
 interface Props {
   children: React.ReactNode;
@@ -48,9 +47,9 @@ const SubscriptionGate: React.FC<Props> = ({ children }) => {
         const isActive = nextState === 'active';
 
         if (wasBackground && isActive) {
-          // W13: refreshPlanState skips the user and house keys until their
-          // ids are loaded, avoiding a cold-start race.
-          refreshPlanState(queryClient, { id: currentUser?.id, houseId: currentUser?.houseId as string | undefined });
+          // W13: refreshPlanState skips the user key until its id is loaded,
+          // avoiding a cold-start race.
+          refreshPlanState(queryClient, { id: currentUser?.id });
         }
 
         appState.current = nextState;
@@ -60,7 +59,7 @@ const SubscriptionGate: React.FC<Props> = ({ children }) => {
     return () => {
       subscription.remove();
     };
-  }, [currentUser?.id, currentUser?.houseId, queryClient]);
+  }, [currentUser?.id, queryClient]);
 
   if (result.status === 'loading') {
     return <RatsLoadingIndicator />;
