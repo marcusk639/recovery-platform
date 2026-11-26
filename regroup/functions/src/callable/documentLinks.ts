@@ -15,8 +15,9 @@ export const DOCUMENT_LINK_LIFETIME_MS = 15 * 60 * 1000;
 /**
  * Whether the caller is the resident a document belongs to: they hold a guest
  * claim for its house, its guestId is a guest record of that house linked to
- * their account, and its file is in that resident's own folder. The same test
- * as the documents read rule, plus the folder.
+ * their account, and its file is in that resident's own folder. The documents
+ * read rule checks the same, except the folder (a list query can't constrain
+ * storagePath), so a misfiled record lists but never opens.
  */
 async function isOwnResidentDocument(
   uid: string,

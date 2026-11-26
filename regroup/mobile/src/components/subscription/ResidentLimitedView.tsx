@@ -15,8 +15,10 @@ import { Routes } from '../../navigation/types';
  * blocked: its operator's plan is required or lapsed past the grace period.
  * They can't fix it, but they keep read-only access to their own data (owner
  * decision, launch spec §4.1 item 2): their payment history (receipts and CSV
- * export) and their own documents. Nothing else of the app is reachable; the
- * two screens are modal routes, and neither is in the linking config.
+ * export) and their own documents. This view replaces the tabs, so nothing
+ * else is reachable in the app. The two screens are modal routes outside the
+ * gate: no deep link may open them (limitedViewLinks.test.ts), and no deep
+ * link may open any other modal route either (linking.ts allowlist).
  *
  * Both buttons need the resident's own guest record (selected at sign-in), so
  * they show only once it has loaded and is linked to this account.

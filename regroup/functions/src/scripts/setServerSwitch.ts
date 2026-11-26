@@ -82,6 +82,11 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<void
     console.log('Dry run: nothing written. Re-run with --apply to write it.');
     return;
   }
+  if (path === 'config/app' && value !== null) {
+    console.log(
+      'Check first: this version is downloadable in that store. An older build is blocked until it updates.',
+    );
+  }
   await ref.set(nestedValue(field, value), { merge: true });
   const after = (await ref.get()).get(field);
   console.log(`${path}.${field} is now ${JSON.stringify(after)}`);
