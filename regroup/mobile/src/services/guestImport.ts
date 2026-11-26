@@ -72,12 +72,16 @@ function splitCsvRecords(text: string): string[][] {
       field += ch;
     }
   }
+  if (quoted) {
+    throw new GuestCsvError('A quoted field is never closed. Check the quotes in the file.');
+  }
   record.push(field);
   records.push(record);
   return records.filter(r => r.some(v => v.trim() !== ''));
 }
 
 export function parseGuestCsv(csvText: string): GuestImportRow[] {
+  // Excel's "CSV UTF-8" byte-order mark goes with the header's trim().
   const lines = splitCsvRecords(csvText);
   if (lines.length < 2) return [];
 

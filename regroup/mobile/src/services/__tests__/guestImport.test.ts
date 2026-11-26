@@ -180,6 +180,24 @@ describe('parseGuestCsv: quoted fields and missing columns', () => {
     );
   });
 
+  // Review: Excel's "CSV UTF-8" export starts with a byte-order mark.
+  it('ignores a UTF-8 byte-order mark before the header', () => {
+    const rows = parseGuestCsv(
+      '\uFEFF' + [HEADER, 'Jane,Smith,jane@example.com,2025-01-15,Alcohol'].join('\n'),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].firstName).toBe('Jane');
+  });
+
+  // Review: an unclosed quote used to swallow the rest of the file silently.
+  it('refuses a field whose quote is never closed', () => {
+    expect(() =>
+      parseGuestCsv(
+        [HEADER, 'Sam,"Smith, Jr.,sam@example.com,2025-01-15,Alcohol', 'Bo,B,b@x.com,2025-01-01,X'].join('\n'),
+      ),
+    ).toThrow(new GuestCsvError('A quoted field is never closed. Check the quotes in the file.'));
+  });
+
   it('marks the error as a CSV problem, not a read failure', () => {
     let caught: unknown;
     try {

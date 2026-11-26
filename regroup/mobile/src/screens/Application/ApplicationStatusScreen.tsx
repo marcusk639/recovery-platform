@@ -43,6 +43,7 @@ export default function ApplicationStatusScreen() {
     ? byId.data ?? undefined
     : mine.data?.find(a => a.houseId === houseId);
   const isLoading = applicationId ? byId.isLoading : mine.isLoading;
+  const loadFailed = applicationId ? byId.isError : mine.isError;
 
   if (isLoading) {
     return (
@@ -84,6 +85,10 @@ export default function ApplicationStatusScreen() {
             </Text>
           )}
         </>
+      ) : loadFailed ? (
+        <Text style={styles.body}>
+          Couldn't load your application's status. Try again later.
+        </Text>
       ) : (
         <Text style={styles.body}>
           Your application has been received. The house manager will review it

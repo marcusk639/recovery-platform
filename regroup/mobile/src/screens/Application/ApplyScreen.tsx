@@ -101,6 +101,7 @@ export default function ApplyScreen() {
             value={form.applicantName}
             onChangeText={v => setField('applicantName', v)}
             placeholder="Your full name"
+            maxLength={200}
             testID="input-name"
           />
           <Text style={styles.label}>Email *</Text>
@@ -109,6 +110,7 @@ export default function ApplyScreen() {
             value={form.applicantEmail}
             onChangeText={v => setField('applicantEmail', v)}
             placeholder="your@email.com"
+            maxLength={320}
             keyboardType="email-address"
             autoCapitalize="none"
             testID="input-email"
@@ -119,6 +121,7 @@ export default function ApplyScreen() {
             value={form.applicantPhone}
             onChangeText={v => setField('applicantPhone', v)}
             placeholder="555-0100"
+            maxLength={40}
             keyboardType="phone-pad"
           />
         </View>
@@ -132,6 +135,7 @@ export default function ApplyScreen() {
             value={form.sobrietyDate}
             onChangeText={v => setField('sobrietyDate', v)}
             placeholder="YYYY-MM-DD"
+            maxLength={40}
           />
           <Text style={styles.label}>Program</Text>
           {PROGRAM_TYPES.map(pt => (
@@ -158,6 +162,7 @@ export default function ApplyScreen() {
             value={form.currentSituation}
             onChangeText={v => setField('currentSituation', v)}
             placeholder="Brief description of your housing situation"
+            maxLength={2000}
             multiline
             numberOfLines={3}
           />
@@ -167,6 +172,7 @@ export default function ApplyScreen() {
             value={form.references}
             onChangeText={v => setField('references', v)}
             placeholder="Name and contact info"
+            maxLength={1000}
             multiline
             numberOfLines={2}
           />

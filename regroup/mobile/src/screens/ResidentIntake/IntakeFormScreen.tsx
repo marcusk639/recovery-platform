@@ -90,8 +90,8 @@ const IntakeFormScreen = () => {
   const applicationId: string = route.params?.applicationId ?? '';
   const { data: application } = useApplication(houseId, applicationId);
   const [prefilledFrom, setPrefilledFrom] = useState<string | null>(null);
-  if (application && prefilledFrom !== application.id) {
-    setPrefilledFrom(application.id);
+  if (application && prefilledFrom !== applicationId) {
+    setPrefilledFrom(applicationId);
     const prefill = prefillFromApplication(application);
     setValues(prev => {
       const next = { ...prev };

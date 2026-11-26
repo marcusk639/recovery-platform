@@ -69,6 +69,15 @@ describe('ApplicationStatusScreen', () => {
     expect(await findByText('Welcome')).toBeTruthy();
   });
 
+  // Review: a failed read is not "not found".
+  it('says the status could not be loaded when the read fails', async () => {
+    mockGetApplication.mockRejectedValue(new Error('Failed to load the application.'));
+    const { findByText, queryByText } = renderScreen();
+
+    expect(await findByText("Couldn't load your application's status. Try again later.")).toBeTruthy();
+    expect(queryByText('Pending Review')).toBeNull();
+  });
+
   it('says it was received when the application cannot be found', async () => {
     mockGetApplication.mockResolvedValue(null);
     const { findByText } = renderScreen();
