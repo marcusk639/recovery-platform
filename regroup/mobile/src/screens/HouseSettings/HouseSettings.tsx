@@ -225,17 +225,18 @@ const HouseSettings: React.FC<Props> = (props) => {
         iconName: 'file-import',
         color: color.medium_grey,
       },
-      payments: {
-        action: () => navigation.navigate(Routes.StripeSettings),
-        label: 'Payments',
-        description: 'Connect Stripe to accept rent payments',
-        iconName: 'credit-card',
-        color: color.medium_grey,
-      },
       // Owners and managers only: peer leaders see no house money, and the
-      // rules refuse their reads of the house's payment records.
+      // rules refuse their reads of the house's payment records. Each of these
+      // screens also refuses a peer leader itself (guardedScreens.ts).
       ...(mayViewHouseMoney
         ? {
+            payments: {
+              action: () => navigation.navigate(Routes.StripeSettings),
+              label: 'Payments',
+              description: 'Connect Stripe to accept rent payments',
+              iconName: 'credit-card',
+              color: color.medium_grey,
+            },
             paymentDashboard: {
               action: () => navigation.navigate(Routes.PaymentDashboard),
               label: 'Payment Dashboard',

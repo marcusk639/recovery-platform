@@ -280,30 +280,38 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
         iconBackgroundColor={color.cobalt}
         onPress={() => navigation.navigate(Routes.MeetingSearch)}
       />
-      <Section
-        name="Drug Testing"
-        description="Log and review drug test results"
-        boxedIconName="vial"
-        iconBackgroundColor={color.dark_blue}
-        onPress={() => navigation.navigate(Routes.DrugTesting)}
-      />
-      <Section
-        name="Resident Intake"
-        description="Onboard a new resident"
-        boxedIconName="clipboard-list"
-        iconBackgroundColor={color.green}
-        onPress={() =>
-          navigation.navigate(Routes.ResidentIntake, { houseId: house.id })
-        }
-      />
-      <Section
-        name="Applications"
-        description="Review resident applications"
-        boxedIconName="file-alt"
-        iconBackgroundColor={color.cobalt}
-        notifications={pendingCount}
-        onPress={() => navigation.navigate(Routes.ApplicationList)}
-      />
+      {/* Staff only (P5 Task 20); each screen also checks the role itself. */}
+      {isHouseStaff && (
+        <>
+          <Section
+            testID="drug-testing-section"
+            name="Drug Testing"
+            description="Log and review drug test results"
+            boxedIconName="vial"
+            iconBackgroundColor={color.dark_blue}
+            onPress={() => navigation.navigate(Routes.DrugTesting)}
+          />
+          <Section
+            testID="intake-section"
+            name="Resident Intake"
+            description="Onboard a new resident"
+            boxedIconName="clipboard-list"
+            iconBackgroundColor={color.green}
+            onPress={() =>
+              navigation.navigate(Routes.ResidentIntake, { houseId: house.id })
+            }
+          />
+          <Section
+            testID="applications-section"
+            name="Applications"
+            description="Review resident applications"
+            boxedIconName="file-alt"
+            iconBackgroundColor={color.cobalt}
+            notifications={pendingCount}
+            onPress={() => navigation.navigate(Routes.ApplicationList)}
+          />
+        </>
+      )}
       {house.houseType === 'oxford' && (
         <>
           <Section

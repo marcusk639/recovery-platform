@@ -53,8 +53,6 @@ import HousesOverview from '../screens/HousesOverview/HousesOverview';
 import NewMeeting from '../screens/StatUpdates/NewMeeting';
 import GuestList from '../screens/GuestList/GuestList';
 import { PhaseConfigSetup } from '../screens/SetupWizards/PhaseSetup/PhaseConfigSetup';
-import HouseSettings from '../screens/HouseSettings/HouseSettings';
-import StripeSettingsScreen from '../screens/HouseSettings/StripeSettingsScreen';
 import UserInfo from '../screens/Profile/UserInfo';
 import PhaseCustomization from '../screens/Profile/PhaseCustomization';
 import SubscriptionHandler from '../screens/SubscriptionHandler/SubscriptionHandler';
@@ -69,16 +67,8 @@ import BusinessMeetingDetail from '../screens/Oxford/BusinessMeetingDetail';
 import OxfordVoting from '../screens/Oxford/Voting';
 import CharterCompliance from '../screens/Oxford/CharterCompliance';
 import { ResidentPayment, PaymentHistory } from '../screens/Payments';
-import PaymentDashboard from '../screens/HouseSettings/PaymentDashboard';
-import DrugTestingScreen from '../screens/DrugTesting/DrugTestingScreen';
-import DrugTestForm from '../screens/DrugTesting/DrugTestForm';
-import DrugTestHistory from '../screens/DrugTesting/DrugTestHistory';
-import IntakeFormScreen from '../screens/ResidentIntake/IntakeFormScreen';
 import ApplyScreen from '../screens/Application/ApplyScreen';
 import ApplicationStatusScreen from '../screens/Application/ApplicationStatusScreen';
-import ApplicationListScreen from '../screens/Applications/ApplicationListScreen';
-import ApplicationDetailScreen from '../screens/Applications/ApplicationDetailScreen';
-import BalanceDashboard from '../screens/BalanceDashboard/BalanceDashboard';
 import RentPaymentScreen from '../screens/RentPayment/RentPaymentScreen';
 import PaymentWebView from '../screens/RentPayment/PaymentWebView';
 import DeleteAccount from '../screens/Personal/DeleteAccount';
@@ -86,13 +76,12 @@ import NotificationsScreen from '../screens/Notifications/Notifications';
 import TreasuryDashboard from '../screens/Treasury/TreasuryDashboard';
 import FinancialRecordForm from '../screens/Treasury/FinancialRecordForm';
 import FinancialRecordDetail from '../screens/Treasury/FinancialRecordDetail';
-import GuestImportScreen from '../screens/GuestImport/GuestImportScreen';
-import AdminReportScreen from '../screens/AdminReport/AdminReportScreen';
 import DocumentListScreen from '../screens/Documents/DocumentListScreen';
-import StaffNotesFeed from '../screens/StaffNotes/StaffNotesFeed';
 import { useSelectedGuest } from '../hooks/useSelectedGuest';
 import { useSelectedHouse } from '../hooks/useSelectedHouse';
 import { RatsKeyboardScreenLayout } from '../components/rats-keyboard';
+// Operator-only screens are registered behind their own role check (P5 Task 20).
+import { guardedScreens } from './guardedScreens';
 import { ScreenModalHost } from '../context/ModalContext';
 
 // Wrapper to inject Redux guest+house into RentPaymentScreen
@@ -350,10 +339,10 @@ export const RootNavigator = ({
         name={Routes.PhaseSetup}
         component={PhaseConfigSetup as any}
       />
-      <RootStack.Screen name={Routes.HouseSettings} component={HouseSettings} />
+      <RootStack.Screen name={Routes.HouseSettings} component={guardedScreens[Routes.HouseSettings]} />
       <RootStack.Screen
         name={Routes.StripeSettings}
-        component={StripeSettingsScreen}
+        component={guardedScreens[Routes.StripeSettings]}
       />
       <RootStack.Screen name={Routes.GuestInfo} component={UserInfo} />
       <RootStack.Screen
@@ -367,9 +356,9 @@ export const RootNavigator = ({
       <RootStack.Screen name={Routes.SendInvites} component={GuestInvites} />
       <RootStack.Screen
         name={Routes.AdminReport}
-        component={AdminReportScreen}
+        component={guardedScreens[Routes.AdminReport]}
       />
-      <RootStack.Screen name={Routes.StaffNotes} component={StaffNotesFeed} />
+      <RootStack.Screen name={Routes.StaffNotes} component={guardedScreens[Routes.StaffNotes]} />
       <RootStack.Screen name={Routes.MeetingSearch} component={MeetingSearch} />
       <RootStack.Screen name={Routes.NewAccount} component={NewAccount} />
 
@@ -463,7 +452,7 @@ export const RootNavigator = ({
       />
       <RootStack.Screen
         name={Routes.PaymentDashboard}
-        component={PaymentDashboard}
+        component={guardedScreens[Routes.PaymentDashboard]}
       />
       <RootStack.Screen
         name={Routes.RentPayment}
@@ -477,18 +466,18 @@ export const RootNavigator = ({
       {/* Drug Testing screens */}
       <RootStack.Screen
         name={Routes.DrugTesting}
-        component={DrugTestingScreen}
+        component={guardedScreens[Routes.DrugTesting]}
       />
-      <RootStack.Screen name={Routes.DrugTestForm} component={DrugTestForm} />
+      <RootStack.Screen name={Routes.DrugTestForm} component={guardedScreens[Routes.DrugTestForm]} />
       <RootStack.Screen
         name={Routes.DrugTestHistory}
-        component={DrugTestHistory}
+        component={guardedScreens[Routes.DrugTestHistory]}
       />
 
       {/* Intake screens */}
       <RootStack.Screen
         name={Routes.ResidentIntake}
-        component={IntakeFormScreen}
+        component={guardedScreens[Routes.ResidentIntake]}
       />
 
       {/* Application screens */}
@@ -499,17 +488,17 @@ export const RootNavigator = ({
       />
       <RootStack.Screen
         name={Routes.ApplicationList}
-        component={ApplicationListScreen}
+        component={guardedScreens[Routes.ApplicationList]}
       />
       <RootStack.Screen
         name={Routes.ApplicationDetail}
-        component={ApplicationDetailScreen}
+        component={guardedScreens[Routes.ApplicationDetail]}
       />
 
       {/* Import screens */}
       <RootStack.Screen
         name={Routes.GuestImport}
-        component={GuestImportScreen}
+        component={guardedScreens[Routes.GuestImport]}
       />
 
       {/* Document screens */}
@@ -521,7 +510,7 @@ export const RootNavigator = ({
       {/* Balance screens */}
       <RootStack.Screen
         name={Routes.BalanceDashboard}
-        component={BalanceDashboard}
+        component={guardedScreens[Routes.BalanceDashboard]}
       />
 
       {/* Notification screens */}

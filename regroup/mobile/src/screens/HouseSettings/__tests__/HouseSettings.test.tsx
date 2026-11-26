@@ -417,13 +417,16 @@ describe('HouseSettings', () => {
       expect(getByText('Payment Dashboard')).toBeTruthy();
     });
 
-    it('hides the Payment Dashboard from a peer leader, who may not see house money', () => {
+    // P5 Task 20, an intended change: Stripe Connect setup (Payments) is a
+    // money screen too, and StripeSettings now refuses a peer leader itself.
+    it('hides the Payment Dashboard and Payments from a peer leader, who may not see house money', () => {
       mockMayViewHouseMoney = false;
       try {
         const store = buildStore();
         const { queryByText, getByText } = renderScreen(store);
         expect(queryByText('Payment Dashboard')).toBeNull();
-        expect(getByText('Payments')).toBeTruthy();
+        expect(queryByText('Payments')).toBeNull();
+        expect(getByText('Reports')).toBeTruthy();
       } finally {
         mockMayViewHouseMoney = true;
       }

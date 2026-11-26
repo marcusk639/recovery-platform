@@ -621,6 +621,22 @@ describe('HouseSummary', () => {
     });
   });
 
+  // ─── Operator-only sections (P5 Task 20) ─────────────────────────────────────
+  describe('operator-only sections', () => {
+    const SECTIONS = ['drug-testing-section', 'intake-section', 'applications-section'];
+
+    it.each(SECTIONS)('shows %s to house staff', id => {
+      const { getByTestId } = renderScreen();
+      expect(getByTestId(id)).toBeTruthy();
+    });
+
+    it.each(SECTIONS)('hides %s from a resident', id => {
+      mockToken = { role: { 'house-1': 'guest' }, claims: {} };
+      const { queryByTestId } = renderScreen();
+      expect(queryByTestId(id)).toBeNull();
+    });
+  });
+
   // ─── Applications query (#197) ───────────────────────────────────────────────
   describe('applications query', () => {
     it('runs for a house admin', () => {

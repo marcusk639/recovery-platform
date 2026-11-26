@@ -1,0 +1,57 @@
+# OPS-040 — A resident's House tab has no operator-only entry points: no Drug
+# Testing, Resident Intake or Applications (P5 Task 20). Each of those screens
+# also refuses a resident itself (RequireHouseRole; the Jest table in
+# src/components/require-house-role/__tests__/screens.test.tsx), and the rules
+# refuse the data.
+# Persona: resident A of test-house-123.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/resident-no-operator-links.yaml
+appId: ${APP_ID}
+tags:
+  - resident
+  - roles
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "house-tab"
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+# For staff the three sections come right after Meetings, so with Meetings in
+# the middle of the screen they would be on it.
+- scrollUntilVisible:
+    element:
+      text: ".*Meeting finder.*"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- assertNotVisible:
+    id: "drug-testing-section"
+- assertNotVisible:
+    id: "intake-section"
+- assertNotVisible:
+    id: "applications-section"
+- assertNotVisible: ".*Log and review drug test results.*"
+- assertNotVisible: ".*Onboard a new resident.*"
+- assertNotVisible: ".*Review resident applications.*"
+# And nowhere further down.
+- swipe:
+    direction: UP
+- swipe:
+    direction: UP
+- assertNotVisible:
+    id: "drug-testing-section"
+- assertNotVisible:
+    id: "intake-section"
+- assertNotVisible:
+    id: "applications-section"
+- assertNotVisible: ".*Log and review drug test results.*"
+- assertNotVisible: ".*Onboard a new resident.*"
+- assertNotVisible: ".*Review resident applications.*"
+- runFlow:
+    file: ../subflows/logout.yaml

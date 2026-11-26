@@ -1,0 +1,77 @@
+import React from 'react';
+import { Text } from 'react-native';
+import { fireEvent, render } from '@testing-library/react-native';
+import RequireHouseRole from '../RequireHouseRole';
+
+let mockToken: { claims?: object; role?: Record<string, string> } = {};
+jest.mock('../../../context/auth', () => ({
+  useRoleToken: () => mockToken,
+}));
+
+const mockUseHouseMoneyAccess = jest.fn();
+jest.mock('../../../state/queries/houseTierQueries', () => ({
+  useHouseMoneyAccess: (...args: unknown[]) => mockUseHouseMoneyAccess(...args),
+}));
+
+const mockGoBack = jest.fn();
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ goBack: mockGoBack }),
+}));
+
+jest.mock('../../screen-header', () => {
+  const { Text: T } = require('react-native');
+  return ({ header }: { header: string }) => <T>{header}</T>;
+});
+
+const renderGuard = (minRank: 'admin' | 'manager', houseId: string | null = 'h1') =>
+  render(
+    <RequireHouseRole houseId={houseId} minRank={minRank}>
+      <Text testID="the-screen">screen</Text>
+    </RequireHouseRole>,
+  );
+
+describe('RequireHouseRole', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseHouseMoneyAccess.mockReturnValue('no');
+  });
+
+  it('shows the screen to house staff at admin rank', () => {
+    mockToken = { claims: {}, role: { h1: 'admin' } };
+    expect(renderGuard('admin').getByTestId('the-screen')).toBeTruthy();
+  });
+
+  it('shows a money screen to the owner without asking for the tier', () => {
+    mockToken = { claims: {}, role: { h1: 'superAdmin' } };
+    expect(renderGuard('manager').getByTestId('the-screen')).toBeTruthy();
+    expect(mockUseHouseMoneyAccess).toHaveBeenCalledWith('h1', false);
+  });
+
+  it('shows a money screen to a manager once the tier says so', () => {
+    mockToken = { claims: {}, role: { h1: 'admin' } };
+    mockUseHouseMoneyAccess.mockReturnValue('yes');
+    expect(renderGuard('manager').getByTestId('the-screen')).toBeTruthy();
+    expect(mockUseHouseMoneyAccess).toHaveBeenCalledWith('h1', true);
+  });
+
+  it('refuses a resident, with a way back', () => {
+    mockToken = { claims: {}, role: { h1: 'guest' } };
+    const { getByTestId, queryByTestId, getByText } = renderGuard('admin');
+    expect(queryByTestId('the-screen')).toBeNull();
+    expect(getByText("You don't have access to this")).toBeTruthy();
+    fireEvent.press(getByTestId('no-access-back-button'));
+    expect(mockGoBack).toHaveBeenCalled();
+  });
+
+  it('refuses when there is no house to check', () => {
+    mockToken = { claims: {}, role: { h1: 'superAdmin' } };
+    expect(renderGuard('admin', null).getByTestId('no-access-screen')).toBeTruthy();
+  });
+
+  it('waits, showing nothing, until the claims are known', () => {
+    mockToken = { role: undefined };
+    const { getByTestId, queryByTestId } = renderGuard('admin');
+    expect(getByTestId('role-check-pending')).toBeTruthy();
+    expect(queryByTestId('the-screen')).toBeNull();
+  });
+});
