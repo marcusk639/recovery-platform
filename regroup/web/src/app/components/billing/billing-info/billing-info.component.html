@@ -15,6 +15,8 @@
       <div class="text-danger" id="card-errors"></div>
       <div class="text-danger" id="cvc-errors"></div>
       <div class="text-danger" id="exp-errors"></div>
+      <a *ngIf="accountRefusal" class="d-block mt-2" data-testid="go-to-account" [routerLink]="['/my-account']"
+        [queryParams]="accountQueryParams">{{ accountRefusal === 'plan-ended' ? 'Reactivate it on your account page' : 'Go to your account page' }}</a>
     </div>
     <div *ngIf="showSubmit" class="col-12">
       <button type="button" class="btn btn-bordered w-100 mt-3" (keyup.enter)="buy()" (click)="buy()">Submit</button>

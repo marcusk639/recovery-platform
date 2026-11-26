@@ -250,6 +250,48 @@ export class AuthService extends BaseFirestoreService<User> {
   }
 
   /**
+   * The signed-in, non-anonymous account with its stored record, or null.
+   * Waits for Firebase's first auth state, so a page load with a stored
+   * session finds it. The id and email come from the Auth user.
+   */
+  async signedInAccount(): Promise<User | null> {
+    const authUser = await this.autoLogin().catch((): null => null);
+    if (!authUser || authUser.isAnonymous) {
+      return null;
+    }
+    const stored = await this.getUser(authUser.uid).catch((): null => null);
+    return {
+      ...(stored || new User()),
+      id: authUser.uid,
+      uid: authUser.uid,
+      email: (stored && stored.email) || authUser.email,
+    } as User;
+  }
+
+  /**
+   * Checkout for an account that already exists (signed in on /signup, launch
+   * item M9). Never creates an account and NEVER deletes one: a failure here
+   * leaves the account as it was. The server decides from the stored record
+   * whether this account may start a plan, and refuses (failed-precondition,
+   * `details.reason`) one that has a plan or whose plan ended.
+   */
+  subscribeExistingOperator(
+    user: User,
+    paymentMethod: string,
+    houseType: HouseType,
+    tier: string,
+    billingInterval?: BillingInterval,
+  ): Promise<User> {
+    return this.functions.initializeSubscription(
+      user,
+      paymentMethod,
+      houseType,
+      tier,
+      billingInterval,
+    );
+  }
+
+  /**
    * Removes the account created for a signup whose subscription failed to
    * initialize. Best-effort: cleanup failures are logged but never mask the
    * original subscription error.
