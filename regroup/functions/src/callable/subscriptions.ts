@@ -47,6 +47,7 @@ import {
 } from "../util/subscriptionHouses";
 import { grantPotentialSuperAdminClaim } from "../util/superAdminClaim";
 import { writeOperatorSubscription } from "../util/operatorSubscriptionWrite";
+import { claimCheckout, releaseCheckout } from "../util/checkoutGuard";
 import {
   getHouse,
   getUser,
@@ -164,8 +165,9 @@ const CHECKOUT_ORPHANED_MESSAGE =
 
 /**
  * Stripe created the subscription but the records that tie it to the operator
- * weren't written. The web deletes the new account on any error, so leaving the
- * subscription would bill, after the trial, an account that no longer exists.
+ * weren't written. The web deletes a new account on any error, so leaving the
+ * subscription would bill, after the trial, an account that no longer exists
+ * (or, for an existing account, one whose record doesn't show the plan).
  * Cancel it now through closeOperatorBilling, which acts only on a subscription
  * Stripe ties to this uid. If that fails too, the subscription is still live:
  * log its ids at ERROR for support and say so.
@@ -264,6 +266,11 @@ export const createOperatorSubscription = onCall(
       );
     }
 
+    // From the stored record, never the client's subscriptionMetadata: refuses
+    // an account with a live or restartable plan (a second subscription would
+    // bill twice), and locks out a concurrent checkout. See util/checkoutGuard.
+    const claim = await claimCheckout(data.user.id);
+
     logger.info("Creating subscription for user", {
       userId: data.user.id,
       houseType: data.houseType,
@@ -274,14 +281,22 @@ export const createOperatorSubscription = onCall(
     // from the resolved tier price. Legacy two-item subscribers are unaffected:
     // the flag defaults off, so the existing block below runs unchanged.
     if (isTierBillingEnabled()) {
-      const tierMetadata = await initializeTierCustomer(
-        data.user.email,
-        data.paymentMethod,
-        data.houseType,
-        data.tier as TierKey,
-        data.user.id,
-        data.billingInterval ?? "month",
-      );
+      let tierMetadata: Awaited<ReturnType<typeof initializeTierCustomer>>;
+      try {
+        tierMetadata = await initializeTierCustomer(
+          data.user.email,
+          data.paymentMethod,
+          data.houseType,
+          data.tier as TierKey,
+          data.user.id,
+          data.billingInterval ?? "month",
+        );
+      } catch (stripeError) {
+        // No subscription was recorded (a declined card, say): free the lock
+        // so the operator can retry at once.
+        await releaseCheckout(claim);
+        throw stripeError;
+      }
       logger.info("Tier subscription created", {
         subscriptionId: tierMetadata.subscriptionId,
       });
