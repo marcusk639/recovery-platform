@@ -102,6 +102,7 @@ import { PrivacyPolicyComponent } from './components/privacypolicy/privacy-polic
 import { TermsComponent } from './components/terms/privacy-policy/terms.component';
 import { RedirectComponent } from './components/redirect/redirect.component';
 import { AppLinkLandingComponent } from './components/app-link-landing/app-link-landing.component';
+import { PlanReactivateComponent } from './components/accounts/plan-reactivate/plan-reactivate.component';
 import { MyAccountComponent } from './components/accounts/my-account/my-account.component';
 import { ModalComponent } from './components/modal/modal.component';
 import { AuthGuard } from './guards/auth.guard';
@@ -203,6 +204,7 @@ import { analyticsImports, analyticsProviders } from './analytics-providers';
     TermsComponent,
     RedirectComponent,
     AppLinkLandingComponent,
+    PlanReactivateComponent,
     ModalComponent,
     TierPickerComponent,
     OrderSummaryComponent,

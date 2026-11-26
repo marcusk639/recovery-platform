@@ -1,0 +1,17 @@
+<div class="plan-reactivate mt-3">
+  <ng-container *ngIf="canRestart && !notice">
+    <button *ngIf="!confirming" type="button" class="button" data-testid="reactivate-plan" (click)="start()">
+      {{ isResume ? 'Resume plan' : 'Reactivate plan' }}
+    </button>
+    <div *ngIf="confirming">
+      <span class="d-block text" data-testid="reactivate-confirm-text">{{ confirmText }}</span>
+      <button type="button" class="button mt-2" data-testid="reactivate-confirm" [disabled]="pending" (click)="confirm()">
+        {{ pending ? 'Working...' : isResume ? 'Resume' : 'Reactivate' }}
+      </button>
+      <button type="button" class="button mt-2 ml-2" [disabled]="pending" (click)="cancel()">Cancel</button>
+    </div>
+  </ng-container>
+  <span *ngIf="notice" class="d-block text" data-testid="reactivate-notice">{{ notice }}</span>
+  <span *ngIf="error" class="d-block text text-danger" data-testid="reactivate-error">{{ error }}</span>
+  <a *ngIf="hasNoPlan || showChoosePlan" class="button mt-2" data-testid="choose-plan" [href]="choosePlanHref">Choose a plan</a>
+</div>

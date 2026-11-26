@@ -56,6 +56,7 @@
                       <button class="button mt-3" (click)="openBillingPortal()" [disabled]="portalLoading">
                         {{ portalLoading ? 'Redirecting...' : 'Manage Billing →' }}
                       </button>
+                      <app-plan-reactivate [user]="user" [fromApp]="fromApp" (reactivated)="onReactivated($event)"></app-plan-reactivate>
                       <a *ngIf="fromApp" class="return-to-app button mt-3 ml-2" routerLink="/checkout-return" [queryParams]="{ result: 'portal' }">
                         Return to Regroup
                       </a>
