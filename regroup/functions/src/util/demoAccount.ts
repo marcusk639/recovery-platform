@@ -7,13 +7,14 @@
  * refuse it here. Reads stay open so the demo can still be shown.
  *
  * Identified by the server-set custom claim `demo: true` (DEMO_CLAIM), which
- * its holder cannot change: anyone signed in as the demo user can change its
- * email through Firebase Auth, which would escape an email check. The email
- * (lower-cased, as the rules and the app's `isDemo` compare it) still counts
- * until the claim is set in production with `npm run demo:mark-account`. The
- * claims writers keep the claim (`util/claims.ts` parseCurrentClaims), and
- * `scheduled/demoAccountRestore.ts` puts back the email and password if
- * someone changes them.
+ * its holder cannot change, and not by its email: anyone signed in as the
+ * demo user can change that through Firebase Auth (owner decision
+ * 2026-11-27). Set it once per project with `npm run demo:mark-account`
+ * BEFORE deploying the functions and rules that read it; until then the
+ * account is not treated as the demo. The claims writers keep the claim
+ * (`util/claims.ts` parseCurrentClaims), and `scheduled/demoAccountRestore.ts`
+ * puts back the email and password if someone changes them. The app's own
+ * popovers (`mobile/src/util/user.ts` `isDemo`) still go by the email.
  */
 import { HttpsError } from 'firebase-functions/v2/https';
 
@@ -28,9 +29,7 @@ export const DEMO_CLAIM = 'demo';
 type CallerAuth = { token?: { email?: unknown; demo?: unknown } } | null | undefined;
 
 export function isDemoAccount(auth: CallerAuth): boolean {
-  if (auth?.token?.[DEMO_CLAIM] === true) return true;
-  const email = auth?.token?.email;
-  return typeof email === 'string' && email.toLowerCase() === DEMO_ACCOUNT_EMAIL;
+  return auth?.token?.[DEMO_CLAIM] === true;
 }
 
 /** Throws `permission-denied` for the demo account; call it before any side effect. */

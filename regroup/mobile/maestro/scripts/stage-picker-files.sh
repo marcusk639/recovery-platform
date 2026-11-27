@@ -58,6 +58,8 @@ PY
 
 case "$PLATFORM" in
   ios)
+    xcrun simctl addmedia "$DEVICE" "$PNG"
+    echo "✓ added e2e-photo.png to Photos ($DEVICE)"
     GROUPS_DIR="$HOME/Library/Developer/CoreSimulator/Devices/$DEVICE/data/Containers/Shared/AppGroup"
     [[ -d "$GROUPS_DIR" ]] || { echo "✗ no simulator $DEVICE" >&2; exit 1; }
     dest=""
@@ -73,8 +75,6 @@ case "$PLATFORM" in
     mkdir -p "$dest"
     cp "$PDF" "$dest/e2e-upload.pdf"
     echo "✓ staged e2e-upload.pdf in On My iPhone ($DEVICE)"
-    xcrun simctl addmedia "$DEVICE" "$PNG"
-    echo "✓ added e2e-photo.png to Photos ($DEVICE)"
     ;;
   android)
     adb -s "$DEVICE" push "$PDF" /sdcard/Download/e2e-upload.pdf >/dev/null

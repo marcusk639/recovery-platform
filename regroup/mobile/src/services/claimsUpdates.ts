@@ -36,33 +36,55 @@ export interface ClaimsWatchDeps {
   refresh: () => Promise<void>;
 }
 
+/** How long to wait before retrying a refresh that failed (offline, say). */
+export const CLAIMS_REFRESH_RETRY_MS = 30_000;
+
 /**
  * Refreshes once for each stamp newer than the token the app held when it first
- * saw a stamp, then once per newer stamp. Refreshes run one at a time. Returns
- * the unsubscribe function.
+ * saw a stamp, then once per newer stamp. Refreshes run one at a time. A stamp
+ * counts as handled only once its refresh succeeds; a failed refresh is retried
+ * after CLAIMS_REFRESH_RETRY_MS (or at the next stamp), so a demotion is not
+ * lost to a flaky connection. Returns the unsubscribe function.
  */
 export function watchClaimsUpdates(uid: string, deps: ClaimsWatchDeps): () => void {
   let handledMs: number | undefined;
+  let latestMs: number | undefined;
   let queue: Promise<void> = Promise.resolve();
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let active = true;
 
-  const handle = async (stampMs: number) => {
+  const handle = async () => {
+    const stampMs = latestMs;
+    if (!active || stampMs === undefined) return;
     if (handledMs === undefined) handledMs = (await deps.tokenIssuedAtMs()) ?? 0;
     if (stampMs <= handledMs) return;
-    handledMs = stampMs;
     await deps.refresh();
+    handledMs = Math.max(handledMs, stampMs);
   };
 
-  return onSnapshot(
+  const enqueue = () => {
+    if (retry) clearTimeout(retry);
+    retry = undefined;
+    queue = queue.then(handle).catch((error) => {
+      logException(error);
+      if (active) retry = setTimeout(enqueue, CLAIMS_REFRESH_RETRY_MS);
+    });
+  };
+
+  const unsubscribe = onSnapshot(
     doc(claimsUpdatesCollection, uid),
     (snapshot) => {
       const stampMs = stampMillis(snapshot.exists() ? snapshot.data()?.updatedAt : undefined);
       if (stampMs === undefined) return;
-      queue = queue
-        .then(() => handle(stampMs))
-        .catch((error) => {
-          logException(error);
-        });
+      latestMs = Math.max(latestMs ?? 0, stampMs);
+      enqueue();
     },
     (error) => logException(error),
   );
+
+  return () => {
+    active = false;
+    if (retry) clearTimeout(retry);
+    unsubscribe();
+  };
 }

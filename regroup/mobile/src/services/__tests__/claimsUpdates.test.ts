@@ -18,7 +18,7 @@ jest.mock('@react-native-firebase/firestore', () => ({
 jest.mock('../../util/logging', () => ({ logException: jest.fn() }));
 
 import { logException } from '../../util/logging';
-import { stampMillis, watchClaimsUpdates } from '../claimsUpdates';
+import { CLAIMS_REFRESH_RETRY_MS, stampMillis, watchClaimsUpdates } from '../claimsUpdates';
 
 const TOKEN_ISSUED = Date.UTC(2026, 10, 27, 12, 0, 0);
 const stamp = (ms: number) => ({
@@ -83,17 +83,60 @@ describe('watchClaimsUpdates', () => {
     expect(refresh).toHaveBeenCalledTimes(2);
   });
 
-  it('runs refreshes one at a time', async () => {
+  it('runs refreshes one at a time, and refreshes again for a stamp that arrived meanwhile', async () => {
     let release: () => void = () => {};
     refresh.mockImplementationOnce(() => new Promise<void>((resolve) => (release = resolve)));
     const { emit } = start();
     emit(stamp(TOKEN_ISSUED + 1));
+    await settle();
     emit(stamp(TOKEN_ISSUED + 2));
     await settle();
     expect(refresh).toHaveBeenCalledTimes(1);
     release();
     await settle();
     expect(refresh).toHaveBeenCalledTimes(2);
+  });
+
+  it('coalesces stamps that arrive together into one refresh', async () => {
+    const { emit } = start();
+    emit(stamp(TOKEN_ISSUED + 1));
+    emit(stamp(TOKEN_ISSUED + 2));
+    await settle();
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries a failed refresh: the stamp is not handled until a refresh succeeds', async () => {
+    jest.useFakeTimers();
+    try {
+      refresh.mockRejectedValueOnce(new Error('offline'));
+      const { emit } = start();
+      emit(stamp(TOKEN_ISSUED + 1));
+      await jest.advanceTimersByTimeAsync(0);
+      expect(refresh).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(CLAIMS_REFRESH_RETRY_MS);
+      expect(refresh).toHaveBeenCalledTimes(2);
+      // Succeeded: the same stamp redelivered is not refreshed again.
+      emit(stamp(TOKEN_ISSUED + 1));
+      await jest.advanceTimersByTimeAsync(CLAIMS_REFRESH_RETRY_MS);
+      expect(refresh).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('stops retrying once unsubscribed', async () => {
+    jest.useFakeTimers();
+    try {
+      refresh.mockRejectedValue(new Error('offline'));
+      const { emit, unsubscribe } = start();
+      emit(stamp(TOKEN_ISSUED + 1));
+      await jest.advanceTimersByTimeAsync(0);
+      unsubscribe();
+      await jest.advanceTimersByTimeAsync(CLAIMS_REFRESH_RETRY_MS * 3);
+      expect(refresh).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   it('refreshes for any stamp when the token time is unknown', async () => {

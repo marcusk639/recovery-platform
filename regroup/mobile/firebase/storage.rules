@@ -31,17 +31,12 @@ service firebase.storage {
     // The shared App Review demo login (its password is in the app). It may read
     // what its claims allow, but never upload, overwrite or delete: every write
     // rule below starts with notDemo(). Identified by the server-set `demo:
-    // true` claim, which its holder cannot change, or, until that claim is set
-    // in production, by its email. Mirrors isDemoAccount() in firestore.rules
-    // and functions util/demoAccount.ts. 'email' in token is checked first:
-    // reading an absent key is an error, which would deny every write by an
-    // account without an email (phone sign-in).
+    // true` claim, which its holder cannot change (not by its email, which
+    // they can). Mirrors isDemoAccount() in firestore.rules and functions
+    // util/demoAccount.ts. 'demo' in token first: reading an absent key is an
+    // error, which would deny every write by an account without the claim.
     function notDemo() {
-      return !(isAuthenticated()
-        && (request.auth.token.get('demo', false) == true
-          || ('email' in request.auth.token
-            && request.auth.token.email is string
-            && request.auth.token.email.lower() == 'demo_user@appdemo.net')));
+      return !(isAuthenticated() && 'demo' in request.auth.token && request.auth.token.demo == true);
     }
 
     function isHouseMember(houseId) {

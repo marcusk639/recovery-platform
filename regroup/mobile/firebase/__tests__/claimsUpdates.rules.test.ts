@@ -18,7 +18,16 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { deleteDoc, doc, getDoc, onSnapshot, setDoc, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  onSnapshot,
+  setDoc,
+  updateDoc,
+} from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -92,7 +101,6 @@ describe('claims-updates/{userId}', () => {
   });
 
   it('BLOCKS listing the collection', async () => {
-    const { collection, getDocs } = await import('firebase/firestore');
     const db = testEnv.authenticatedContext(UID).firestore();
     await assertFails(getDocs(collection(db, 'claims-updates')));
   });

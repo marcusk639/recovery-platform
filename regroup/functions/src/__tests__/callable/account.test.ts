@@ -83,9 +83,11 @@ describe('deleteAccount', () => {
     expect(mockRun).toHaveBeenCalledWith('u1');
   });
 
-  it('refuses to delete the shared demo account (case-insensitive)', async () => {
+  // S5: identified by the server-set demo claim, whatever its email now is.
+  it('refuses to delete the shared demo account (its demo claim)', async () => {
     const r = req();
-    (r.auth.token as any).email = 'Demo_User@AppDemo.net';
+    (r.auth.token as any).demo = true;
+    (r.auth.token as any).email = 'changed@example.com';
     await expect(handler(r)).rejects.toMatchObject({
       code: 'permission-denied',
       message: "The demo account can't be deleted.",

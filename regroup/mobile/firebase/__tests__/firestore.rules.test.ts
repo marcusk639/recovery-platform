@@ -1982,6 +1982,7 @@ describe("houses/{houseId} — delete", () => {
     const ctx = testEnv.authenticatedContext("demoAccountUid", {
       ...authHouseSuperAdmin("demoAccountUid", HOUSE_ID),
       email: "demo_user@appdemo.net",
+      demo: true, // S5: the server-set claim identifies the demo account
     });
     await assertFails(deleteDoc(houseRef(ctx)));
   });
@@ -2228,11 +2229,12 @@ describe("Demo account house-scoping (isDemoHouse gate)", () => {
   const NON_DEMO_HOUSE_ID = HOUSE_ID; // reused; seeded per-test with isDemoHouse: false or absent
 
   function authDemoAdmin(houseId: string) {
-    return { ...authHouseAdmin(DEMO_UID, houseId), email: DEMO_EMAIL };
+    // S5: the server-set demo claim identifies the account, not the email.
+    return { ...authHouseAdmin(DEMO_UID, houseId), email: DEMO_EMAIL, demo: true };
   }
 
   function authDemoGuest(houseId: string) {
-    return { ...authHouseGuest(DEMO_UID, houseId), email: DEMO_EMAIL };
+    return { ...authHouseGuest(DEMO_UID, houseId), email: DEMO_EMAIL, demo: true };
   }
 
   async function seedHouseWithFlag(

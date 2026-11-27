@@ -69,8 +69,9 @@ afterEach(async () => {
   await testEnv.clearStorage();
 });
 
+// The demo account carries the server-set claim (owner decision 2026-11-27).
 const demo = (email = 'demo_user@appdemo.net') =>
-  testEnv.authenticatedContext(DEMO_UID, allRoles(email)).storage();
+  testEnv.authenticatedContext(DEMO_UID, { ...allRoles(email), demo: true }).storage();
 const twin = () =>
   testEnv.authenticatedContext(DEMO_UID, allRoles('operator@example.com')).storage();
 const seed = (path: string, data: Buffer, contentType: string) =>
@@ -90,9 +91,13 @@ describe('the demo account in Storage', () => {
     },
   );
 
-  test('DENY the demo email in any case', async () => {
-    const [path, data, contentType] = WRITES[0];
-    await assertFails(uploadBytes(ref(demo('Demo_User@AppDemo.NET'), path), data, { contentType }));
+  // Owner decision 2026-11-27: the server-set claim identifies the account, so
+  // changing its email does not escape the rules.
+  test.each(WRITES)('DENY the demo claim after an email change: %s', async (path, data, contentType) => {
+    const changed = testEnv
+      .authenticatedContext(DEMO_UID, { ...allRoles('attacker@example.com'), demo: true })
+      .storage();
+    await assertFails(uploadBytes(ref(changed, path), data, { contentType }));
   });
 
   test('DENY demo deleting an existing file', async () => {
@@ -106,6 +111,12 @@ describe('the demo account in Storage', () => {
       await seed(path, data, contentType);
       await assertSucceeds(getDownloadURL(ref(demo(), path)));
     }
+  });
+
+  test('ALLOW the demo email without the claim: the claim is what counts', async () => {
+    const [path, data, contentType] = WRITES[0];
+    const ctx = testEnv.authenticatedContext(DEMO_UID, allRoles('demo_user@appdemo.net')).storage();
+    await assertSucceeds(uploadBytes(ref(ctx, path), data, { contentType }));
   });
 
   test('ALLOW an account with no email claim to upload (phone sign-in)', async () => {

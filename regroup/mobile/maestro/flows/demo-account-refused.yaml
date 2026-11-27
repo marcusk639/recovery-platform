@@ -2,7 +2,7 @@
 # house, and is refused what changes state or costs money.
 # Persona: the demo account the landing screen's Demo link signs in to
 # (seeded by maestro/scripts/seed/demoHouse.js with the demo: true claim).
-# 1. The Demo link signs in and shows the demo house.
+# 1. The demo account signs in and sees the demo house.
 # 2. House settings is refused in the app ("disabled in demo mode").
 # 3. The server refuses it too, whatever the app does: createInvitation answers
 #    PERMISSION_DENIED with the same words, and a Storage upload is refused.
@@ -13,27 +13,19 @@ tags:
   - security
 ---
 - runFlow: ../subflows/guard-e2e-app.yaml
-- launchApp:
-    clearState: true
-    arguments:
-      IS_E2E_TEST: "1"
+# Signs in through the login form with the Demo link's credentials. The Demo
+# link itself (landing-demo-link) signs in but leaves the app on the landing
+# screen in the E2EEmulator build (found 2026-11-27, reported with S5), so it
+# is not used here.
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: demo_user@appdemo.net
+      PASSWORD: DemoUser1
+# The house header is not text in the hierarchy; its settings button is.
 - extendedWaitUntil:
     visible:
-      id: "initial-landing-screen"
-    timeout: 30000
-- scrollUntilVisible:
-    element:
-      id: "landing-demo-link"
-    direction: DOWN
-    timeout: 10000
-- tapOn:
-    id: "landing-demo-link"
-- extendedWaitUntil:
-    visible:
-      id: "main-app-screen"
-    timeout: 60000
-- extendedWaitUntil:
-    visible: "E2E Demo House"
+      id: "house-settings-button"
     timeout: 30000
 - tapOn:
     id: "house-settings-button"

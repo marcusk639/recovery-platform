@@ -68,7 +68,12 @@ const REFUSED = [
 ];
 /** deleteAccount refuses the demo account with its own message (callable/account.ts). */
 const REFUSED_ELSEWHERE = ['deleteAccount'];
-/** Reads the demo needs; the rules and claims scope them as for any account. */
+/**
+ * Reads the demo needs; the rules and claims scope them as for any account.
+ * findMeetings and userIsAtMeeting reach paid APIs (recovery-api, Google
+ * geocoding), but any free signup can call them too, so refusing the demo
+ * account would not lower that exposure; limiting them is a separate item.
+ */
 const ALLOWED = [
   'complianceExport',
   'findMeetings',
@@ -92,11 +97,12 @@ const exportsByModule = modules.map((file) => ({
   names: [
     ...fs
       .readFileSync(path.join(callableDir, file), 'utf8')
-      .matchAll(/^export const (\w+) = onCall\(/gm),
+      .matchAll(/^export const (\w+) = onCall\s*(?:<[^>]*>)?\(/gm),
   ].map((m) => m[1]),
 }));
 
-const demoAuth = (email = 'demo_user@appdemo.net', extra: object = {}) => ({
+// The demo account carries the server-set claim (S5); its email alone is nothing.
+const demoAuth = (email = 'demo_user@appdemo.net', extra: object = { demo: true }) => ({
   uid: 'demo-uid',
   token: { email, auth_time: Math.floor(Date.now() / 1000), ...extra },
 });
@@ -111,6 +117,27 @@ function handlerFor(name: string): Handler {
 afterEach(() => {
   mockState.armed = false;
   mockState.calls = [];
+});
+
+// Every onCall( in src/ (comments aside) must be one of the exports read above,
+// so a callable defined another way or elsewhere cannot skip classification.
+it('finds every onCall in src/', () => {
+  const srcRoot = path.join(__dirname, '../..');
+  const walk = (dir: string): string[] =>
+    fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) return e.name === '__tests__' ? [] : walk(full);
+      return e.name.endsWith('.ts') ? [full] : [];
+    });
+  const calls = walk(srcRoot).reduce((n, file) => {
+    const code = fs
+      .readFileSync(file, 'utf8')
+      .split('\n')
+      .filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line))
+      .join('\n');
+    return n + (code.match(/\bonCall\s*(?:<[^>]*>)?\(/g) ?? []).length;
+  }, 0);
+  expect(calls).toBe(exportsByModule.flatMap((m) => m.names).length);
 });
 
 it('classifies every callable exactly once', () => {
@@ -142,10 +169,10 @@ describe.each(REFUSED)('%s', (name) => {
     expect(mockState.calls).toEqual([]);
   });
 
-  it('does not refuse other accounts as the demo account', async () => {
+  it('does not refuse an account without the claim, even one with the demo email', async () => {
     const handler = handlerFor(name);
     const outcome = await Promise.race([
-      handler({ auth: demoAuth('resident@example.com'), data: {} }).then(
+      handler({ auth: demoAuth('demo_user@appdemo.net', {}), data: {} }).then(
         () => undefined,
         (error: { message?: string }) => error?.message,
       ),
@@ -155,7 +182,7 @@ describe.each(REFUSED)('%s', (name) => {
   });
 });
 
-it('deleteAccount refuses the demo account, by email or by claim', async () => {
+it('deleteAccount refuses the demo account by its claim, whatever its email', async () => {
   await expect(handlerFor('deleteAccount')({ auth: demoAuth(), data: {} })).rejects.toMatchObject({
     code: 'permission-denied',
   });
@@ -165,8 +192,8 @@ it('deleteAccount refuses the demo account, by email or by claim', async () => {
 });
 
 describe('isDemoAccount', () => {
-  it('matches the demo email in any case', () => {
-    expect(isDemoAccount({ token: { email: 'DEMO_USER@appdemo.net' } })).toBe(true);
+  it('is not matched by the demo email alone (owner decision 2026-11-27)', () => {
+    expect(isDemoAccount({ token: { email: 'demo_user@appdemo.net' } })).toBe(false);
   });
 
   it('matches the server-set demo claim whatever the email', () => {

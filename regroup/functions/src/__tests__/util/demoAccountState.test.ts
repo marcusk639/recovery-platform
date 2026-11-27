@@ -10,6 +10,7 @@ import {
   DEMO_ACCOUNT_PASSWORD,
   markDemoAccount,
   restoreDemoAccount,
+  squattedEmail,
   type DemoAuth,
 } from '../../util/demoAccountState';
 import { DEMO_ACCOUNT_EMAIL } from '../../util/demoAccount';
@@ -155,6 +156,66 @@ describe('restoreDemoAccount', () => {
       passwordChanged: true,
     });
     expect(auth.revokeRefreshTokens).toHaveBeenCalledWith('demo1');
+  });
+
+  it('frees the demo email from an account that took it, then restores (the restore never sticks)', async () => {
+    const { auth, user } = fakeAuth({
+      ...DEMO,
+      email: 'attacker@example.com',
+      customClaims: { demo: true },
+    });
+    const squatter = { uid: 'squatter1', email: DEMO_ACCOUNT_EMAIL };
+    const updates: Array<[string, object]> = [];
+    (auth.updateUser as jest.Mock).mockImplementation(
+      async (uid: string, props: { email: string }) => {
+        updates.push([uid, props]);
+        if (uid === 'demo1' && squatter.email === DEMO_ACCOUNT_EMAIL) {
+          throw Object.assign(new Error('taken'), { code: 'auth/email-already-exists' });
+        }
+        if (uid === 'squatter1') squatter.email = props.email;
+        if (uid === 'demo1') user.email = props.email;
+      },
+    );
+    (auth.getUserByEmail as jest.Mock).mockImplementation(async (email: string) => {
+      if (email === squatter.email) return { ...squatter };
+      throw Object.assign(new Error('none'), { code: 'auth/user-not-found' });
+    });
+    const { db } = configured();
+    await expect(restoreDemoAccount(db, auth)).resolves.toMatchObject({
+      outcome: 'restored',
+      squatterUid: 'squatter1',
+    });
+    expect(updates[1]).toEqual([
+      'squatter1',
+      { email: squattedEmail('squatter1'), disabled: true },
+    ]);
+    expect(auth.revokeRefreshTokens).toHaveBeenCalledWith('squatter1');
+    expect(user.email).toBe(DEMO_ACCOUNT_EMAIL);
+  });
+
+  it('reports a deleted demo account instead of failing every run', async () => {
+    const { auth } = fakeAuth({ ...DEMO, uid: 'someone-else' });
+    (auth.getUser as jest.Mock).mockRejectedValue(
+      Object.assign(new Error('gone'), { code: 'auth/user-not-found' }),
+    );
+    const { db } = configured();
+    await expect(restoreDemoAccount(db, auth)).resolves.toEqual({
+      outcome: 'missing',
+      uid: 'demo1',
+    });
+  });
+
+  it('rethrows any other Auth error', async () => {
+    const { auth } = fakeAuth({
+      ...DEMO,
+      email: 'attacker@example.com',
+      customClaims: { demo: true },
+    });
+    (auth.updateUser as jest.Mock).mockRejectedValue(
+      Object.assign(new Error('quota'), { code: 'auth/quota-exceeded' }),
+    );
+    const { db } = configured();
+    await expect(restoreDemoAccount(db, auth)).rejects.toThrow('quota');
   });
 
   it('re-adds a missing demo claim, keeping the house claims', async () => {

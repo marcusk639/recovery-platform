@@ -99,19 +99,15 @@ service cloud.firestore {
     }
 
     function isDemoAccount() {
-      // The shared App Review login. The server-set `demo: true` custom claim
-      // is what identifies it (functions util/demoAccount.ts): unlike the
-      // email, its holder cannot change it. The email match stays as a
-      // fallback until the claim is set in production (npm run
-      // demo:mark-account). 'email' in request.auth.token is required:
-      // Firestore Rules throws (rather than returning null/undefined, unlike
-      // JS) when dot-accessing an absent map key, so any token without an
-      // email claim (e.g. phone-only auth) would otherwise error out of every
-      // house-role check.
-      return signedIn() && (
-        request.auth.token.get('demo', false) == true ||
-        ('email' in request.auth.token && request.auth.token.email is string &&
-          request.auth.token.email.lower() == 'demo_user@appdemo.net'));
+      // The shared App Review login, identified by the server-set `demo: true`
+      // custom claim (functions util/demoAccount.ts; set once per project with
+      // `npm run demo:mark-account`). Not by its email: anyone can sign in as
+      // it and change that (owner decision 2026-11-27). 'demo' in token first,
+      // because reading an absent key is an error that would fail every
+      // house-role check. Kept to this shape: it runs inside every house-role
+      // check, and the guest rules sit at the 1000-expression limit
+      // (guestShadow.rules.test.ts fails with token.get() or an email fallback).
+      return signedIn() && 'demo' in request.auth.token && request.auth.token.demo == true;
     }
 
     // Defense-in-depth: whenever the caller is the public demo account, further
