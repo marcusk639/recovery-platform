@@ -9,8 +9,10 @@ paths: 'src/**/*.{ts,tsx}'
 
 ```
 ErrorBoundary > SafeAreaProvider > StripeProvider > ThemeProvider
-  > DataProvider > NotificationProvider > ModalProvider > Auth > RootNavigator
+  > DataProvider > NotificationProvider > ModalProvider > Auth > VersionGate > RootNavigator
 ```
+
+`VersionGate` (`src/components/version-gate/`) shows `UpdateRequiredScreen` when this build's `APP_VERSION` (`src/config/appVersion.ts`) is below the public `getAppConfig` callable's minimum for its platform. It runs before sign-in and fails open: loading, an error, a 3 s timeout, or a missing or malformed value lets the user in. Refetched on foreground.
 
 ## State Management (hybrid)
 
@@ -58,6 +60,8 @@ React Navigation 7 native stack. Route names: `Routes` enum in `src/navigation/t
 - `MainTabParamList` — bottom tabs: House, Guest, Activities, Contacts, HouseChat, Personal
 - `RootStackParamList` — everything else pushed as full-screen modals from any tab
 
+**Deep links:** `linkingConfig` (`src/navigation/linking.ts`) is passed to `<NavigationContainer linking>` in `index.js`. Prefixes come from `appLinkPrefixes()` (`regroup-app://`, legacy `com.rats.dev://`, and the origin of `webBaseUrl()` only when it is a valid `https://host`, `http:` in dev builds only). It resolves only an allowlist: the six Main tabs (`app/house|guest|activities|contacts|chat|personal`), `auth/login` and `auth/signup/:invitation?` (the param is never read). No operator-only, paywalled or SubscriptionGate-bypassing screen is listed. An `app/*` link opens only for a signed-in, non-anonymous Firebase user; otherwise it is dropped and the app stays on the landing screen. Invitation and checkout-return URLs are not navigation: `parseAppLink` (`src/services/appLinks/parseAppLink.ts`) is the only parser, the config's `getInitialURL` and `subscribe` hold back every full URL it claims (so the guard follows its per-prefix rules), and Splash hands them to `deliverAppLink` (initial URL and listener). A link that claims to be an invitation but does not parse (`claimsInvitation`: the `invite` route, or the custom scheme's `type=invitation`) still reaches Splash, which shows "Invitation link not valid" (`services/appLinks/brokenInvitation.ts`) instead of opening the app silently; any other unparseable link is dropped. Accepted forms: `?type=invitation&token=` and `invite?token=` on either custom scheme or `https://<web origin>/invite?token=`, the legacy `?type=invitation&house=…&email=…`, and `checkout-return?result=success|canceled|portal` (also `app/checkout-return`, on either the custom scheme or https; https `/checkout-return`). An invitation goes to `state.user.invitation` (signup when signed out; signed in, `improvedNavigationService.navigateToInvitation()` opens the same screen, and a cold start opens it through `handleInvitationFlow`). A user who was already signed in when the invitation reached SignUp sees `SignedInInvitation` instead of the form (an account the sign-up itself just created keeps the form): "Accept as this account" (token invitations: refused before any redeem when the account already has an admins record and the invitation is a manager one, or is a resident of another house and the invitation is a resident one; otherwise `redeemInvitation`, force-refreshed ID token, the same membership records sign-up writes via `src/services/invitationMembership.ts` (resident record + `isGuest`/`houseId`/`guestId`, or admins record + `isAdmin`/`adminId`), reloaded user) and "Continue to the app", both clear the invitation and reset to `getInitialNavigation`'s start route (`resetToStartRoute`). The invitation is also cleared when sign-up finishes (NewAccount) and on logout. It survives a login (launch spec §4.2): after any login with an invitation held, LoginForm opens SignUp, so a user who opened an invitation signed out and then logged in to an existing account (finished profile or not) gets the same accept / continue screen. Any other link that arrives signed out is held in `state.user.pendingAppLink` (with `pendingAppLinkReceivedAt`) and delivered once after sign-in if under 15 minutes old; logout clears it. Add a route to the allowlist only with a test in `src/navigation/__tests__/linking.test.ts`.
+
 Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetings, OxfordVoting, CharterCompliance, TreasuryDashboard, ResidentPayment, PaymentHistory, PaymentDashboard, RentPayment, HouseSettings, StripeSettings, Notifications, DrugTesting, DrugTestForm, DrugTestHistory, StaffNotes, ResidentIntake, Documents, BalanceDashboard, ApplicationList, ApplicationDetail, GuestImport, AdminReport, PhaseSetup. (`ChoreRotationSetupScreen` exists in `src/screens/HouseSettings/` but is not registered as a route.)
 
 ## Service Layer
@@ -73,7 +77,7 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 | `complaints.ts`                 | Complaint CRUD                                            |
 | `crud.tsx`                      | Reusable generic CRUD operations                          |
 | `dispute.tsx`                   | Activity dispute workflow                                 |
-| `documents.ts`                  | House document upload, list, delete (admin-only)          |
+| `documents.ts`                  | House document upload, list, delete (staff); residents read their own |
 | `drugTests.ts`                  | Drug test record creation and history                     |
 | `EnhancedAuthService.ts`        | Sign in/up with rate limiting + validation                |
 | `feedback.ts`                   | User feedback submissions                                 |
@@ -133,8 +137,10 @@ Firebase custom claims: `guest`, `admin`, `superAdmin`, `potentialSuperAdmin`.
 The gate is `SubscriptionGate` (`src/components/subscription/SubscriptionGate.tsx`), which wraps the main navigator and renders the result of `useSubscriptionGate()` (`src/hooks/useSubscriptionGate.ts`). For operators and guests alike it reads the selected house's `subscriptionStatus` and `guestGraceEndsAt` (the fields the Stripe webhook writes), not `user.subscriptionMetadata.status`. A house with no status yet shows a spinner, not a paywall. The `paywall/config` kill switch (`paywallConfigRef` in `src/services/paywall.ts`) can turn the gate off. On a background → active change, the gate invalidates the user and house queries so status refreshes after the billing portal. Gate logic:
 
 - **Operators (admin/superAdmin):** lapsed subscription → `SubscriptionRequiredScreen` blocks all app access
-- **Guests:** 7-day grace window after operator lapses → dismissible banner → `GraceExpiredScreen`
+- **Guests:** 7-day grace window after operator lapses → dismissible banner → `ResidentLimitedView` (`grace_expired`, which a plan-required house also gives): only their own Payment History (with CSV export) and their own Documents, read-only, plus sign out. Modal routes sit outside the gate, so none may be deep-linkable (the `linking` allowlist; `limitedViewLinks.test.ts` pins these two).
 - **potentialSuperAdmin / setup-incomplete users:** not gated (routed to SetupStack before gate runs)
+
+A resident's document access (owner decision 2026-11-26): their own documents only, read-only, from GuestHome's **My Documents** card (`my-documents-card`) in an active house or from `ResidentLimitedView` in a blocked one; staff keep the **Documents** card. The rules read the ID token's guest claim, so a resident who moved out still sees their own document list (names only) for up to an hour, until the token refreshes; accepted for launch. `getDocumentLink` reads live claims, so the files don't open.
 
 Oxford features are additionally gated by `houseOxfordActive()` in Firestore rules (requires `oxfordEnabled == true` AND `subscriptionStatus ∈ {active, trialing}`).
 
@@ -154,7 +160,7 @@ TypeScript interfaces in `src/entities/` define Firestore document shapes. Newer
 | `Notification`             | userId, subject, message, type, read, date                                                                         | Written by Cloud Functions                                   |
 | `Dispute`                  | id, guestId, activityId, status, challenges[]                                                                      | Immutable resolution chain                                   |
 | `Application`              | id, houseId, applicantUid, status, profile data                                                                    | Stored in `houses/{id}/applications` subcollection           |
-| `Document`                 | id, houseId, name, url, uploadedBy, createdAt                                                                      | Admin-only; stored in top-level `documents` collection       |
+| `Document`                 | id, houseId, name, url, uploadedBy, createdAt                                                                      | Staff manage; a resident reads their own (`guestId` = their guest record): GuestHome's My Documents card, or the limited view. Top-level `documents` |
 | `DrugTest`                 | id, houseId, guestId, result, observedBy, testedAt                                                                 | Immutable audit trail; admin-only write                      |
 | `Room`                     | id, houseId, name, capacity, beds[]                                                                                | Embedded in house document                                   |
 | `StaffNote`                | id, houseId, guestId?, type (resident_note/shift_log), body, authorId                                              | Shift logs have no guestId                                   |

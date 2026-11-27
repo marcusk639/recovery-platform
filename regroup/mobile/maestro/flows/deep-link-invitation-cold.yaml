@@ -19,7 +19,10 @@ tags:
     timeout: 30000
 # Cold: stop the app so the link starts it.
 - stopApp
-- openLink: "regroup-app://?type=invitation&invitationType=guest&house=test-house-123&inviter=test-manager&email=e2e-invitee%40rats-e2e.com&owner=&initialPhase="
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: "regroup-app://?type=invitation&invitationType=guest&house=test-house-123&inviter=test-manager&email=e2e-invitee%40rats-e2e.com&owner=&initialPhase="
 # The app routes an invitation link straight to signup, with the invitation
 # shown and the invited email filled in.
 - extendedWaitUntil:

@@ -25,6 +25,7 @@ import { eventAgeMinutes, isStaleEvent, RETRY_CUTOFF_MS } from '../../util/event
 export { onHouseDeleted } from './houseTombstone';
 export { onActivityWritten } from './activityWeekSummary';
 export { onGuestLinkedRestamp } from './guestRestamp';
+export { onUserAdminProfileSync } from './adminProfileSync';
 export { onGuestWrite } from './guestWrite';
 export { onHouseRentSettingsWrite } from './houseRentSettings';
 export { notifyOperatorOnApplication } from './applicationNotice';

@@ -1,0 +1,50 @@
+# GATE-001/002 — the minimum-version gate (launch spec §4.2, P5 Task 13).
+# Sets config/app.minVersion to 99.0 for both platforms in the emulator, so
+# this build is too old: the update screen and its store button show, and the
+# landing screen doesn't. Then clears it: with no value the app lets the user
+# in (fails open). The slow, failing and malformed cases are unit tests
+# (src/components/version-gate/__tests__). The value is cleared when the flow
+# ends, pass or fail, so no other flow starts blocked.
+# Persona: none (the gate runs before sign-in).
+# Run: maestro/scripts/run-flows.sh version-gate
+appId: ${APP_ID}
+tags:
+  - gate
+onFlowComplete:
+  - runScript:
+      file: ../scripts/maestro-js/min-version.js
+      env:
+        ACTION: clear
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runScript:
+    file: ../scripts/maestro-js/min-version.js
+    env:
+      ACTION: set
+      VALUE: "99.0"
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "update-required-screen"
+    timeout: 30000
+- assertVisible:
+    id: "update-required-store-button"
+- assertNotVisible:
+    id: "initial-landing-screen"
+# No minimum: the next launch lets the user in.
+- runScript:
+    file: ../scripts/maestro-js/min-version.js
+    env:
+      ACTION: clear
+- launchApp:
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- assertNotVisible:
+    id: "update-required-screen"

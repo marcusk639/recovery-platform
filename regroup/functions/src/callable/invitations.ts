@@ -75,12 +75,59 @@ const createInvitationSchema = z.object({
 const TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
- * Build the invitation link the recipient will tap. The mobile parser at
- * src/services/native-deep-links.ts treats `?token=<...>` as the new
- * server-issued format.
+ * Origin the emailed app links point at. `WEB_BASE_URL` (plain process.env,
+ * like `CONNECT_BASE_URL`) must match the mobile build's `RATS_WEB_URL`
+ * origin, because the app only accepts `https://<its web origin>/invite`.
  */
-function buildInviteLink(token: string): string {
-  return `regroup-app://?type=invitation&token=${encodeURIComponent(token)}`;
+const DEFAULT_WEB_BASE_URL = 'https://regroup-app.com';
+const PRODUCTION_PROJECT = 'phoenix-cleanhouse';
+let warnedDefaultOrigin = false;
+
+/** Test seam: the unset-WEB_BASE_URL warning is logged once per instance. */
+export function resetWebBaseUrlWarning(): void {
+  warnedDefaultOrigin = false;
+}
+
+/**
+ * The validated web origin: https (http only for localhost / 127.0.0.1, the
+ * emulators), no path or query. An invalid value is a config error and falls
+ * back to the default. Unset outside production warns once, because staging
+ * invitations would then carry production links the staging app rejects.
+ */
+export function webBaseUrl(): string {
+  const v = process.env.WEB_BASE_URL?.trim();
+  if (!v) {
+    if (!warnedDefaultOrigin && process.env.GCLOUD_PROJECT !== PRODUCTION_PROJECT) {
+      warnedDefaultOrigin = true;
+      logger.warn(
+        'createInvitation: WEB_BASE_URL is not set; invitation links use the production origin',
+        { project: process.env.GCLOUD_PROJECT ?? null },
+      );
+    }
+    return DEFAULT_WEB_BASE_URL;
+  }
+  try {
+    const u = new URL(v);
+    const localHttp =
+      u.protocol === 'http:' && (u.hostname === 'localhost' || u.hostname === '127.0.0.1');
+    const bare = (u.pathname === '/' || u.pathname === '') && !u.search && !u.hash && !u.username;
+    if ((u.protocol === 'https:' || localHttp) && bare) return u.origin;
+  } catch {
+    // fall through to the config error
+  }
+  logger.error(
+    'createInvitation: WEB_BASE_URL is invalid (need an https origin, no path); using the production origin',
+  );
+  return DEFAULT_WEB_BASE_URL;
+}
+
+/**
+ * Build the invitation link the recipient will tap: an https app link on the
+ * web origin. The mobile parser (src/services/appLinks/parseAppLink.ts)
+ * accepts `https://<web origin>/invite?token=<...>`.
+ */
+export function buildInviteLink(token: string, webOrigin: string): string {
+  return `${webOrigin}/invite?token=${encodeURIComponent(token)}`;
 }
 
 // The invitation email (util/email) reads SENDGRID_API_KEY from process.env,
@@ -168,7 +215,7 @@ export const createInvitation = onCall({ secrets: [SENDGRID_API_KEY] }, async (r
   await admin.firestore().collection('invitations').doc(token).set(invitation);
 
   // ── Send the email via the extracted helper ──────────────────────────
-  const link = buildInviteLink(token);
+  const link = buildInviteLink(token, webBaseUrl());
   // role string for the email template: 'admin' | 'guest' (senior-peer
   // is templated as 'guest' for the recipient — they see the same email).
   const emailRole = input.role === 'senior-peer' ? 'guest' : input.role;

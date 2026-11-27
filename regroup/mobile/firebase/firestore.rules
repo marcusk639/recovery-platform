@@ -1265,9 +1265,21 @@ service cloud.firestore {
     }
 
     match /documents/{docId} {
-      // Only house admins and super-admins can read or write documents.
-      // Residents (guests) have zero access.
-      allow read: if signedIn() && isAdmin([resource.data.houseId]);
+      // House admins and super-admins read and write the house's documents.
+      // A resident reads their own and writes nothing (owner decision, launch
+      // spec §4.1 item 2: kept while their house is plan required or lapsed).
+      // Their own: its guestId is a guest record of the same house linked to
+      // their account. getDocumentLink also requires the file to be in that
+      // resident's folder; the rule can't, because the Documents screen's list
+      // query (houseId, guestId) doesn't constrain storagePath.
+      function ownResidentDocument(d) {
+        let gid = d.get('guestId', '');
+        return isGuest([d.houseId]) && gid is string && gid != '' &&
+          get(/databases/$(database)/documents/guests/$(gid)).data.get('userId', '') == request.auth.uid &&
+          get(/databases/$(database)/documents/guests/$(gid)).data.get('houseId', '') == d.houseId;
+      }
+      allow read: if signedIn() &&
+        (isAdmin([resource.data.houseId]) || ownResidentDocument(resource.data));
       // No permanent download link: documents open through getDocumentLink.
       allow create: if signedIn() && isAdmin([request.resource.data.houseId])
         && !('storageUrl' in request.resource.data);

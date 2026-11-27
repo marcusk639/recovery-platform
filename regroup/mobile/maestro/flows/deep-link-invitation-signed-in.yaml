@@ -1,0 +1,29 @@
+# Deep link: an invitation link opened while signed in. Logs in as
+# test-guest-a@rats-e2e.com, then opens the link. deliverAppLink stores the
+# invitation and opens the invitation screen (signup, testID invitation-info)
+# through improvedNavigationService.navigateToInvitation (launch P5 Task 3).
+# Before Task 3 nothing handled a link for a signed-in user and this failed.
+# LINK: the url to open, default is the token form. Override with
+#   -e LINK='regroup-app://?type=invitation&invitationType=guest&house=…&email=…'
+#   -e LINK='com.rats.dev://?type=invitation&token=e2e-invite-token-1'
+# Run: maestro/scripts/run-flows.sh deep-link-invitation-signed-in
+appId: ${APP_ID}
+tags:
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- evalScript: "${output.link = typeof LINK === 'undefined' ? 'regroup-app://?type=invitation&token=e2e-invite-token-1' : LINK}"
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: ${output.link}
+# A signed-in user is shown the invitation.
+- extendedWaitUntil:
+    visible:
+      id: "invitation-info"
+    timeout: 15000
