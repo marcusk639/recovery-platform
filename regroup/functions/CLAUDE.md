@@ -25,6 +25,8 @@ npm run deploy:batched -- --project <id>   # Batched fallback for deploy quotas 
 
 **Migration scripts** (each runs `npm run build` first; dry-run is the default, `--apply` writes for the cents migrations):
 
+Every script's target comes from `scripts/scriptBootstrap.ts` (`scripts/scriptTarget.ts`): production `phoenix-cleanhouse` by default, the emulator with `FIRESTORE_EMULATOR_HOST`, or staging with `REGROUP_SCRIPT_TARGET=regroup-e2e` (its only accepted value; an empty or other value, or one together with an emulator host, is refused). Staging uses application-default credentials and never reads `service-key.json`; a `GOOGLE_APPLICATION_CREDENTIALS` service account for another project is refused. E.g. `REGROUP_SCRIPT_TARGET=regroup-e2e GOOGLE_APPLICATION_CREDENTIALS=~/.config/regroup-e2e/service-account.json npm run backfill:house-listings:dry-run`.
+
 ```bash
 npm run migrate:dry-run         # Dry-run guest weeks migration
 npm run migrate:run             # Apply guest weeks migration
