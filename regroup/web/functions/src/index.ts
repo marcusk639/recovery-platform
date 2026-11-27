@@ -87,6 +87,10 @@ function getShell(): string {
   return cachedShell;
 }
 
+// An invitation link's query carries its token (/invite?token=…), so logs
+// get the path only.
+const pathOnly = (url: string): string => url.split(/[?#]/)[0];
+
 /**
  * Serves the shell so the client can render the route itself. Degrades SSR to
  * CSR rather than failing the request.
@@ -126,7 +130,7 @@ export const ssr = onRequest(
     const response = res as unknown as ResponseLike;
     const request = req as unknown as RequestLike;
     const deadline = setTimeout(
-      () => sendShell(response, "render-deadline-exceeded", request.originalUrl),
+      () => sendShell(response, "render-deadline-exceeded", pathOnly(request.originalUrl)),
       RENDER_DEADLINE_MS,
     );
     response.on("close", () => clearTimeout(deadline));
@@ -140,10 +144,10 @@ export const ssr = onRequest(
     } catch (err) {
       clearTimeout(deadline);
       logger.error("ssr: render threw", {
-        url: request.originalUrl,
+        url: pathOnly(request.originalUrl),
         message: err instanceof Error ? err.message : String(err),
       });
-      sendShell(response, "render-threw", request.originalUrl);
+      sendShell(response, "render-threw", pathOnly(request.originalUrl));
     }
   },
 );

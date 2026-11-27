@@ -1,0 +1,27 @@
+{
+  "paths": ["/invite", "/app/*", "/checkout-return"],
+  "environments": {
+    "phoenix-cleanhouse": {
+      "domain": "regroup-app.com",
+      "iosAppIds": ["D8K3FS4HAX.com.rats.dev"],
+      "android": [
+        {
+          "package": "com.regroup.app",
+          "sha256": ["<OWNER: Play app-signing SHA-256>"]
+        }
+      ]
+    },
+    "regroup-e2e": {
+      "domain": "regroup-e2e.web.app",
+      "iosAppIds": ["D8K3FS4HAX.com.rats.dev.e2e.stg"],
+      "android": [
+        {
+          "package": "com.regroup.app.e2e.stg",
+          "sha256": [
+            "FA:C6:17:45:DC:09:03:78:6F:B9:ED:E6:2A:96:2B:39:9F:73:48:F0:BB:6F:89:9B:83:32:66:75:91:03:3B:9C"
+          ]
+        }
+      ]
+    }
+  }
+}

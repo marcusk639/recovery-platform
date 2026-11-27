@@ -1,0 +1,75 @@
+# Deep link: a token invitation link opened signed out survives logging in to
+# an existing account (launch spec §4.2, P5 Task 3; device rows DEVS-018 /
+# DEVP-007). The link opens signup with the invitation; the user goes to Log in
+# instead, signs in as the invited account, and gets the invitation screen
+# (testID signed-in-invitation) with "Accept as this account" and "Continue to
+# the app". Continue ends on the house tab and leaves the invitation unredeemed.
+# Needs the seeded invitation e2e-invite-token-continue to
+# test-guest-b@rats-e2e.com (maestro/scripts/seed/index.js).
+# Run: maestro --device <serial> test -e APP_ID=… -e E2E_TEST_PASSWORD=… maestro/flows/deep-link-invitation-login.yaml
+appId: ${APP_ID}
+tags:
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+# Cold, signed out: stop the app so the link starts it.
+- stopApp
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: "regroup-app://?type=invitation&token=e2e-invite-token-continue"
+- extendedWaitUntil:
+    visible:
+      id: "invitation-info"
+    timeout: 30000
+# An existing account: Log in instead of signing up.
+- scrollUntilVisible:
+    element:
+      id: "login-link"
+    direction: DOWN
+    timeout: 15000
+- tapOn:
+    id: "login-link"
+- extendedWaitUntil:
+    visible:
+      id: "login-screen"
+    timeout: 15000
+- tapOn:
+    id: "email-input"
+- eraseText
+- inputText: "test-guest-b@rats-e2e.com"
+# Same password-field race as subflows/login.yaml.
+- waitForAnimationToEnd
+- tapOn:
+    id: "password-input"
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+- inputText: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "login-button"
+- tapOn:
+    text: "Not Now"
+    optional: true
+# The invitation survived the login: the signed-in invitation screen, not Main.
+- extendedWaitUntil:
+    visible:
+      id: "signed-in-invitation"
+    timeout: 60000
+- assertVisible:
+    id: "accept-invitation-button"
+- tapOn:
+    id: "continue-to-app-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 30000
+- assertNotVisible:
+    id: "invitation-info"
