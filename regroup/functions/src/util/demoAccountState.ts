@@ -1,16 +1,21 @@
 /**
  * Keeps the shared demo account intact (S5, REV-A8). Its password ships in the
- * app, so anyone signed in as it can change its email or password through
- * Firebase Auth, which offers no per-account lock: an email change would have
- * escaped an email-based guard, and a password change locks App Review out.
+ * app, so anyone signed in as it can change its sign-in through Firebase Auth,
+ * which offers no per-account lock: a new password locks App Review out, and a
+ * linked provider, phone number or second factor would give one person a way
+ * back in that survives a password reset.
  *
  * - `markDemoAccount` (owner script `npm run demo:mark-account`) sets the
  *   `demo: true` claim the guards read and records the account in the
- *   server-only `config/demoAccount` doc.
- * - `restoreDemoAccount` (scheduled, `scheduled/index.ts`) puts back the email
- *   and password when either changed, signs every session of the account out,
- *   and re-adds the claim if it is missing. A password change shows as a new
- *   `tokensValidAfterTime`, which Auth bumps on every password change.
+ *   server-only `config/demoAccount` doc (uid, tokensValidAfter and the claims
+ *   to recreate it with). The deploys refuse to run until it has
+ *   (`regroup/scripts/preflight-demo-account.js`).
+ * - `restoreDemoAccount` (scheduled, `scheduled/demoAccountRestore.ts`):
+ *   recreates a deleted account at the same uid; otherwise puts back the email
+ *   and password, unlinks every provider but the password, clears a phone
+ *   number and second factors, signs every session out, and re-adds a missing
+ *   claim. A password change shows as a new `tokensValidAfterTime`, which Auth
+ *   bumps on every password change. Nothing is written while it is intact.
  *
  * Ids only in logs and results.
  */
@@ -27,53 +32,77 @@ export const DEMO_CONFIG_PATH = { collection: 'config', doc: 'demoAccount' } as 
 interface DemoUserRecord {
   uid: string;
   email?: string;
+  phoneNumber?: string;
+  providerData?: Array<{ providerId: string }>;
+  multiFactor?: { enrolledFactors?: unknown[] };
   customClaims?: Record<string, unknown>;
   tokensValidAfterTime?: string;
+}
+
+export interface DemoUpdate {
+  email?: string;
+  password?: string;
+  emailVerified?: boolean;
+  disabled?: boolean;
+  phoneNumber?: null;
+  providersToUnlink?: string[];
+  multiFactor?: { enrolledFactors: null };
 }
 
 export interface DemoAuth {
   getUser(uid: string): Promise<DemoUserRecord>;
   getUserByEmail(email: string): Promise<DemoUserRecord>;
+  createUser(props: {
+    uid: string;
+    email: string;
+    password: string;
+    emailVerified: boolean;
+  }): Promise<unknown>;
   setCustomUserClaims(uid: string, claims: object | null): Promise<void>;
-  updateUser(
-    uid: string,
-    props: {
-      email: string;
-      password?: string;
-      emailVerified?: boolean;
-      disabled?: boolean;
-    },
-  ): Promise<unknown>;
+  updateUser(uid: string, props: DemoUpdate): Promise<unknown>;
   revokeRefreshTokens(uid: string): Promise<void>;
 }
 
 type Db = FirebaseFirestore.Firestore;
-const configRef = (db: Db) =>
-  db.collection(DEMO_CONFIG_PATH.collection).doc(DEMO_CONFIG_PATH.doc);
+const configRef = (db: Db) => db.collection(DEMO_CONFIG_PATH.collection).doc(DEMO_CONFIG_PATH.doc);
 const authCode = (error: unknown) => (error as { code?: unknown } | null)?.code;
+const SIGN_IN = { email: DEMO_ACCOUNT_EMAIL, password: DEMO_ACCOUNT_PASSWORD, emailVerified: true };
 
-async function ensureClaim(
+async function setClaims(
   db: Db,
   auth: DemoAuth,
-  user: DemoUserRecord,
-): Promise<boolean> {
-  if (user.customClaims?.[DEMO_CLAIM] === true) return false;
-  await auth.setCustomUserClaims(user.uid, {
-    ...(user.customClaims ?? {}),
-    [DEMO_CLAIM]: true,
-  });
+  uid: string,
+  claims: Record<string, unknown>,
+): Promise<void> {
+  await auth.setCustomUserClaims(uid, { ...claims, [DEMO_CLAIM]: true });
   // As util/userClaims does: the app refreshes its token on this stamp.
-  await db
-    .collection(CLAIMS_UPDATES_COLLECTION)
-    .doc(user.uid)
-    .set({ updatedAt: new Date() });
+  await db.collection(CLAIMS_UPDATES_COLLECTION).doc(uid).set({ updatedAt: new Date() });
+}
+
+async function ensureClaim(db: Db, auth: DemoAuth, user: DemoUserRecord): Promise<boolean> {
+  if (user.customClaims?.[DEMO_CLAIM] === true) return false;
+  await setClaims(db, auth, user.uid, user.customClaims ?? {});
   return true;
 }
 
-export type MarkResult =
-  | { outcome: "would-mark" | "marked"; uid: string; claimAdded: boolean }
-  | { outcome: "refused"; reason: string };
+async function record(db: Db, auth: DemoAuth, uid: string, claims: unknown): Promise<void> {
+  const fresh = await auth.getUser(uid);
+  await configRef(db).set({
+    uid,
+    tokensValidAfter: fresh.tokensValidAfterTime ?? null,
+    claims: claims ?? {},
+  });
+}
 
+export type MarkResult =
+  | { outcome: 'would-mark' | 'marked'; uid: string; claimAdded: boolean }
+  | { outcome: 'refused'; reason: string };
+
+/**
+ * By --uid, or by the demo email. Run the dry run first and check the uid: if
+ * someone changed the demo email and another account took it, the email finds
+ * that account.
+ */
 export async function markDemoAccount(
   db: Db,
   auth: DemoAuth,
@@ -81,120 +110,127 @@ export async function markDemoAccount(
 ): Promise<MarkResult> {
   let user: DemoUserRecord;
   try {
-    user = opts.uid
-      ? await auth.getUser(opts.uid)
-      : await auth.getUserByEmail(DEMO_ACCOUNT_EMAIL);
+    user = opts.uid ? await auth.getUser(opts.uid) : await auth.getUserByEmail(DEMO_ACCOUNT_EMAIL);
   } catch {
-    return {
-      outcome: "refused",
-      reason: "no such account (pass --uid if its email was changed)",
-    };
+    return { outcome: 'refused', reason: 'no such account (pass --uid if its email was changed)' };
   }
   const claimAdded = user.customClaims?.[DEMO_CLAIM] !== true;
-  if (!opts.apply) return { outcome: "would-mark", uid: user.uid, claimAdded };
+  if (!opts.apply) return { outcome: 'would-mark', uid: user.uid, claimAdded };
   await ensureClaim(db, auth, user);
-  const fresh = await auth.getUser(user.uid);
-  await configRef(db).set({
-    uid: user.uid,
-    tokensValidAfter: fresh.tokensValidAfterTime ?? null,
-  });
-  return { outcome: "marked", uid: user.uid, claimAdded };
+  await record(db, auth, user.uid, { ...(user.customClaims ?? {}), [DEMO_CLAIM]: true });
+  return { outcome: 'marked', uid: user.uid, claimAdded };
 }
 
 /** Where an account that took the demo email is moved; it is also disabled. */
-export const squattedEmail = (uid: string) =>
-  `squatted-${uid}@invalid.regroup-app.com`;
+export const squattedEmail = (uid: string) => `squatted-${uid}@invalid.regroup-app.com`;
 
 /**
- * Puts the demo email and password back. Once someone changed the email, the
- * address was free and free signup could register it on another account; that
- * account is moved to a parking address, disabled and signed out first, or the
- * restore would fail on every run (auth/email-already-exists) while the Demo
- * link signed in to the squatter. Returns the squatter's uid, if any.
+ * Runs `write`, first freeing the demo email if another account holds it:
+ * once someone changed the demo email, free signup could register it on
+ * another account. That account is moved to a parking address, disabled and
+ * signed out. Returns the squatter's uid, if any.
  */
-async function putBack(
-  auth: DemoAuth,
-  uid: string,
-): Promise<string | undefined> {
-  const props = {
-    email: DEMO_ACCOUNT_EMAIL,
-    password: DEMO_ACCOUNT_PASSWORD,
-    emailVerified: true,
-  };
+async function withDemoEmailFree(auth: DemoAuth, uid: string, write: () => Promise<unknown>) {
   try {
-    await auth.updateUser(uid, props);
+    await write();
     return undefined;
   } catch (error) {
-    if (authCode(error) !== "auth/email-already-exists") throw error;
+    if (authCode(error) !== 'auth/email-already-exists') throw error;
   }
   const squatter = await auth.getUserByEmail(DEMO_ACCOUNT_EMAIL);
-  if (squatter.uid === uid)
-    throw new Error("demo email reported taken by the demo account itself");
-  await auth.updateUser(squatter.uid, {
-    email: squattedEmail(squatter.uid),
-    disabled: true,
-  });
+  if (squatter.uid === uid) throw new Error('demo email reported taken by the demo account itself');
+  await auth.updateUser(squatter.uid, { email: squattedEmail(squatter.uid), disabled: true });
   await auth.revokeRefreshTokens(squatter.uid);
-  await auth.updateUser(uid, props);
+  await write();
   return squatter.uid;
 }
 
-export type RestoreResult =
-  | { outcome: "not-configured" }
-  | { outcome: "missing"; uid: string }
-  | {
-      outcome: "intact" | "restored";
-      uid: string;
-      emailChanged: boolean;
-      passwordChanged: boolean;
-      claimAdded: boolean;
-      /** The account that had taken the demo email, now disabled. */
-      squatterUid?: string;
-    };
+interface Changes {
+  emailChanged: boolean;
+  passwordChanged: boolean;
+  /** Providers other than the password, which the restore unlinks. */
+  providersUnlinked: string[];
+  phoneCleared: boolean;
+  mfaCleared: boolean;
+}
 
-export async function restoreDemoAccount(
-  db: Db,
-  auth: DemoAuth,
-): Promise<RestoreResult> {
+function changesOf(user: DemoUserRecord, tokensValidAfter: unknown): Changes {
+  return {
+    emailChanged: (user.email ?? '').toLowerCase() !== DEMO_ACCOUNT_EMAIL,
+    passwordChanged: (user.tokensValidAfterTime ?? null) !== (tokensValidAfter ?? null),
+    // Phone goes through phoneNumber: null (the SDK refuses unlinking it both ways).
+    providersUnlinked: (user.providerData ?? [])
+      .map((p) => p.providerId)
+      .filter((id) => id !== 'password' && id !== 'phone'),
+    phoneCleared: !!user.phoneNumber,
+    mfaCleared: (user.multiFactor?.enrolledFactors?.length ?? 0) > 0,
+  };
+}
+
+const tampered = (c: Changes) =>
+  c.emailChanged ||
+  c.passwordChanged ||
+  c.providersUnlinked.length > 0 ||
+  c.phoneCleared ||
+  c.mfaCleared;
+
+export type RestoreResult =
+  | { outcome: 'not-configured' }
+  | { outcome: 'recreated'; uid: string; squatterUid?: string }
+  | ({
+      outcome: 'intact' | 'restored';
+      uid: string;
+      claimAdded: boolean;
+      squatterUid?: string;
+    } & Changes);
+
+export async function restoreDemoAccount(db: Db, auth: DemoAuth): Promise<RestoreResult> {
   const config = (await configRef(db).get()).data();
-  const uid = typeof config?.uid === "string" ? config.uid : "";
-  if (!uid) return { outcome: "not-configured" };
+  const uid = typeof config?.uid === 'string' ? config.uid : '';
+  if (!uid) return { outcome: 'not-configured' };
+  const savedClaims =
+    config?.claims && typeof config.claims === 'object'
+      ? (config.claims as Record<string, unknown>)
+      : {};
 
   let user: DemoUserRecord;
   try {
     user = await auth.getUser(uid);
   } catch (error) {
-    if (authCode(error) === "auth/user-not-found")
-      return { outcome: "missing", uid };
-    throw error;
+    if (authCode(error) !== 'auth/user-not-found') throw error;
+    // Deleted: recreate it at the same uid, so its data and roles line up again.
+    const squatterUid = await withDemoEmailFree(auth, uid, () =>
+      auth.createUser({ uid, ...SIGN_IN }),
+    );
+    await setClaims(db, auth, uid, savedClaims);
+    await record(db, auth, uid, { ...savedClaims, [DEMO_CLAIM]: true });
+    return { outcome: 'recreated', uid, ...(squatterUid ? { squatterUid } : {}) };
   }
-  const emailChanged = (user.email ?? "").toLowerCase() !== DEMO_ACCOUNT_EMAIL;
-  const passwordChanged =
-    (user.tokensValidAfterTime ?? null) !== (config?.tokensValidAfter ?? null);
+
+  const changes = changesOf(user, config?.tokensValidAfter);
   const claimAdded = await ensureClaim(db, auth, user);
-  if (!emailChanged && !passwordChanged) {
-    return {
-      outcome: "intact",
-      uid,
-      emailChanged,
-      passwordChanged,
-      claimAdded,
-    };
-  }
-  const squatterUid = await putBack(auth, uid);
-  // Whoever changed them keeps no session.
+  if (!tampered(changes)) return { outcome: 'intact', uid, claimAdded, ...changes };
+
+  const update: DemoUpdate = {
+    ...SIGN_IN,
+    ...(changes.providersUnlinked.length ? { providersToUnlink: changes.providersUnlinked } : {}),
+    ...(changes.phoneCleared ? { phoneNumber: null } : {}),
+    ...(changes.mfaCleared ? { multiFactor: { enrolledFactors: null } } : {}),
+  };
+  const squatterUid = await withDemoEmailFree(auth, uid, () => auth.updateUser(uid, update));
+  // Whoever changed it keeps no session.
   await auth.revokeRefreshTokens(uid);
-  const fresh = await auth.getUser(uid);
-  await configRef(db).set({
+  await record(
+    db,
+    auth,
     uid,
-    tokensValidAfter: fresh.tokensValidAfterTime ?? null,
-  });
+    config?.claims ?? { ...(user.customClaims ?? {}), [DEMO_CLAIM]: true },
+  );
   return {
-    outcome: "restored",
+    outcome: 'restored',
     uid,
-    emailChanged,
-    passwordChanged,
     claimAdded,
+    ...changes,
     ...(squatterUid ? { squatterUid } : {}),
   };
 }

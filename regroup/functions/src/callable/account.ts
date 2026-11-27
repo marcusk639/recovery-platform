@@ -3,7 +3,7 @@ import { logger } from 'firebase-functions';
 import { STRIPE_SECRET_KEY } from '../config';
 import { runAccountDeletion } from '../accountDeletion';
 import { BillingNotVerifiedError } from '../api/stripeDeletion';
-import { isDemoAccount } from '../util/demoAccount';
+import { DEMO_ACCOUNT_EMAIL, isDemoAccount } from '../util/demoAccount';
 
 const MAX_AUTH_AGE_SECONDS = 300;
 
@@ -38,7 +38,10 @@ export const deleteAccount = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (req
     throw new HttpsError('failed-precondition', 'Please sign in again to delete your account');
   }
 
-  if (isDemoAccount(request.auth)) {
+  // The demo claim, or its email too: deleting the shared App Review account
+  // can't be undone, so this one guard does not wait for the claim to be set.
+  const email = typeof token.email === 'string' ? token.email.toLowerCase() : undefined;
+  if (isDemoAccount(request.auth) || email === DEMO_ACCOUNT_EMAIL) {
     throw new HttpsError('permission-denied', "The demo account can't be deleted.");
   }
 

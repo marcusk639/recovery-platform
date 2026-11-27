@@ -76,6 +76,13 @@ describe('deleteAccount', () => {
     }
   });
 
+  it('also refuses the demo email without the claim (case-insensitive)', async () => {
+    const r = req();
+    (r.auth.token as any).email = 'Demo_User@AppDemo.net';
+    await expect(handler(r)).rejects.toMatchObject({ code: 'permission-denied' });
+    expect(mockRun).not.toHaveBeenCalled();
+  });
+
   it('ignores a non-string email claim instead of crashing', async () => {
     const r = req();
     (r.auth.token as any).email = { value: 'demo_user@appdemo.net' };

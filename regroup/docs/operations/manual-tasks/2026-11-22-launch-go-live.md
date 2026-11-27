@@ -240,6 +240,27 @@ that the key's account is `acct_1GfryQKsstp3aqoP`, and retrieves every `STRIPE_P
 
 **Expected result:** `account acct_1GfryQKsstp3aqoP OK`, and 12 prices OK, live and active.
 
+#### C2b. Mark the App Review demo account (S5, before C3 and C4)
+
+The functions and both rulesets identify the shared demo account (`demo_user@appdemo.net`, whose
+password is in the app) by a server-set `demo: true` claim only. Until it is set, the demo login is
+unrestricted on the server, so the functions and rules deploys refuse to run without it
+(`scripts/preflight-demo-account.js`, a predeploy hook).
+
+```bash
+npm --prefix functions run demo:mark-account                       # dry run
+npm --prefix functions run demo:mark-account -- --uid <UID> --apply
+```
+
+The dry run finds the account by its email and prints its uid. **Check that uid against the App Review
+account** (Firebase console, Authentication) before `--apply`: if someone changed the demo email and
+another account took it, the email finds the wrong account. Then apply with `--uid`.
+
+**Expected result:** `{"outcome":"marked","uid":"<UID>",...}`. Re-run it (idempotent) after C3: until
+the new functions are live, a role change on the account made by the old functions drops the claim.
+Also confirm the account's password is `DemoUser1`, the one the app uses: the scheduled
+`restoreDemoAccount` puts that password back whenever it changes.
+
 #### C3. Functions
 
 First compare `firebase functions:list --project phoenix-cleanhouse` with `ALL_FUNCTIONS` in
@@ -251,8 +272,9 @@ npm --prefix functions run build
 firebase deploy --only functions --project phoenix-cleanhouse
 ```
 
-**Expected result:** every function deploys, including the two new ones (`getDocumentLink` and
-`resolveFailedPaymentOffline`). Then:
+**Expected result:** the predeploy prints `[preflight-demo-account] ✓ demo account <UID> carries the
+demo claim` (if it says `Deploy blocked`, run C2b), and every function deploys, including the new ones
+(`getDocumentLink`, `resolveFailedPaymentOffline` and `restoreDemoAccount`). Then:
 
 ```bash
 gcloud functions describe createOperatorSubscription --region us-central1 --project phoenix-cleanhouse --format='value(serviceConfig.secretEnvironmentVariables)'
@@ -274,7 +296,8 @@ cd ..
 This deploys #289's rules (guest Stripe billing ids become server-only) and #287's (residents can no
 longer set `autoPayEnabled`), along with everything else on `main`.
 
-**Expected result:** both the Firestore and Storage rulesets release. The dry run compiles cleanly.
+**Expected result:** the demo-account preflight passes (C2b), both the Firestore and Storage rulesets
+release, and the dry run compiles cleanly.
 
 #### C4b. Clear the stored auto-pay flags (M7, #287)
 

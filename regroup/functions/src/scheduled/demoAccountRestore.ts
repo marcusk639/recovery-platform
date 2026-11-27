@@ -13,8 +13,8 @@ export async function runRestoreDemoAccount(): Promise<void> {
   const result = await restore(admin.firestore(), admin.auth());
   if (result.outcome === 'restored') {
     logger.warn('demo_account.restored', result);
-  } else if (result.outcome === 'missing') {
-    logger.error('demo_account.missing', { uid: result.uid });
+  } else if (result.outcome === 'recreated') {
+    logger.warn('demo_account.recreated', result);
   } else if (result.outcome === 'intact' && result.claimAdded) {
     logger.warn('demo_account.claim_restored', { uid: result.uid });
   }
