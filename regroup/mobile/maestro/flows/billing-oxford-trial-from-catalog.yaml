@@ -1,0 +1,65 @@
+# Oxford upgrade card: the trial length is the server's (launch P5 Task 12,
+# BILL-007, guard money). The card reads getTierCatalog: with sales open it
+# offers "Start 7-Day Free Trial" (TRIAL_PERIOD_DAYS = 7), never the 14 days
+# the card used to type.
+# Prices aren't asserted: the emulator's catalog has none unless the Stripe
+# sandbox key is in regroup/functions/.secret.local, and then the card shows
+# "Oxford Plan — from $49/month". The unit tests pin both.
+# Persona: oxford operator (test-house-oxford) with subscriptionMetadata
+# .oxfordEnabled set false, so the dashboard shows the upgrade card.
+# Run after a fresh seed (npm run maestro:seed); the seed restores the user.
+#
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/billing-oxford-trial-from-catalog.yaml
+appId: ${APP_ID}
+tags:
+  - oxford
+  - billing
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runScript:
+    file: ../scripts/maestro-js/set-oxford-upsell.js
+    env:
+      OXFORD_ENABLED: 'false'
+      SALES_OPEN: 'true'
+- assertTrue: ${output.upsellSet == 'ok'}
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-oxford-operator@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: ".*Oxford House Hub.*"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    text: ".*Oxford House Hub.*"
+- extendedWaitUntil:
+    visible:
+      id: "oxford-upgrade-prompt"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "oxford-upgrade-button"
+    direction: DOWN
+- extendedWaitUntil:
+    visible:
+      text: "Start 7-Day Free Trial"
+    timeout: 30000
+- assertNotVisible:
+    text: ".*14-Day.*"
+- assertVisible:
+    text: "No charge during your free trial"
+# Leave the seed as it was: Oxford back on, the sales switch closed (its
+# default: missing means closed), then sign out from the profile tab.
+- runScript:
+    file: ../scripts/maestro-js/set-oxford-upsell.js
+    env:
+      OXFORD_ENABLED: 'true'
+      SALES_OPEN: 'false'
+- assertTrue: ${output.upsellSet == 'ok'}
+- runFlow: ../subflows/logout.yaml

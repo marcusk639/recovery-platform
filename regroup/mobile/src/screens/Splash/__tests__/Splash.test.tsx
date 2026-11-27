@@ -171,6 +171,10 @@ jest.mock("../../../components/SimpleDebugLogViewer", () => ({
 
 // ─── Util mocks ───────────────────────────────────────────────────────────────
 jest.mock("../../../util/logging", () => ({ logException: jest.fn() }));
+const mockRefreshPlanState = jest.fn();
+jest.mock("../../../services/planState", () => ({
+  refreshPlanState: (...args: unknown[]) => mockRefreshPlanState(...args),
+}));
 
 jest.mock("../../../util/simple-debug-logger", () => ({
   logDebug: jest.fn(),
@@ -913,6 +917,32 @@ describe("Splash (withSplash HOC)", () => {
           payload: { kind: "checkout-return", result: "success" },
         });
         expect(navigateToInvitation).not.toHaveBeenCalled();
+      });
+
+      // Task 10: the checkout hand-back refreshes the plan state once.
+      it("refreshes the plan state for a checkout return received while signed in", async () => {
+        mockRefreshPlanState.mockClear();
+        renderSplash({ user: signedInUser, loggedIn: true });
+        await act(async () => {});
+        act(() => linkListener()({ url: "regroup-app://app/checkout-return?result=success" }));
+
+        expect(mockRefreshPlanState).toHaveBeenCalledTimes(1);
+        expect(mockRefreshPlanState.mock.calls[0][1]).toMatchObject({ uid: "u1" });
+        expect(navigateToInvitation).not.toHaveBeenCalled();
+      });
+
+      it("refreshes the plan state once when a held checkout return is delivered at sign-in", async () => {
+        mockRefreshPlanState.mockClear();
+        renderSplash({
+          user: signedInUser,
+          loggedIn: true,
+          pendingAppLink: { kind: "checkout-return", result: "portal" },
+          pendingAppLinkReceivedAt: Date.now(),
+        });
+        await act(async () => {});
+
+        expect(mockDispatch).toHaveBeenCalledWith({ type: "user/clearPendingAppLink" });
+        expect(mockRefreshPlanState).toHaveBeenCalledTimes(1);
       });
 
       it("ignores a link parseAppLink does not claim", async () => {

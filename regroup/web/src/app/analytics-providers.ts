@@ -58,7 +58,9 @@ export function analyticsImports(
 }
 
 // Pages whose URL can carry an invitation token: the landing page's paths
-// (regroup/app-links.json `paths`) and /redirect, which older emails used.
+// (regroup/app-links.json `paths`) and /redirect, which pre-launch emails used.
+// That page is gone (it renders the not-found page now), but such a link still
+// carries a token in ?url=, so it stays here.
 const APP_LINK_PATH = /^\/(invite|checkout-return|app|redirect)(\/|$)/;
 
 /**

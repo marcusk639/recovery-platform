@@ -16,7 +16,7 @@ import {
 } from "../../components/rats-keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
-import { RootStackParamList } from "../../navigation/types";
+import { RootStackParamList, Routes } from "../../navigation/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback } from "react";
@@ -411,7 +411,13 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                 style={[styles.statValue, { color: color.green }]}
               />
             </View>
-            <View style={styles.stat}>
+            {/* Opens who owes what (P5 Task 18). */}
+            <TouchableOpacity
+              style={styles.stat}
+              testID="outstanding-stat"
+              accessibilityRole="button"
+              onPress={() => navigation.navigate(Routes.BalanceDashboard)}
+            >
               <RatsText
                 translate={false}
                 text="Outstanding"
@@ -422,7 +428,7 @@ const PaymentDashboard: React.FC<Props> = ({ navigation }) => {
                 text={`$${(totalOutstanding / 100).toFixed(2)}`}
                 style={[styles.statValue, { color: color.red }]}
               />
-            </View>
+            </TouchableOpacity>
             <View style={styles.stat}>
               <RatsText
                 translate={false}

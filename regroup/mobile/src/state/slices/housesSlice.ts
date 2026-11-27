@@ -1,6 +1,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { House } from '../../entities/House';
 import { Houses } from '../../types';
+import { isLogoutFulfilled } from './accountReset';
 
 interface HousesState {
   houses: Houses;
@@ -37,6 +38,11 @@ const housesSlice = createSlice({
     resetSearchResults: state => {
       state.searchedHouses = [];
     },
+  },
+  // The next account on this phone starts with nothing selected; DataContext
+  // selects its house only while none is.
+  extraReducers: builder => {
+    builder.addMatcher(isLogoutFulfilled, () => initialState);
   },
 });
 

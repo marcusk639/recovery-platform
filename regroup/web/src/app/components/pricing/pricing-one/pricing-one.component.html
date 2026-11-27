@@ -100,13 +100,16 @@
             </div>
             <div class="plan-button">
               <a
-                *ngIf="tier.availableForSale"
+                *ngIf="canCheckout(tier)"
                 [routerLink]="ctaRoute(tier)"
                 [queryParams]="signupQueryParams(tier)"
-                class="btn mt-4"
+                class="btn mt-4 plan-checkout"
               >
                 {{ ctaLabel(tier) }}
               </a>
+              <span *ngIf="tier.availableForSale && !salesOpen" class="btn mt-4 disabled plan-coming-soon" aria-disabled="true">
+                {{ ctaLabel(tier) }}
+              </span>
               <a *ngIf="!tier.availableForSale" [routerLink]="ctaRoute(tier)" class="btn mt-4">
                 {{ ctaLabel(tier) }}
               </a>
@@ -159,13 +162,16 @@
             </div>
             <div class="plan-button">
               <a
-                *ngIf="tier.availableForSale"
+                *ngIf="canCheckout(tier)"
                 [routerLink]="ctaRoute(tier)"
                 [queryParams]="signupQueryParams(tier)"
-                class="btn mt-4"
+                class="btn mt-4 plan-checkout"
               >
                 {{ ctaLabel(tier) }}
               </a>
+              <span *ngIf="tier.availableForSale && !salesOpen" class="btn mt-4 disabled plan-coming-soon" aria-disabled="true">
+                {{ ctaLabel(tier) }}
+              </span>
               <a *ngIf="!tier.availableForSale" [routerLink]="ctaRoute(tier)" class="btn mt-4">
                 {{ ctaLabel(tier) }}
               </a>

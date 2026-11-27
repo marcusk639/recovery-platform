@@ -244,11 +244,27 @@ const HouseSettings: React.FC<Props> = (props) => {
       // rules refuse their reads of the house's payment records.
       ...(mayViewHouseMoney
         ? {
+            // Owner decision 2026-11-27: bulk-adding residents is for owners
+            // and managers too; the screen checks the same itself.
+            guestImport: {
+              action: () => navigation.navigate(Routes.GuestImport),
+              label: 'Import residents from CSV',
+              description: 'Add current residents from a spreadsheet',
+              iconName: 'file-import',
+              color: color.medium_grey,
+            },
             paymentDashboard: {
               action: () => navigation.navigate(Routes.PaymentDashboard),
               label: 'Payment Dashboard',
               description: 'View all resident payment activity',
               iconName: 'chart-bar',
+              color: color.medium_grey,
+            },
+            balances: {
+              action: () => navigation.navigate(Routes.BalanceDashboard),
+              label: 'Balances',
+              description: 'What each resident owes now',
+              iconName: 'balance-scale',
               color: color.medium_grey,
             },
           }
@@ -325,7 +341,11 @@ const HouseSettings: React.FC<Props> = (props) => {
                     ? 'manage-guests-button'
                     : key === 'rent'
                       ? 'rent-settings-section'
-                      : undefined
+                      : key === 'guestImport'
+                        ? 'guest-import-section'
+                        : key === 'balances'
+                          ? 'balances-section'
+                          : undefined
               }
             />
           );

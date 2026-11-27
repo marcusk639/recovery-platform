@@ -19,6 +19,7 @@ const transform = (value: string, toUpper?: boolean) =>
 /**
  * Standard text field
  * Phase 3.3: Migrated from withRats HOC to useTheme and useTranslation hooks
+ * Other Text props (onPress, testID, accessibility) pass through to Text.
  */
 const RatsText = ({
   style,
@@ -26,14 +27,14 @@ const RatsText = ({
   translate = true,
   translateParams = {},
   toUpper,
-  numberOfLines,
+  ...textProps
 }: Props & TextProps) => {
   const { theme } = useTheme();
   const { t } = useTranslation();
 
   return (
     <Text
-      numberOfLines={numberOfLines}
+      {...textProps}
       style={[styles.text, { fontFamily: theme.primaryFontFamily }, style]}>
       {translate
         ? transform(t(text, translateParams), toUpper)

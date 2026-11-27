@@ -1,0 +1,101 @@
+# OPS-038 — Operator: the balance dashboard opens from Payments and from House
+# Settings, and its Outstanding total is what the seeded residents owe.
+# Persona: manager (owner of test-house-123). The expected total is computed
+# from the emulator's guest docs (maestro-js/house-outstanding.js:
+# rentOwed + choreFees of each current resident), not typed into the flow, so
+# E2E_RENT_CENTS can vary it.
+# Before P5 Task 18 nothing opened the balance dashboard.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/operator-balances.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - payments
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runScript:
+    file: ../scripts/maestro-js/house-outstanding.js
+    env:
+      HOUSE_ID: test-house-123
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- tapOn:
+    id: "house-settings-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 30000
+# 1. Payments → tap Outstanding.
+- scrollUntilVisible:
+    element:
+      text: ".*Payment Dashboard.*"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    text: ".*Payment Dashboard.*"
+- extendedWaitUntil:
+    visible:
+      id: "outstanding-stat"
+    timeout: 60000
+# The dashboard renders while its modal is still sliding in; a tap then is lost.
+- waitForAnimationToEnd
+- tapOn:
+    id: "outstanding-stat"
+    retryTapIfNoChange: true
+- extendedWaitUntil:
+    visible:
+      id: "balance-stats-card"
+    timeout: 30000
+# The Outstanding stat: under its label, above the per-resident list (whose
+# rows show amounts too). childOf the stats card doesn't resolve on iOS.
+- assertVisible:
+    text: ${output.outstandingPattern}
+    below:
+      text: "Outstanding"
+    above:
+      text: "Outstanding Balances"
+# 2. House Settings → Balances opens the same screen. A relaunch keeps the
+# session and closes the modals.
+- stopApp
+- launchApp:
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-button"
+    timeout: 30000
+- tapOn:
+    id: "house-settings-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "balances-section"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    id: "balances-section"
+- extendedWaitUntil:
+    visible:
+      id: "balance-stats-card"
+    timeout: 30000
+# The Outstanding stat: under its label, above the per-resident list (whose
+# rows show amounts too). childOf the stats card doesn't resolve on iOS.
+- assertVisible:
+    text: ${output.outstandingPattern}
+    below:
+      text: "Outstanding"
+    above:
+      text: "Outstanding Balances"
+- runFlow:
+    file: ../subflows/logout.yaml

@@ -569,6 +569,15 @@ describe('PaymentDashboard figures', () => {
     expect(queryByText('100%')).toBeNull();
   });
 
+  // P5 Task 18: the Outstanding figure opens the per-resident balances.
+  it("opens the balance dashboard from the Outstanding stat", async () => {
+    setupStore(residents);
+    mockGetHousePaymentRecords.mockResolvedValue([]);
+    const { findByTestId } = renderDashboard();
+    fireEvent.press(await findByTestId("outstanding-stat"));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith("balanceDashboard");
+  });
+
   it('shows a dash, not $NaN, for a record with no dollar amount', async () => {
     setupStore(residents);
     mockGetHousePaymentRecords.mockResolvedValue([

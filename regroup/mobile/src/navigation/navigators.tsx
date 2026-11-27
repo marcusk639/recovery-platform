@@ -67,6 +67,7 @@ import OxfordOnboardingWizard from '../screens/Oxford/OxfordOnboardingWizard';
 import OfficerManagement from '../screens/Oxford/OfficerManagement';
 import EESTracker from '../screens/Oxford/EESTracker';
 import BusinessMeetings from '../screens/Oxford/BusinessMeetings';
+import BusinessMeetingDetail from '../screens/Oxford/BusinessMeetingDetail';
 import OxfordVoting from '../screens/Oxford/Voting';
 import CharterCompliance from '../screens/Oxford/CharterCompliance';
 import { ResidentPayment, PaymentHistory } from '../screens/Payments';
@@ -450,6 +451,10 @@ export const RootNavigator = ({
       <RootStack.Screen
         name={Routes.BusinessMeetings}
         component={BusinessMeetings}
+      />
+      <RootStack.Screen
+        name={Routes.BusinessMeetingDetail}
+        component={BusinessMeetingDetail}
       />
       <RootStack.Screen name={Routes.OxfordVoting} component={OxfordVoting} />
       <RootStack.Screen

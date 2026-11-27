@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { WEB_PORTAL_URL } from '@mobile/screens/Subscription/SubscriptionRequiredScreen';
+import { ACCOUNT_URL } from './accountUrl';
 import { operatorHouseIds } from './access';
 import { healthLabel } from './houses/healthLabel';
 import { HouseTable } from './houses/HouseTable';
@@ -44,7 +44,7 @@ export function Home() {
       {houseIds.map((houseId) => (
         <HouseSummaryReporter key={houseId} houseId={houseId} report={report} />
       ))}
-      <HouseTable summaries={summaries} healthLabel={healthLabel} manageSubscriptionUrl={WEB_PORTAL_URL} />
+      <HouseTable summaries={summaries} healthLabel={healthLabel} manageSubscriptionUrl={ACCOUNT_URL} />
     </div>
   );
 }

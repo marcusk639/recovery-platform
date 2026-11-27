@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View, Linking, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ActivityIndicator } from 'react-native';
 import { RatsText } from '../../components/rats-text';
 import {
   CARD_STYLE,
@@ -8,7 +8,6 @@ import {
   HEADER,
   fontSize,
   SAVE_BUTTON,
-  fontFamily,
 } from '../../styles/theme';
 import { RatsIcon } from '../../components/rats-icon';
 import { logout } from '../../state/slices/userSlice';
@@ -18,7 +17,7 @@ import { logException } from '../../util/logging';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 import { useAppDispatch } from '../../state/store';
-import { WEB_BASE_URL } from '../Subscription/SubscriptionRequiredScreen';
+import { openWebBilling } from '../../services/webBilling';
 
 interface Props {
   closeModal: () => any;
@@ -75,12 +74,6 @@ const FALLBACK_COPY = {
   primaryAction: 'Fix Subscription',
 };
 
-// Built from WEB_BASE_URL so a staging/dev build does not send a lapsed
-// operator to the production billing page. Hardcoding the host here ignored
-// RATS_WEB_URL, unlike the paywall screen's own deep link.
-// Exported so accountUrl.test.ts can pin it, matching WEB_PORTAL_URL on the
-// paywall screen.
-export const ACCOUNT_URL = `${WEB_BASE_URL}/my-account`;
 
 /**
  * Subscription Update Modal
@@ -93,7 +86,6 @@ const SubscriptionUpdateModal: React.FC<Props> = (props) => {
 
   const dispatch = useAppDispatch();
   const [signingOut, setSigningOut] = useState(false);
-  const [linkError, setLinkError] = useState<string | null>(null);
 
   const copy = isGuest
     ? {
@@ -105,19 +97,10 @@ const SubscriptionUpdateModal: React.FC<Props> = (props) => {
       }
     : (STATUS_COPY[status] ?? FALLBACK_COPY);
 
-  const goToAccount = useCallback(async () => {
-    setLinkError(null);
-    try {
-      const supported = await Linking.canOpenURL(ACCOUNT_URL);
-      if (supported) {
-        await Linking.openURL(ACCOUNT_URL);
-      } else {
-        setLinkError(`Unable to open browser. Please visit ${ACCOUNT_URL}.`);
-      }
-    } catch {
-      setLinkError(`Unable to open browser. Please visit ${ACCOUNT_URL}.`);
-      logException('Could not open account URL');
-    }
+  // my-account in the browser, with ?from=app so the web hands back to the app
+  // (services/webBilling.ts alerts if the browser doesn't open).
+  const goToAccount = useCallback(() => {
+    openWebBilling('my-account');
   }, []);
 
   const handleSignOut = useCallback(async () => {
@@ -151,16 +134,6 @@ const SubscriptionUpdateModal: React.FC<Props> = (props) => {
           text={copy.description}
           testID="subscription-status-description"
         />
-
-        {/* Link error message */}
-        {linkError ? (
-          <RatsText
-            translate={false}
-            text={linkError}
-            style={styles.errorText}
-            testID="subscription-link-error"
-          />
-        ) : null}
 
         {/* Primary CTA — only for account holders */}
         {!isGuest && (
@@ -222,13 +195,6 @@ const styles = StyleSheet.create({
     color: color.dark_grey,
     fontSize: fontSize.medium,
     marginBottom: normalize(10),
-    textAlign: 'center',
-    paddingHorizontal: normalize(10),
-  },
-  errorText: {
-    color: color.red,
-    fontSize: fontSize.small,
-    marginTop: normalize(8),
     textAlign: 'center',
     paddingHorizontal: normalize(10),
   },

@@ -133,7 +133,9 @@ export class TierPickerComponent implements OnInit {
   }
 
   confirm(): void {
-    if (!this.houseType || !this.chosen) {
+    // Sales closed (catalog salesOpen false): /signup shows "Coming soon"
+    // instead of this picker; refuse here too, so no plan goes to checkout.
+    if (!this.houseType || !this.chosen || this.catalog?.salesOpen !== true) {
       return;
     }
     this.selected.emit({
