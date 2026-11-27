@@ -2,13 +2,17 @@
 // Storage emulator at users/USER_ID/avatar (storage.rules: the owner's own
 // file), and whether the users and guests docs hold a download URL for it
 // rather than a path on the phone. Emulator only.
-// env: USER_ID, GUEST_ID. Sets output.fileStored, output.userHasUrl,
+// env: USER_ID, GUEST_ID, RESET (optional). Sets output.fileStored, output.userHasUrl,
 // output.guestHasUrl and output.userAvatarIsLocal.
 const path = 'users/' + USER_ID + '/avatar';
-const meta = http.get(
-  'http://127.0.0.1:9199/v0/b/demo-regroup-e2e.appspot.com/o/' + encodeURIComponent(path),
-  { headers: { Authorization: 'Bearer owner' } },
-);
+const objectUrl =
+  'http://127.0.0.1:9199/v0/b/demo-regroup-e2e.appspot.com/o/' + encodeURIComponent(path);
+// The seed resets Firestore and Auth, not Storage: RESET=true first deletes a
+// photo an earlier run left, so the flow starts with none.
+if (typeof RESET !== 'undefined' && RESET === 'true') {
+  http.delete(objectUrl, { headers: { Authorization: 'Bearer owner' } });
+}
+const meta = http.get(objectUrl, { headers: { Authorization: 'Bearer owner' } });
 output.fileStored = meta.status === 200;
 
 function avatarOf(collection, id) {

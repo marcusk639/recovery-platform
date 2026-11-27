@@ -24,6 +24,7 @@ tags:
     env:
       USER_ID: e2e-guest-a
       GUEST_ID: guest-a
+      RESET: "true"
 - assertTrue:
     condition: ${!output.fileStored && !output.userHasUrl}
     label: no avatar before the flow (re-seed first)
