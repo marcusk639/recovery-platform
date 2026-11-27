@@ -20,9 +20,9 @@ const timezoneUrl = (lat: number, lng: number, _time: number) =>
 const REVERSE_GEOCODE = (lat: number, lng: number) =>
   `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}+&key=${mapsKey()}`;
 const GEOCODE = (street: string, city: string, state: string) =>
-  `https://maps.googleapis.com/maps/api/geocode/json?address=${street},+${city},+${state}&key=${mapsKey()}`;
+  `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(`${street}, ${city}, ${state}`)}&key=${mapsKey()}`;
 const PARTIAL_GEOCODE = (query: string) =>
-  `https://maps.googleapis.com/maps/api/geocode/json?address=${query}&key=${mapsKey()}`;
+  `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${mapsKey()}`;
 const AA_API = (lat: number, lng: number) =>
   `https://api.meetingguide.org/app/v2/request?latitude=${lat}&longitude=${lng}`;
 import { AAMeetingResponse } from "../entities/AAMeetingResponse";

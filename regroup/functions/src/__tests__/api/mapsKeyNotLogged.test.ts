@@ -84,6 +84,30 @@ describe.each([
   });
 });
 
+// The address is caller input (userIsAtMeeting's meetingAddress), so it must
+// stay one query value: an '&' or '#' in it must not add or cut parameters.
+describe.each([
+  [
+    'partialGeocode',
+    () => partialGeocode('1 Main St & key=other#frag'),
+    '1 Main St & key=other#frag',
+  ],
+  [
+    'geocode',
+    () => geocode('1 Main St & key=other', 'Austin#x', 'TX'),
+    '1 Main St & key=other, Austin#x, TX',
+  ],
+])('%s request URL', (_name, request, address) => {
+  it('sends the address as a single parameter and the key exactly once', async () => {
+    mockAxiosGet.mockResolvedValueOnce({ data: { results: [] } });
+    await request();
+    const url = new URL(mockAxiosGet.mock.calls[0][0]);
+    expect(url.hash).toBe('');
+    expect(url.searchParams.getAll('address')).toEqual([address]);
+    expect(url.searchParams.getAll('key')).toEqual([MAPS_KEY]);
+  });
+});
+
 describe('userIsAtMeeting when geocoding the meeting address fails', () => {
   it('returns false and logs neither the Maps key nor the address', async () => {
     const result = await (userIsAtMeeting as Function)({
