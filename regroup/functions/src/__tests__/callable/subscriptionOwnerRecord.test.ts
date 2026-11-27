@@ -21,8 +21,8 @@ const mockUpdateUser = jest.fn();
 // on mockUpdateUser, as the write these tests check for.
 jest.mock('../../util/operatorSubscriptionWrite', () => ({
   writeOperatorSubscription: jest.fn(),
-  changeSubscriptionHouses: async (uid: string, change: (h: object) => object) => {
-    const houses = change({});
+  changeSubscriptionHouses: async (uid: string, change: (h: object, m: object) => object) => {
+    const houses = change({}, { tier: 'professional', maxProperties: 3, houses: {} });
     await mockUpdateUser(uid, { subscriptionMetadata: { houses } });
     return houses;
   },

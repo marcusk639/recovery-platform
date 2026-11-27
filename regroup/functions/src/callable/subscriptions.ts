@@ -56,6 +56,7 @@ import {
   changeSubscriptionHouses,
   setSubscriptionStatus,
   writeOperatorSubscription,
+  writeReplacementSubscription,
 } from "../util/operatorSubscriptionWrite";
 import {
   assertCheckoutHeld,
@@ -236,16 +237,24 @@ async function reverseUnrecordedCheckout(
 }
 
 /**
- * Sets the stored status alone (setSubscriptionStatus). A record that names
- * another subscription by now is left alone and logged.
+ * Sets the stored status alone (setSubscriptionStatus) and returns the stored
+ * metadata as it now is, for the caller to return. A record that names another
+ * subscription by now is left alone and logged.
  */
-async function writeStatusOf(uid: string, subscriptionId: string, status: string): Promise<void> {
-  if (await setSubscriptionStatus(uid, subscriptionId, status)) return;
-  logger.warn("Subscription status not written: the record names another subscription", {
-    userId: uid,
-    subscriptionId,
-    status,
-  });
+async function writeStatusOf(
+  uid: string,
+  subscriptionId: string,
+  status: string,
+): Promise<OperatorSubscription> {
+  const { written, subscriptionMetadata } = await setSubscriptionStatus(uid, subscriptionId, status);
+  if (!written) {
+    logger.warn("Subscription status not written: the record names another subscription", {
+      userId: uid,
+      subscriptionId,
+      status,
+    });
+  }
+  return subscriptionMetadata as OperatorSubscription;
 }
 
 /** Whether Stripe shows the subscription ended; false when it can't be read. */
@@ -609,11 +618,11 @@ export const reactivateOperatorSubscription = onCall(
       );
     }
     logger.info("Subscription reactivated");
-    if (replacement) {
-      await updateUser(data.user.id, { subscriptionMetadata });
-    } else {
-      await writeStatusOf(data.user.id, storedMetadata.subscriptionId, "active");
-    }
+    // A replacement replaces the plan, keeping the stored houses map; a resume
+    // writes only the status.
+    subscriptionMetadata = replacement
+      ? await writeReplacementSubscription(data.user.id, subscriptionMetadata)
+      : await writeStatusOf(data.user.id, storedMetadata.subscriptionId, "active");
     if (replacement) {
       // The webhooks find a subscription only through its subscriptions doc, and
       // the replacement's first events can arrive before the record above points
@@ -665,11 +674,11 @@ export const cancelUserSubscription = onCall(
         "Subscription does not belong to caller",
       );
     await cancelSubscription(data.subscriptionId);
-    const subscriptionMetadata = {
-      ...firestoreUser.subscriptionMetadata,
-      status: "cancelling",
-    };
-    await writeStatusOf(request.auth.uid, data.subscriptionId, "cancelling");
+    const subscriptionMetadata = await writeStatusOf(
+      request.auth.uid,
+      data.subscriptionId,
+      "cancelling",
+    );
     return { ...data.user, subscriptionMetadata };
   },
 );
@@ -704,34 +713,29 @@ export const updateSubscriptionGuests = onCall(
     // resident cap and persist occupancy instead of touching Stripe items.
     const guestMeta = user.subscriptionMetadata;
     if (guestMeta?.tier) {
-      const houses = guestMeta.houses ?? {};
       const houseId = houseIds[0];
-      // The guests endpoint only mutates occupancy of houses already on the
-      // subscription. It must not implicitly create a house — that would
-      // bypass the property cap enforced by updateSubscriptionHouses.
-      if (!(houseId in houses)) {
-        throw new HttpsError(
-          "failed-precondition",
-          "House is not part of your subscription",
-        );
-      }
-      if (action === "add") {
+      // Checked and counted on the stored record, in its transaction, so a
+      // resident counted meanwhile is neither lost nor let past the cap.
+      await changeSubscriptionHouses(user.id!, (stored, storedMeta) => {
+        // The guests endpoint only mutates occupancy of houses already on the
+        // subscription. It must not implicitly create a house — that would
+        // bypass the property cap enforced by updateSubscriptionHouses.
+        if (!(houseId in stored)) {
+          throw new HttpsError(
+            "failed-precondition",
+            "House is not part of your subscription",
+          );
+        }
+        const meta = { ...guestMeta, ...storedMeta, houses: stored };
         if (
-          !withinResidentCap(
-            totalResidents(guestMeta),
-            guestMeta.maxResidents ?? null,
-          )
+          action === "add" &&
+          !withinResidentCap(totalResidents(meta), meta.maxResidents ?? null)
         ) {
           throw new HttpsError(
             "failed-precondition",
             "Resident limit reached for your plan",
           );
         }
-      }
-      // From the stored map, so a resident counted meanwhile isn't lost; a
-      // house removed meanwhile stays removed.
-      await changeSubscriptionHouses(user.id!, (stored) => {
-        if (!(houseId in stored)) return stored;
         const current = stored[houseId]?.numberOfGuests ?? 0;
         const next = action === "add" ? current + 1 : Math.max(0, current - 1);
         return { ...stored, [houseId]: { numberOfGuests: next } };
@@ -813,8 +817,9 @@ export const updateSubscriptionHouses = onCall(
       }
       // Changed from the stored map, so the property cap counts houses
       // createHouses added meanwhile, and none of them is dropped.
-      const houses = await changeSubscriptionHouses(user.id!, (stored) => {
-        const meta = { ...houseMeta, houses: stored };
+      const houses = await changeSubscriptionHouses(user.id!, (stored, storedMeta) => {
+        // The stored plan's caps too: a downgrade meanwhile applies.
+        const meta = { ...houseMeta, ...storedMeta, houses: stored };
         return (
           action === "add"
             ? addHousesToSubscription(meta, houseIds ?? [])

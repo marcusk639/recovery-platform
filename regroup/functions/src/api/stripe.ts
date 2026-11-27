@@ -12,6 +12,7 @@ import {
 import { assertPaymentMethodUsable } from "./cardValidation";
 import { periodEndSeconds } from "../util/subscriptionPeriod";
 import { isResourceMissing } from "../util/stripe";
+import { HttpsError } from "firebase-functions/v2/https";
 
 /**
  * Trial length for all new subscriptions. Stripe applies trial_period_days
@@ -217,6 +218,29 @@ export const createItemsFromMetadata = (
   ];
 };
 
+/**
+ * Reactivate creates the replacement on the stored customer, which charges its
+ * saved card. A customer Stripe no longer has (deleted, say by support) can't
+ * be billed, and the create would fail only after the lookup, with an error not
+ * marked as before any subscription. Refused here instead, before anything is
+ * created, so the lock is freed and the operator told what to do.
+ */
+const assertCustomerOnFile = async (customerId: string): Promise<void> => {
+  let gone: boolean;
+  try {
+    gone = (await stripe.customers.retrieve(customerId)).deleted === true;
+  } catch (error) {
+    if (!isResourceMissing(error)) throw error;
+    gone = true;
+  }
+  if (gone) {
+    throw new HttpsError(
+      "failed-precondition",
+      "This plan's billing details are no longer on file, so it can't be restarted. Please contact support.",
+    );
+  }
+};
+
 export const reactivateSubscription = async (
   customerId: string,
   subscriptionMetadata: OperatorSubscription,
@@ -240,6 +264,7 @@ export const reactivateSubscription = async (
     let price: string;
     try {
       price = resolveTierPriceId(houseType, tier, billingInterval);
+      await assertCustomerOnFile(customerId);
       await attempt.beforeCreate();
     } catch (error) {
       // Before Stripe is called, so the callable may free the checkout lock.
@@ -481,16 +506,6 @@ export const failedBeforeSubscription = (error: unknown): boolean =>
 const ENDED_STATUSES = new Set(["canceled", "incomplete_expired"]);
 
 /**
- * A Stripe subscription for this operator that hasn't ended, or null: checkout's
- * second check, for one the operator record doesn't show (a checkout whose
- * record write failed and could not be cancelled). Every tier subscription
- * carries the operator's userId in its metadata.
- *
- * First the customers with this email and their subscriptions: list calls are
- * consistent, and a retry sends the same email. Then a metadata search, which
- * finds one under another email but can lag writes by a minute or more.
- */
-/**
  * A customer's subscriptions, or none when Stripe no longer has the customer:
  * deleting a customer cancels its subscriptions, so nothing live is there.
  */
@@ -503,6 +518,16 @@ const listSubscriptionsOf = async (customer: string): Promise<Stripe.Subscriptio
   }
 };
 
+/**
+ * A Stripe subscription for this operator that hasn't ended, or null: checkout's
+ * second check, for one the operator record doesn't show (a checkout whose
+ * record write failed and could not be cancelled). Every tier subscription
+ * carries the operator's userId in its metadata.
+ *
+ * First the customers with this email and their subscriptions: list calls are
+ * consistent, and a retry sends the same email. Then a metadata search, which
+ * finds one under another email but can lag writes by a minute or more.
+ */
 export const findLiveSubscriptionForUser = async (
   userId: string,
   email: string,

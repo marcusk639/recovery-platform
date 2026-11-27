@@ -128,26 +128,33 @@ jest.mock("../../util/houseRoles", () => ({
 // they apply to the mocked user and record the result on mockUpdateUser, so
 // these tests keep asserting what the record becomes.
 type MockHouses = Record<string, { numberOfGuests: number }>;
-const mockChangeSubscriptionHouses = jest.fn(
-  async (uid: string, change: (houses: MockHouses) => MockHouses) => {
-    const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
-    const houses = change(meta.houses ?? {});
-    await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, houses } });
-    return houses;
-  },
-);
+type MockChange = (houses: MockHouses, meta: Record<string, any>) => MockHouses;
+const mockChangeSubscriptionHouses = jest.fn(async (uid: string, change: MockChange) => {
+  const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
+  const houses = change(meta.houses ?? {}, meta);
+  await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, houses } });
+  return houses;
+});
 const mockSetSubscriptionStatus = jest.fn(async (uid: string, _sub: string, status: string) => {
   const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
-  await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, status } });
-  return true;
+  const subscriptionMetadata = { ...meta, status };
+  await mockUpdateUser(uid, { subscriptionMetadata });
+  return { written: true, subscriptionMetadata };
+});
+// Reactivate's replacement, also recorded on mockUpdateUser.
+const mockWriteReplacementSubscription = jest.fn(async (uid: string, meta: object) => {
+  await mockUpdateUser(uid, { subscriptionMetadata: meta });
+  return meta;
 });
 jest.mock("../../util/operatorSubscriptionWrite", () => ({
   writeOperatorSubscription: (uid: string, meta: object) =>
     mockWriteOperatorSubscription(uid, meta),
-  changeSubscriptionHouses: (uid: string, change: (h: MockHouses) => MockHouses) =>
+  changeSubscriptionHouses: (uid: string, change: MockChange) =>
     mockChangeSubscriptionHouses(uid, change),
   setSubscriptionStatus: (uid: string, sub: string, status: string) =>
     mockSetSubscriptionStatus(uid, sub, status),
+  writeReplacementSubscription: (uid: string, meta: object) =>
+    mockWriteReplacementSubscription(uid, meta),
 }));
 
 jest.mock("../../util/email", () => ({

@@ -15,22 +15,41 @@ type HousesMap = Record<string, unknown>;
 export const writeOperatorSubscription = async <M extends object>(
   uid: string,
   meta: M,
+): Promise<M & { houses: HousesMap }> =>
+  // potentialSuperAdmin on the doc is what the app routes an operator who has
+  // not finished setup by. A new web signup writes it when it creates the
+  // account; an existing account checking out while signed in has no such
+  // write, so the checkout sets it here, with the plan it is for.
+  writeKeepingHouses(uid, meta, { potentialSuperAdmin: true });
+
+/**
+ * Writes Reactivate's replacement plan, keeping the stored houses map as
+ * writeOperatorSubscription does. The replacement is built from the record
+ * read before Stripe created it, so its own map could drop a resident counted
+ * meanwhile or bring back a house deleted meanwhile. Clears the lock too.
+ */
+export const writeReplacementSubscription = async <M extends object>(
+  uid: string,
+  meta: M,
+): Promise<M & { houses: HousesMap }> => writeKeepingHouses(uid, meta, {});
+
+const writeKeepingHouses = async <M extends object>(
+  uid: string,
+  meta: M,
+  extra: Record<string, unknown>,
 ): Promise<M & { houses: HousesMap }> => {
   const ref = userCollection.doc(uid);
   return ratsFirestore.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const houses = (snap.data()?.subscriptionMetadata?.houses ?? {}) as HousesMap;
     const written = { ...meta, houses };
-    // potentialSuperAdmin on the doc is what the app routes an operator who has
-    // not finished setup by. A new web signup writes it when it creates the
-    // account; an existing account checking out while signed in has no such
-    // write, so the checkout sets it here, with the plan it is for.
-    tx.update(ref, { subscriptionMetadata: stripUndefinedDeep(written), potentialSuperAdmin: true });
+    tx.update(ref, { subscriptionMetadata: stripUndefinedDeep(written), ...extra });
     return written;
   });
 };
 
 export type SubscriptionHouses = Record<string, { numberOfGuests: number }>;
+type StoredMetadata = Record<string, any>;
 
 /**
  * Changes the operator's subscription houses map from the stored one, in a
@@ -38,17 +57,18 @@ export type SubscriptionHouses = Record<string, { numberOfGuests: number }>;
  * back the whole metadata they had read earlier, which put back fields changed
  * meanwhile: an erased checkout lock (util/checkoutGuard) refused a checkout
  * still under way, and a houses map read before createHouses added a house
- * dropped it, freeing a property-cap slot. `change` may throw to refuse (the
- * cap checks), and runs on the stored map. Returns the map as written.
+ * dropped it, freeing a property-cap slot. `change` runs on the stored map
+ * and the stored metadata (the plan's caps), and throws to refuse (the cap
+ * checks). Returns the map as written.
  */
 export const changeSubscriptionHouses = async (
   uid: string,
-  change: (houses: SubscriptionHouses) => SubscriptionHouses,
+  change: (houses: SubscriptionHouses, stored: StoredMetadata) => SubscriptionHouses,
 ): Promise<SubscriptionHouses> => {
   const ref = userCollection.doc(uid);
   return ratsFirestore.runTransaction(async (tx) => {
-    const stored = (await tx.get(ref)).data()?.subscriptionMetadata?.houses;
-    const houses = change((stored ?? {}) as SubscriptionHouses);
+    const meta = ((await tx.get(ref)).data()?.subscriptionMetadata ?? {}) as StoredMetadata;
+    const houses = change((meta.houses ?? {}) as SubscriptionHouses, meta);
     tx.update(ref, {
       'subscriptionMetadata.houses': houses,
       'subscriptionMetadata.lastUpdatedAt': new Date().toISOString(),
@@ -59,22 +79,24 @@ export const changeSubscriptionHouses = async (
 
 /**
  * Sets the operator's subscription status alone, while the record still names
- * this subscription (false, and nothing written, once it names another). For
- * the same reason as changeSubscriptionHouses: the rest is left as stored.
+ * this subscription; once it names another nothing is written. For the same
+ * reason as changeSubscriptionHouses: the rest is left as stored. Returns
+ * whether it wrote, and the stored metadata as it now is.
  */
 export const setSubscriptionStatus = async (
   uid: string,
   subscriptionId: string,
   status: string,
-): Promise<boolean> => {
+): Promise<{ written: boolean; subscriptionMetadata: StoredMetadata }> => {
   const ref = userCollection.doc(uid);
   return ratsFirestore.runTransaction(async (tx) => {
-    const meta = (await tx.get(ref)).data()?.subscriptionMetadata;
-    if (meta?.subscriptionId !== subscriptionId) return false;
+    const meta = ((await tx.get(ref)).data()?.subscriptionMetadata ?? {}) as StoredMetadata;
+    if (meta.subscriptionId !== subscriptionId) return { written: false, subscriptionMetadata: meta };
+    const lastUpdatedAt = new Date().toISOString();
     tx.update(ref, {
       'subscriptionMetadata.status': status,
-      'subscriptionMetadata.lastUpdatedAt': new Date().toISOString(),
+      'subscriptionMetadata.lastUpdatedAt': lastUpdatedAt,
     });
-    return true;
+    return { written: true, subscriptionMetadata: { ...meta, status, lastUpdatedAt } };
   });
 };

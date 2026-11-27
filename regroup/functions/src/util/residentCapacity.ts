@@ -117,9 +117,11 @@ export async function recordResidentAccepted(
   const meta = owner?.subscriptionMetadata;
   if (!meta?.tier) return;
 
-  // From the stored map, writing only it: see changeSubscriptionHouses.
-  await changeSubscriptionHouses(ownerId, (houses) => ({
-    ...houses,
-    [houseId]: { numberOfGuests: (houses[houseId]?.numberOfGuests ?? 0) + 1 },
-  }));
+  // From the stored map, writing only it: see changeSubscriptionHouses. A
+  // house no longer on the plan (deleted, its slot freed) isn't brought back.
+  await changeSubscriptionHouses(ownerId, (houses) =>
+    houseId in houses
+      ? { ...houses, [houseId]: { numberOfGuests: (houses[houseId]?.numberOfGuests ?? 0) + 1 } }
+      : houses,
+  );
 }

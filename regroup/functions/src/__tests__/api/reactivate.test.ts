@@ -4,11 +4,15 @@
 // createTierSubscription.test.ts) since api/stripe.ts wraps `new Stripe(...)`.
 
 const mockSubscriptionsCreate = jest.fn();
+const mockCustomersRetrieve = jest.fn();
 
 jest.mock("stripe", () =>
   jest.fn().mockImplementation(() => ({
     subscriptions: {
       create: (...args: unknown[]) => mockSubscriptionsCreate(...args),
+    },
+    customers: {
+      retrieve: (...args: unknown[]) => mockCustomersRetrieve(...args),
     },
   })),
 );
@@ -23,6 +27,7 @@ describe("reactivateSubscription", () => {
     process.env.STRIPE_API_VERSION = "2026-01-28.clover";
     process.env.STRIPE_HOUSE_PRICE_ID = "price_house";
     process.env.STRIPE_GUEST_PRICE_ID = "price_guest";
+    mockCustomersRetrieve.mockImplementation(async (id: string) => ({ id }));
   });
 
   it("recreates a single-item subscription for a tier subscription", async () => {
@@ -162,6 +167,31 @@ describe("reactivateSubscription", () => {
         },
       }).catch((e: unknown) => e);
       expect(error).toBe(refusal);
+      expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
+      expect(failedBeforeSubscription(error)).toBe(true);
+    });
+
+    // The replacement is created on the stored customer. If Stripe no longer has
+    // it (deleted, say by support), the create would fail after the lookup with
+    // an error not marked as before any subscription, holding the lock.
+    it.each([
+      ["deleted", async (id: string) => ({ id, deleted: true })],
+      [
+        "missing",
+        async () => {
+          throw Object.assign(new Error("No such customer"), {
+            type: "StripeInvalidRequestError",
+            code: "resource_missing",
+          });
+        },
+      ],
+    ])("refuses a stored customer Stripe has %s, before creating anything", async (_label, retrieve) => {
+      process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_std";
+      mockCustomersRetrieve.mockImplementation(retrieve);
+      const error = await reactivateSubscription("cus_4", tierMeta(), "uid_4").catch(
+        (e: unknown) => e,
+      );
+      expect(error).toMatchObject({ code: "failed-precondition" });
       expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
       expect(failedBeforeSubscription(error)).toBe(true);
     });

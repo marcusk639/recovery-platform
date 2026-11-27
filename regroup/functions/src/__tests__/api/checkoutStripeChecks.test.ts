@@ -170,8 +170,8 @@ describe('findLiveSubscriptionForUser', () => {
   });
 
   // Stripe cancels a customer's subscriptions when it deletes the customer, so a
-  // stored customer it no longer has holds nothing live. Reactivate used to
-  // answer "try again in a minute" there, which never got better.
+  // stored customer it no longer has holds nothing live. (Reactivate then refuses
+  // to restart on it: see reactivate.test.ts.)
   it("treats a stored customer Stripe no longer has as holding no subscription", async () => {
     mockSubscriptionsList.mockImplementation(async ({ customer }: { customer: string }) => {
       if (customer === 'cus_gone') {

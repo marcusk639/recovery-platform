@@ -126,10 +126,10 @@ jest.mock('../../api/firestore', () => ({
 jest.mock('../../util/operatorSubscriptionWrite', () => ({
   changeSubscriptionHouses: async (
     uid: string,
-    change: (h: Record<string, { numberOfGuests: number }>) => object,
+    change: (h: Record<string, { numberOfGuests: number }>, meta: object) => object,
   ) => {
     const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
-    const houses = change(meta.houses ?? {});
+    const houses = change(meta.houses ?? {}, meta);
     await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, houses } });
     return houses;
   },

@@ -129,12 +129,37 @@ describe('a resident added or removed', () => {
     });
   });
 
-  it("doesn't put back a house removed meanwhile", async () => {
+  it('refuses a house removed meanwhile, and leaves it removed', async () => {
     recordMovedOn(
       { ...TIER_PLAN, houses: { h1: { numberOfGuests: 2 } } },
       { ...TIER_PLAN, houses: {} },
     );
-    await call(updateSubscriptionGuests, { ownerUserId: 'op', houseIds: ['h1'], action: 'add' });
+    await expect(
+      call(updateSubscriptionGuests, { ownerUserId: 'op', houseIds: ['h1'], action: 'add' }),
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    expect(mockStored.subscriptionMetadata.houses).toEqual({});
+  });
+
+  // Two adds at one below the cap both passed a check on their own reads.
+  it('checks the resident cap against the stored count', async () => {
+    recordMovedOn(
+      { ...TIER_PLAN, maxResidents: 3, houses: { h1: { numberOfGuests: 2 } } },
+      { ...TIER_PLAN, maxResidents: 3, houses: { h1: { numberOfGuests: 3 } } },
+    );
+    await expect(
+      call(updateSubscriptionGuests, { ownerUserId: 'op', houseIds: ['h1'], action: 'add' }),
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+
+    expect(mockStored.subscriptionMetadata.houses).toEqual({ h1: { numberOfGuests: 3 } });
+  });
+
+  it("on accepting an invitation, doesn't bring back a house removed from the plan", async () => {
+    recordMovedOn(
+      { ...TIER_PLAN, houses: { h1: { numberOfGuests: 1 } } },
+      { ...TIER_PLAN, houses: {} },
+    );
+    await recordResidentAccepted('op', 'h1');
 
     expect(mockStored.subscriptionMetadata.houses).toEqual({});
   });
@@ -179,6 +204,17 @@ describe('a house added to or removed from the plan', () => {
       call(updateSubscriptionHouses, { ownerUserId: 'op', action: 'add', houseIds: ['h4'] }),
     ).rejects.toMatchObject({ code: 'failed-precondition' });
     expect(Object.keys(mockStored.subscriptionMetadata.houses)).toHaveLength(3);
+  });
+
+  it('checks the property cap with the stored plan, after a downgrade meanwhile', async () => {
+    recordMovedOn(
+      { ...TIER_PLAN, houses: { h1: { numberOfGuests: 0 } } },
+      { ...TIER_PLAN, tier: 'starter', maxProperties: 1, houses: { h1: { numberOfGuests: 0 } } },
+    );
+    await expect(
+      call(updateSubscriptionHouses, { ownerUserId: 'op', action: 'add', houseIds: ['h2'] }),
+    ).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(Object.keys(mockStored.subscriptionMetadata.houses)).toEqual(['h1']);
   });
 
   it('removes only the deleted house, leaving the lock', async () => {
@@ -229,9 +265,17 @@ describe('a plan set to cancel, or resumed', () => {
       { ...TIER_PLAN, status: 'active', houses: {} },
       { ...TIER_PLAN, subscriptionId: 'sub_2', status: 'trialing', houses: {} },
     );
-    await call(cancelUserSubscription, { user: CLIENT_USER, subscriptionId: 'sub_1' });
+    const result = await call(cancelUserSubscription, {
+      user: CLIENT_USER,
+      subscriptionId: 'sub_1',
+    });
 
     expect(mockStored.subscriptionMetadata).toMatchObject({
+      subscriptionId: 'sub_2',
+      status: 'trialing',
+    });
+    // The record as stored, not a cancel that wasn't written.
+    expect(result.subscriptionMetadata).toMatchObject({
       subscriptionId: 'sub_2',
       status: 'trialing',
     });
