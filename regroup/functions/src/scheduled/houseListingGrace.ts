@@ -17,7 +17,7 @@
  *
  * Cost: one equality query on subscriptionStatus that reads only
  * guestGraceEndsAt. Houses whose grace still runs are skipped in memory; for
- * the rest one batched read finds which still have a listing, and only those
+ * the rest batched reads (100 per call) find which still have a listing, and only those
  * are re-planned (two reads each) and deleted.
  */
 import { logger } from 'firebase-functions/v2';
