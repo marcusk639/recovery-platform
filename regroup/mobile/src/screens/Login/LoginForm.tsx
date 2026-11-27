@@ -90,11 +90,13 @@ const LoginForm = withFormik<
       });
 
       // Use improved navigation service to get the correct route. An
-      // invitation held from before sign-in opens the invitation screen.
-      const navigationConfig = improvedNavigationService.getInitialNavigation(
-        user,
-        (props as any).invitation,
-      );
+      // invitation held from before sign-in opens the invitation screen
+      // (SignUp shows a signed-in user Accept / Continue) for every account:
+      // the invitation flow's NewAccount route is for an account sign-up just
+      // created, and it clears the invitation without offering it.
+      const navigationConfig = (props as any).invitation
+        ? { initialRoute: Routes.PriorAuth, authInitialRoute: Routes.Signup, initialMainRoute: undefined }
+        : improvedNavigationService.getInitialNavigation(user);
 
       // Navigate after login - use setTimeout to ensure Redux state is updated
       setTimeout(() => {

@@ -64,8 +64,11 @@ const resetTarget = () => {
   return [root.name, root.state?.routes[0].name];
 };
 
-async function logIn() {
-  mockLogin.mockResolvedValue({ user: completeGuest });
+// An account that never finished its profile (NewAccount).
+const incompleteGuest = { ...completeGuest, infoEntered: false };
+
+async function logIn(user: Record<string, unknown> = completeGuest) {
+  mockLogin.mockResolvedValue({ user });
   const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
   const screen = render(
     <QueryClientProvider client={client}>
@@ -96,6 +99,19 @@ describe('LoginForm with an invitation held from before sign-in', () => {
     mockHeldInvitation = { id: '', token: 'tok-1', type: 'admin', houseId: 'h1', email: '' };
     await logIn();
     expect(resetTarget()).toEqual([Routes.PriorAuth, Routes.Signup]);
+  });
+
+  // The sign-up route for an unfinished profile is NewAccount, which clears
+  // the invitation without offering it; a login offers it first.
+  it('offers the invitation to an account that never finished its profile', async () => {
+    mockHeldInvitation = { id: '', token: 'tok-1', type: 'admin', houseId: 'h1', email: '' };
+    await logIn(incompleteGuest);
+    expect(resetTarget()).toEqual([Routes.PriorAuth, Routes.Signup]);
+  });
+
+  it('keeps the start route for that account when no invitation is held', async () => {
+    await logIn(incompleteGuest);
+    expect(resetTarget()).toEqual([Routes.Main, Routes.Guest]);
   });
 
   it('opens the start route when no invitation is held', async () => {
