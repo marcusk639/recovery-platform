@@ -57,6 +57,13 @@ tags:
     visible:
       id: "house-card-test-house-123"
     timeout: 30000
+# The test house is the last card; on Android its VIEW DETAILS button starts
+# at the list's bottom edge, and Maestro taps the middle of the whole button,
+# which lies under the system Home button. Scroll the list up first.
+- swipe:
+    start: "50%, 70%"
+    end: "50%, 30%"
+- waitForAnimationToEnd
 - tapOn:
     id: "house-details-button-test-house-123"
 - extendedWaitUntil:
