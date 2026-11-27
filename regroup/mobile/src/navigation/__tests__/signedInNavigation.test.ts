@@ -8,10 +8,15 @@
 jest.mock('../service', () => ({ navigationRef: { current: null } }));
 jest.mock('../../util/logging', () => ({ logException: jest.fn() }));
 
-import { resetToSignedInRoute, SIGNED_IN_RESET_DELAY_MS } from '../signedInNavigation';
+import {
+  resetToSignedInRoute,
+  SIGNED_IN_RECHECK_MS,
+  SIGNED_IN_RESET_DELAY_MS,
+} from '../signedInNavigation';
 import { Routes } from '../types';
 
 const mockNavDispatch = jest.fn();
+let mockCurrentRoute = 'House';
 
 const service = require('../service');
 const { logException } = require('../../util/logging');
@@ -41,7 +46,11 @@ beforeEach(() => {
   jest.useFakeTimers();
   mockNavDispatch.mockClear();
   (logException as jest.Mock).mockClear();
-  service.navigationRef.current = { dispatch: (...args: unknown[]) => mockNavDispatch(...args) };
+  mockCurrentRoute = 'House';
+  service.navigationRef.current = {
+    dispatch: (...args: unknown[]) => mockNavDispatch(...args),
+    getCurrentRoute: () => ({ name: mockCurrentRoute }),
+  };
 });
 afterEach(() => jest.useRealTimers());
 
@@ -92,5 +101,21 @@ describe('resetToSignedInRoute', () => {
     jest.runAllTimers();
     expect(logException).toHaveBeenCalledTimes(1);
     expect(onDone).toHaveBeenCalledTimes(1);
+  });
+
+  it('resets again when a slow remount put the landing screen back after the reset', () => {
+    resetToSignedInRoute(admin);
+    jest.advanceTimersByTime(SIGNED_IN_RESET_DELAY_MS);
+    expect(mockNavDispatch).toHaveBeenCalledTimes(1);
+    mockCurrentRoute = Routes.InitialLanding;
+    jest.advanceTimersByTime(SIGNED_IN_RECHECK_MS);
+    expect(mockNavDispatch).toHaveBeenCalledTimes(2);
+    expect(resetTarget()).toEqual([Routes.Main, Routes.House]);
+  });
+
+  it('resets once when the start route stuck', () => {
+    resetToSignedInRoute(admin);
+    jest.runAllTimers();
+    expect(mockNavDispatch).toHaveBeenCalledTimes(1);
   });
 });

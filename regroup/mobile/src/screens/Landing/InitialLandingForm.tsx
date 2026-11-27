@@ -89,16 +89,18 @@ const InitialLandingFormView = (props: FormViewProps) => {
   // left the app on the landing screen. Reset the root like LoginForm does.
   const showDemo = async () => {
     setLoading(true);
+    let user: User;
     try {
-      const { user } = await props
+      ({ user } = await props
         .login("demo_user@appdemo.net", "DemoUser1")
-        .unwrap();
-      resetToSignedInRoute(user, { hasInvitation: !!props.invitation });
+        .unwrap());
     } catch (error) {
       logException(error, "InitialLandingForm: demo sign-in failed");
       setLoading(false);
       Alert.alert(DEMO_SIGN_IN_FAILED_MESSAGE);
+      return;
     }
+    resetToSignedInRoute(user, { hasInvitation: !!props.invitation });
   };
 
   if (loading) {

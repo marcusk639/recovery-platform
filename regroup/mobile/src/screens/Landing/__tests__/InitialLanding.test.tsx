@@ -159,6 +159,8 @@ jest.mock("../../../navigation/signedInNavigation", () => ({
   resetToSignedInRoute: jest.fn(),
 }));
 
+jest.mock("../../../util/logging", () => ({ logException: jest.fn() }));
+
 // ─── React imports (after mocks) ──────────────────────────────────────────────
 import React from "react";
 import { render, fireEvent, act } from "@testing-library/react-native";
@@ -356,6 +358,20 @@ describe("InitialLanding", () => {
       expect(mockNavigate).not.toHaveBeenCalledWith("login");
     });
 
+    it('opens a held invitation after the demo sign-in, like the login form', async () => {
+      const { resetToSignedInRoute } = require("../../../navigation/signedInNavigation");
+      const demoUser = { id: "e2e-demo-user", isAdmin: true };
+      mockDemoLogin.mockResolvedValue({ user: demoUser });
+
+      const { getByTestId } = renderScreen({ invitation: { token: "t" } });
+
+      await act(async () => {
+        fireEvent.press(getByTestId("landing-demo-link"));
+      });
+
+      expect(resetToSignedInRoute).toHaveBeenCalledWith(demoUser, { hasInvitation: true });
+    });
+
     it('says so, and stays on the landing screen, when the demo sign-in fails', async () => {
       const { resetToSignedInRoute } = require("../../../navigation/signedInNavigation");
       const { Alert } = require("react-native");
@@ -369,6 +385,11 @@ describe("InitialLanding", () => {
       });
 
       expect(resetToSignedInRoute).not.toHaveBeenCalled();
+      const { logException } = require("../../../util/logging");
+      expect(logException).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "auth/network-request-failed" }),
+        expect.any(String),
+      );
       expect(alert).toHaveBeenCalledWith("Couldn't open the demo. Please try again.");
       expect(getByTestId("landing-demo-link")).toBeTruthy();
       alert.mockRestore();
