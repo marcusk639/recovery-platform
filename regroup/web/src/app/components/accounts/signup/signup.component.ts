@@ -21,13 +21,26 @@ export type AccountNotice = 'plan-exists' | 'plan-ended' | 'not-operator-account
  * signed-in account's record, so the page says so before asking for a card. The
  * server decides; this only picks what to show.
  */
-export function accountNoticeFor(account: User): AccountNotice | null {
+export function accountNoticeFor(
+  account: User,
+  catalogTiers: TierCatalogEntry[] | null,
+): AccountNotice | null {
   const meta: any = account.subscriptionMetadata || {};
   const status = meta.status || '';
   if (status === 'canceled') {
-    if (meta.tier) {
+    // Reactivate restarts a tier still for sale; otherwise (no tier, or one no
+    // longer sold) checkout is the way back. Until the catalog loads, assume
+    // the plan can be reactivated: the card step waits for the catalog anyway.
+    const onSale =
+      !catalogTiers ||
+      catalogTiers.some(
+        (t) => t.houseType === meta.houseType && t.tier === meta.tier && t.availableForSale,
+      );
+    if (meta.tier && onSale) {
       return 'plan-ended';
     }
+  } else if (status === 'incomplete_expired') {
+    // Never started, so nothing bills and no trial was used: checkout is allowed.
   } else if (status || meta.subscriptionId) {
     return 'plan-exists';
   }
@@ -69,6 +82,7 @@ export class SignupComponent implements OnInit {
   account: User | null = null;
   checkingAccount = true;
   accountNotice: AccountNotice | null = null;
+  private catalogTiers: TierCatalogEntry[] | null = null;
 
   constructor(
     private auth: AuthService,
@@ -128,6 +142,8 @@ export class SignupComponent implements OnInit {
     this.tierCatalog.getCatalog().subscribe({
       next: (catalog) => {
         this.trialDays = catalog.trialDays > 0 ? catalog.trialDays : null;
+        this.catalogTiers = catalog.tiers;
+        this.refreshAccountNotice();
         if (catalog.salesOpen !== true) {
           this.salesClosed = true;
           this.pickerVisible = false;
@@ -181,9 +197,13 @@ export class SignupComponent implements OnInit {
     } catch {
       this.account = null;
     }
-    this.accountNotice = this.account ? accountNoticeFor(this.account) : null;
+    this.refreshAccountNotice();
     this.checkingAccount = false;
     this.startExistingCheckout();
+  }
+
+  private refreshAccountNotice(): void {
+    this.accountNotice = this.account ? accountNoticeFor(this.account, this.catalogTiers) : null;
   }
 
   /** Once both the account and a plan are known, go straight to the card step. */

@@ -314,9 +314,23 @@ describe('SignupComponent', () => {
     });
 
     it('with an ended tier plan, points to Reactivate', async () => {
-      await signInAs(account({ status: 'canceled', subscriptionId: 'sub_1', tier: 'starter' }));
+      await signInAs(
+        account({ status: 'canceled', subscriptionId: 'sub_1', tier: 'starter', houseType: 'traditional' }),
+      );
       expect(component.accountNotice).toBe('plan-ended');
       expect(el().querySelector('[data-testid="account-notice"]').textContent).toContain('Reactivate');
+    });
+
+    it('with an ended plan whose tier is no longer for sale, goes to the card step', async () => {
+      await signInAs(account({ status: 'canceled', subscriptionId: 's', tier: 'network', houseType: 'oxford' }));
+      expect(component.accountNotice).toBeNull();
+      expect(component.signUpStarted).toBe(true);
+    });
+
+    it('with an incomplete_expired plan (never started), goes to the card step', async () => {
+      await signInAs(account({ status: 'incomplete_expired', subscriptionId: 's', tier: 'starter' }));
+      expect(component.accountNotice).toBeNull();
+      expect(component.signUpStarted).toBe(true);
     });
 
     it('with an ended legacy plan (no tier), goes to the card step as the server allows', async () => {
