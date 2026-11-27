@@ -42,11 +42,13 @@ const ADMIN_SCREENS = [
   Routes.ResidentIntake,
   Routes.ApplicationList,
   Routes.ApplicationDetail,
-  Routes.GuestImport,
   Routes.HouseSettings,
   Routes.StaffNotes,
 ];
+// Guest Import: bulk-adding residents is for owners and managers (owner,
+// 2026-11-27), the same tiers as the house's money.
 const MONEY_SCREENS = [
+  Routes.GuestImport,
   Routes.BalanceDashboard,
   Routes.PaymentDashboard,
   Routes.StripeSettings,

@@ -30,7 +30,8 @@ const SCREENS: Record<string, [React.ComponentType<any>, HouseRank]> = {
   [Routes.ResidentIntake]: [IntakeFormScreen, 'admin'],
   [Routes.ApplicationList]: [ApplicationListScreen, 'admin'],
   [Routes.ApplicationDetail]: [ApplicationDetailScreen, 'admin'],
-  [Routes.GuestImport]: [GuestImportScreen, 'admin'],
+  // Owners and managers (owner, 2026-11-27): bulk-adding residents.
+  [Routes.GuestImport]: [GuestImportScreen, 'manager'],
   [Routes.HouseSettings]: [HouseSettings, 'admin'],
   [Routes.StaffNotes]: [StaffNotesFeed, 'admin'],
   [Routes.BalanceDashboard]: [BalanceDashboard, 'manager'],
