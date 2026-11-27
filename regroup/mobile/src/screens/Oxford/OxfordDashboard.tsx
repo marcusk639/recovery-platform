@@ -33,6 +33,8 @@ import CharterBadge from "../../components/oxford/CharterBadge";
 import { useCurrentWeekRecord } from "../../state/queries/treasuryQueries";
 import { Routes, RootStackParamList } from "../../navigation/types";
 import { openWebBilling } from "../../services/webBilling";
+import { formatPlanPrice, lowestMonthlyCents } from "../../services/tierCatalog";
+import { useTierCatalog } from "../../state/queries/tierCatalogQueries";
 import { Officer } from "../../entities/oxford/Officer";
 import { BusinessMeeting } from "../../entities/oxford/BusinessMeeting";
 import { EESTransaction } from "../../entities/oxford/EESTransaction";
@@ -89,6 +91,15 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
   const transactionsQuery = useEESTransactions(houseId, !!houseId);
   const { data: currentWeekRecord } = useCurrentWeekRecord(houseId, !!houseId);
   const { summary: charterSummary } = useCharterCompliance(houseId, !!houseId);
+
+  // The upgrade card's price, trial and CTA come from the catalog (Launch P5
+  // Task 12), fetched only while that card is what this screen shows.
+  const showsUpgradeCard =
+    !!house && house.houseType === "oxford" && !subscriptionMetadata?.oxfordEnabled;
+  const { data: catalog } = useTierCatalog(showsUpgradeCard);
+  const oxfordFromCents = lowestMonthlyCents(catalog, "oxford");
+  const trialDays =
+    catalog?.salesOpen === true && catalog.trialDays > 0 ? catalog.trialDays : null;
 
   // Memoize derived lists: each RQ refetch returns a new array reference,
   // so without useMemo these filter/slice chains re-run on every render
@@ -201,7 +212,11 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
 
           <View style={styles.upgradeCtaContainer}>
             <RatsText
-              text="Oxford Plan — $49/month"
+              text={
+                oxfordFromCents === null
+                  ? "Oxford Plan"
+                  : `Oxford Plan — from ${formatPlanPrice(oxfordFromCents)}/month`
+              }
               style={styles.upgradePriceLine}
               translate={false}
             />
@@ -216,16 +231,18 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
               style={styles.upgradeButton}
             >
               <RatsText
-                text="Start 14-Day Free Trial"
+                text={trialDays === null ? "See plans" : `Start ${trialDays}-Day Free Trial`}
                 style={styles.upgradeButtonText}
                 translate={false}
               />
             </TouchableOpacity>
-            <RatsText
-              text="No payment required to start"
-              style={styles.upgradeNote}
-              translate={false}
-            />
+            {trialDays !== null && (
+              <RatsText
+                text="No payment required to start"
+                style={styles.upgradeNote}
+                translate={false}
+              />
+            )}
           </View>
         </ScrollView>
       </View>

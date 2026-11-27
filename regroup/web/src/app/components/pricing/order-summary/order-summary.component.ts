@@ -1,12 +1,13 @@
 import { Component, Input } from '@angular/core';
 import { BillingInterval, TierCatalogEntry } from 'src/app/entities/TierCatalog';
 
-const TRIAL_DAYS = 7;
-
 /**
  * Presentational summary of the plan being purchased. Rendered on both
  * account-details and billing steps of /signup so the amount and trial
  * terms are visible before any card field is reachable.
+ *
+ * The trial length is the catalog's `trialDays` (the server's
+ * TRIAL_PERIOD_DAYS), never a number of its own: with none, no trial line.
  */
 @Component({
   selector: 'order-summary',
@@ -16,6 +17,7 @@ const TRIAL_DAYS = 7;
 export class OrderSummaryComponent {
   @Input() tier: TierCatalogEntry;
   @Input() billingInterval: BillingInterval = 'month';
+  @Input() trialDays: number | null = null;
 
   get effectiveInterval(): BillingInterval {
     if (!this.tier) {
@@ -42,14 +44,14 @@ export class OrderSummaryComponent {
     return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
   }
 
-  get trialDays(): number {
-    return TRIAL_DAYS;
+  get hasTrial(): boolean {
+    return typeof this.trialDays === 'number' && this.trialDays > 0;
   }
 
   /** Date the first charge occurs — today + the trial length. */
   get firstChargeDate(): Date {
     const date = new Date();
-    date.setDate(date.getDate() + TRIAL_DAYS);
+    date.setDate(date.getDate() + (this.hasTrial ? this.trialDays : 0));
     return date;
   }
 }

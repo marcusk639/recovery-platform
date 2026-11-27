@@ -20,6 +20,8 @@ npm run dev:ssr                   # Dev server with SSR
 npx tsc --noEmit -p tsconfig.spec.json  # What CI runs: typecheck the specs
 npm test -- --watch=false --browsers=ChromeHeadless --include=src/app/e2e-env.spec.ts
 # Karma runs headless. CI only typechecks specs: the full suite is not green yet.
+# A spec that renders an <img> crashes the karma server (UnhandledRejection; e.g.
+# work, pricing-two): check those templates in a scripts/__tests__ node test.
 npm run lint                      # TSLint
 npm run e2e                       # DOES NOT WORK: angular.json points at e2e/protractor.conf.js,
                                   # which doesn't exist; e2e/src holds only the CLI placeholder spec
@@ -36,9 +38,9 @@ npm run prerender                 # ng run sapp:prerender (route `/`); unused by
 npm run deploy                    # firebase deploy --only hosting,functions:web:ssr (see the
                                   # firebase-tools note in Gotchas)
 npm run serve:ssr                 # run dist/sapp/server/main.js
-npm run test:scripts              # node --test on the four scripts/*.test.js files listed in
-                                  # package.json (copy, bundle check, staging config generator,
-                                  # deploy-config invariants); CI runs it in regroup/web — typecheck
+npm run test:scripts              # node --test on the script tests listed in package.json
+                                  # (copy, bundle check, staging config generator, deploy-config
+                                  # invariants, app links, trial copy); CI runs it in regroup/web — typecheck
 npm run test:ssr                  # render smoke test of functions/dist (after build:ssr,
                                   # functions npm ci, build:copy-to-functions); not in CI
 npm run build:deploy              # Build + deploy in one command
@@ -195,13 +197,15 @@ Auto-login calls `doAutoLogin()` which sets Firebase persistence then resolves `
 | `AuthService`          | `users`         | Auth state, login/signup, user CRUD                                                      |
 | `HouseService`         | `houses`        | House lookup by ID                                                                       |
 | `SubscriptionService`  | `subscriptions` | Newsletter email capture only (see below)                                                |
-| `TierCatalogService`   | —               | `getTierCatalog` callable, cached per session; web pricing                               |
+| `TierCatalogService`   | —               | `getTierCatalog` callable, cached per session; prices, `trialDays`, `salesOpen`          |
 | `ContactService`       | `contact`       | Contact form                                                                             |
 | `BetaService`          | `beta-users`    | Beta email allowlist (`beta-users/users`); injected into `SignupComponent`, never called |
 | `CloudFunctionService` | —               | Wraps all callable Firebase Functions                                                    |
 | `AppService`           | —               | App name and a `route()` navigation helper                                               |
 | `ModalService`         | —               | App-level modal state                                                                    |
 | `LocalStorageService`  | —               | Browser localStorage wrapper                                                             |
+
+Prices, the trial length and the sales switch come only from the catalog (launch P5 Task 12). `OrderSummaryComponent` takes `trialDays` as an input and shows no trial line without one; no template types a trial length (`scripts/__tests__/trial-copy.test.mjs`). With `salesOpen: false`, the pricing page shows "Coming soon" in place of the checkout link and `/signup` shows "Coming soon" in place of the picker and card form, so `createOperatorSubscription` is never reached (the callable refuses on its own too). With the catalog unavailable, both show an error and no price.
 
 `SubscriptionService.pushEmail` appends to the `subscriptions/emails` doc. Its `housePrice` / `residentPrice` fields are leftovers that nothing reads; pricing comes from `TierCatalogService`.
 

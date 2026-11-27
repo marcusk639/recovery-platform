@@ -25,6 +25,13 @@ jest.mock("../../../services/webBilling", () => ({
   openWebBilling: (page: string) => mockOpenWebBilling(page),
 }));
 
+// The catalog callable (Launch P5 Task 12). The price helpers stay real.
+const mockGetTierCatalog = jest.fn((): Promise<any> => Promise.resolve(null));
+jest.mock("../../../services/tierCatalog", () => ({
+  ...jest.requireActual("../../../services/tierCatalog"),
+  getTierCatalog: () => mockGetTierCatalog(),
+}));
+
 jest.mock("../../../../firebase-setup", () => ({
   firestore: {
     collection: jest.fn(() => ({
@@ -111,7 +118,7 @@ jest.mock("../../../context", () => ({
 }));
 
 import React from "react";
-import { render, fireEvent } from "@testing-library/react-native";
+import { render, fireEvent, waitFor, act } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Provider } from "react-redux";
 import { configureStore } from "@reduxjs/toolkit";
@@ -166,6 +173,8 @@ function renderScreen(oxfordEnabled: boolean | undefined, house: TestHouse) {
 beforeEach(() => {
   mockNavigate.mockClear();
   mockUseOfficers.mockReturnValue({ data: [] });
+  mockGetTierCatalog.mockReset();
+  mockGetTierCatalog.mockResolvedValue(null);
 });
 
 describe("OxfordDashboard — paywall", () => {
@@ -302,5 +311,86 @@ describe("OxfordDashboard — officer name display", () => {
     });
     const { getByText } = renderScreen(true, OXFORD_ONBOARDED);
     expect(getByText("Unknown")).toBeTruthy();
+  });
+});
+
+// Launch P5 Task 12: the upgrade card's price and trial come from the catalog.
+describe("OxfordDashboard — upgrade card from the catalog", () => {
+  const OXFORD_ONBOARDED = {
+    id: "h1",
+    houseType: "oxford",
+    oxfordOnboardingComplete: true,
+  };
+  const oxfordTier = (tier: string, amountCents: number, availableForSale = true) => ({
+    houseType: "oxford",
+    tier,
+    label: tier,
+    maxResidents: 15,
+    maxProperties: 1,
+    availableForSale,
+    prices: { month: { amountCents }, year: null },
+  });
+  const catalog = {
+    currency: "usd",
+    tiers: [
+      oxfordTier("plus", 8900),
+      oxfordTier("standard", 4900),
+      oxfordTier("network", 2900, false),
+    ],
+    trialDays: 7,
+    salesOpen: true,
+  };
+
+  it("shows the catalog's price and trial: $49/month and Start 7-Day Free Trial", async () => {
+    mockGetTierCatalog.mockResolvedValue(catalog);
+    const { findByText, getByText, queryByText } = renderScreen(false, OXFORD_ONBOARDED);
+    expect(await findByText("Start 7-Day Free Trial")).toBeTruthy();
+    expect(getByText("Oxford Plan — from $49/month")).toBeTruthy();
+    expect(getByText("No payment required to start")).toBeTruthy();
+    expect(queryByText(/14-Day/)).toBeNull();
+    expect(mockGetTierCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  it("with the catalog null, shows See plans and no number", async () => {
+    mockGetTierCatalog.mockResolvedValue(null);
+    const { findByText, getByText, toJSON } = renderScreen(false, OXFORD_ONBOARDED);
+    await waitFor(() => expect(mockGetTierCatalog).toHaveBeenCalled());
+    await act(async () => {}); // let the query settle on null
+    expect(await findByText("See plans")).toBeTruthy();
+    expect(getByText("Oxford Plan")).toBeTruthy();
+    const text = JSON.stringify(toJSON());
+    expect(text).not.toMatch(/\$\d/);
+    expect(text).not.toMatch(/\d+-Day/i);
+    expect(text).not.toContain("Free Trial");
+  });
+
+  it("with sales closed, shows the price but no trial, and See plans", async () => {
+    mockGetTierCatalog.mockResolvedValue({ ...catalog, salesOpen: false });
+    const { findByText, getByText, queryByText } = renderScreen(false, OXFORD_ONBOARDED);
+    // "See plans" also shows while loading: wait for the catalog's price first.
+    expect(await findByText("Oxford Plan — from $49/month")).toBeTruthy();
+    expect(getByText("See plans")).toBeTruthy();
+    expect(queryByText(/Free Trial/)).toBeNull();
+    expect(queryByText("No payment required to start")).toBeNull();
+  });
+
+  it("with no trial in the catalog, offers the plan without a trial", async () => {
+    mockGetTierCatalog.mockResolvedValue({ ...catalog, trialDays: 0 });
+    const { findByText, getByText, queryByText } = renderScreen(false, OXFORD_ONBOARDED);
+    expect(await findByText("Oxford Plan — from $49/month")).toBeTruthy();
+    expect(getByText("See plans")).toBeTruthy();
+    expect(queryByText(/Free Trial/)).toBeNull();
+  });
+
+  it("does not fetch the catalog once Oxford is enabled", () => {
+    renderScreen(true, OXFORD_ONBOARDED);
+    expect(mockGetTierCatalog).not.toHaveBeenCalled();
+  });
+
+  it("the button opens plan management in the browser whatever the catalog says", async () => {
+    mockGetTierCatalog.mockResolvedValue(null);
+    const { findByTestId } = renderScreen(false, OXFORD_ONBOARDED);
+    fireEvent.press(await findByTestId("oxford-upgrade-button"));
+    expect(mockOpenWebBilling).toHaveBeenCalledWith("my-account");
   });
 });
