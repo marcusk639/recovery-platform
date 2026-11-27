@@ -14,6 +14,7 @@ import { normalize } from "../../styles/theme";
 import { RatsLogo } from "../../components/rats-logo";
 import { getInitialLink, onLink } from "../../services/native-deep-links";
 import { parseAppLink } from "../../services/appLinks/parseAppLink";
+import { reportBrokenInvitationLink } from "../../services/appLinks/brokenInvitation";
 import {
   deliverAppLink,
   deliverPendingAppLink,
@@ -151,6 +152,8 @@ export const withSplash = <P extends object>(
           signedIn: isSignedInUser(latest.current.userState.user),
           dispatch: latest.current.dispatch,
         });
+      } else {
+        reportBrokenInvitationLink(link.url);
       }
       return appLink;
     }, []);

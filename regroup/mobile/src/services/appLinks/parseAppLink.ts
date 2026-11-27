@@ -121,11 +121,14 @@ const checkoutReturn = (query: Query): AppLink | null => {
     : null;
 };
 
-export function parseAppLink(url: string): AppLink | null {
-  return parse(url, true);
+interface AppTarget {
+  custom: boolean;
+  route: string;
+  rawQuery: string;
 }
 
-function parse(url: string, allowRedirect: boolean): AppLink | null {
+/** The route and raw query of a URL addressed to the app (a custom scheme or the web origin). */
+const appTarget = (url: string): AppTarget | null => {
   if (typeof url !== 'string') return null;
   const parts = URL_PARTS.exec(url.trim());
   if (!parts) return null;
@@ -142,7 +145,29 @@ function parse(url: string, allowRedirect: boolean): AppLink | null {
     if (!origin || `${scheme}://${authority.toLowerCase()}` !== origin) return null;
     route = path;
   }
-  route = route.replace(/^\/+|\/+$/g, '');
+  return { custom, route: route.replace(/^\/+|\/+$/g, ''), rawQuery };
+};
+
+/**
+ * Whether a URL is addressed to the app as an invitation (the invite route, or
+ * the custom scheme's `type=invitation`), whether or not it parses. Splash
+ * tells the user about one that doesn't (brokenInvitation.ts).
+ */
+export function claimsInvitation(url: string): boolean {
+  const target = appTarget(url);
+  if (!target) return false;
+  if (target.route === 'invite') return true;
+  return target.custom && target.route === '' && /(^|&)type=invitation(&|$)/.test(target.rawQuery);
+}
+
+export function parseAppLink(url: string): AppLink | null {
+  return parse(url, true);
+}
+
+function parse(url: string, allowRedirect: boolean): AppLink | null {
+  const target = appTarget(url);
+  if (!target) return null;
+  const { custom, route, rawQuery } = target;
 
   const query = parseQuery(rawQuery);
   if (!query) return null;
