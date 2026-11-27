@@ -586,6 +586,35 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
         }
       </AuthConsumer>
 
+      {/******************************* MY DOCUMENTS (resident, own record) *******************************/}
+      {/* Read-only, the same list ResidentLimitedView opens; the rules let a
+          resident read only documents filed under their own guest record. */}
+      <AuthConsumer>
+        {({ token }) =>
+          !isAdmin(token, house!.id) &&
+          !!user?.id &&
+          !!currentGuest?.id &&
+          currentGuest.userId === user.id ? (
+            <StatSection
+              name="My Documents"
+              description="Your lease and other files"
+              iconName="chevron-right"
+              iconColor={color.dark_grey}
+              boxedIconName="folder-open"
+              iconBackgroundColor={color.baby_blue}
+              onPress={() =>
+                navigation.navigate(Routes.Documents, {
+                  houseId: house!.id,
+                  guestId: currentGuest.id,
+                  title: "My Documents",
+                })
+              }
+              testID="my-documents-card"
+            />
+          ) : null
+        }
+      </AuthConsumer>
+
       {/******************************* EXPORT COMPLIANCE REPORT (admin only) *******************************/}
       <AuthConsumer>
         {({ token }) =>

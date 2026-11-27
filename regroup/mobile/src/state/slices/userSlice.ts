@@ -10,6 +10,7 @@ import { navigationRef } from "../../navigation/service";
 import { CommonActions } from "@react-navigation/native";
 import { Routes } from "../../navigation/types";
 import { retrySetupRecovery } from "./setupRecoveryThunk";
+import type { AppLink } from "../../services/appLinks/parseAppLink";
 import { addMessagingToken } from "./userMessagingToken";
 
 /**
@@ -35,6 +36,11 @@ interface UserState {
   anonUser: Partial<User> | null;
   anonymous: boolean;
   invitation: Invitation | null;
+  // An app link that arrived while signed out (or anonymous), held until a
+  // user signs in; services/appLinks/deliverAppLink.ts delivers it once, if
+  // it is still fresh (received less than 15 minutes ago, epoch ms).
+  pendingAppLink: AppLink | null;
+  pendingAppLinkReceivedAt: number | null;
   loginFailed: boolean;
   loggingOutSuccessful: boolean;
   token: any;
@@ -62,6 +68,8 @@ const initialState: UserState = {
   anonUser: null,
   anonymous: false,
   invitation: null,
+  pendingAppLink: null,
+  pendingAppLinkReceivedAt: null,
   loginFailed: false,
   loggingOutSuccessful: false,
   token: { claims: {} },
@@ -212,6 +220,24 @@ const userSlice = createSlice({
     initializeInvitation: (state, action: PayloadAction<Invitation>) => {
       state.invitation = action.payload;
     },
+    // Cleared once used (sign-up finished, accepted or left as a signed-in
+    // user), on login and on logout: App.tsx routes with it.
+    clearInvitation: (state) => {
+      state.invitation = null;
+    },
+    setPendingAppLink: {
+      reducer: (state, action: PayloadAction<{ link: AppLink; receivedAt: number }>) => {
+        state.pendingAppLink = action.payload.link;
+        state.pendingAppLinkReceivedAt = action.payload.receivedAt;
+      },
+      prepare: (link: AppLink, receivedAt: number = Date.now()) => ({
+        payload: { link, receivedAt },
+      }),
+    },
+    clearPendingAppLink: (state) => {
+      state.pendingAppLink = null;
+      state.pendingAppLinkReceivedAt = null;
+    },
     setSignUpRole: (state, action: PayloadAction<Role>) => {
       state.signUpRole = action.payload;
     },
@@ -241,6 +267,9 @@ const userSlice = createSlice({
         state.error = null;
       })
       .addCase(login.fulfilled, (state, action) => {
+        // An invitation that arrived signed out survives the login (launch
+        // spec §4.2, P5 Task 3): LoginForm then opens the invitation screen,
+        // where the user accepts it or continues to the app.
         state.loggingOutSuccessful = false;
         state.user = action.payload.user;
         state.setupRecoveryFailed = action.payload.setupRecoveryFailed;
@@ -312,6 +341,10 @@ const userSlice = createSlice({
         state.loggingOutSuccessful = false;
       })
       .addCase(logout.fulfilled, (state, action) => {
+        // Nothing the signed-out user received survives into the next account.
+        state.invitation = null;
+        state.pendingAppLink = null;
+        state.pendingAppLinkReceivedAt = null;
         state.user = action.payload.user;
         state.anonUser = action.payload.user;
         state.loggingOut = false;
@@ -391,6 +424,9 @@ const userSlice = createSlice({
 export const {
   loginFailed: loginFailedAction,
   initializeInvitation,
+  clearInvitation,
+  setPendingAppLink,
+  clearPendingAppLink,
   setSignUpRole,
   setSubscriptionStatus,
   clearError,

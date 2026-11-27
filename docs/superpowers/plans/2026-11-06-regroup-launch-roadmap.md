@@ -55,6 +55,8 @@ These are the owner's parallel tasks. Several have outside lead times (Stripe re
 | Store-listing prerequisites: hosted privacy policy and terms URLs, App Privacy and Data safety answers, listing updates, US-only availability | §4.2, §5 prerequisites | P9                   | partial: the App Store listing is live; the Play listing waits on Google approving the account                                                                                                                                |
 | Notice to existing operators                                                                                                                  | §4.1 item 4            | P10 step 10.1        | planned: owner sends it before launch step 10.2                                                                                                                                                                               |
 
+**P8 runbook line added 2026-11-24 (P5 Task 5, universal-link files):** after the production web deploy (spec §5 step 8.5), run `cd regroup/web && node scripts/check-app-links.mjs https://regroup-app.com --project phoenix-cleanhouse` and record the output as the step's evidence line. It needs the Play app-signing SHA-256 in `regroup/app-links.json` (owner input): until then `npm run build:ssr` builds production web with an empty `assetlinks.json` and a WARNING, so the check passes while Android App Links can't verify. Before the Android release, confirm `assetlinks.json` names `com.regroup.app` with the fingerprint.
+
 ## Writing the next sub-plan
 
 When a phase's gate is met, write its plan with superpowers:writing-plans:

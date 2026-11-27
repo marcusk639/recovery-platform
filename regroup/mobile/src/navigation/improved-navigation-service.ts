@@ -128,15 +128,13 @@ class ImprovedNavigationService {
           authRoute: Routes.NewAccount,
         };
 
+      // Signed in with an invitation (e.g. the app was cold-started by an
+      // invitation link): open the invitation screen, the signup screen that
+      // shows it (testID invitation-info). A link that arrives while the app
+      // runs goes there through navigateToInvitation.
       case UserState.GUEST_COMPLETE:
       case UserState.ADMIN_COMPLETE:
       case UserState.SUPER_ADMIN_COMPLETE:
-        return {
-          context: NavigationContext.MAIN,
-          route: Routes.Main,
-          mainRoute: this.getMainRouteForUser(userState),
-        };
-
       default:
         return {
           context: NavigationContext.AUTH,
@@ -203,21 +201,6 @@ class ImprovedNavigationService {
   }
 
   /**
-   * Get main route based on user state
-   */
-  private getMainRouteForUser(userState: UserState): keyof MainTabParamList {
-    switch (userState) {
-      case UserState.GUEST_COMPLETE:
-        return Routes.Guest;
-      case UserState.ADMIN_COMPLETE:
-      case UserState.SUPER_ADMIN_COMPLETE:
-        return Routes.House;
-      default:
-        return Routes.House;
-    }
-  }
-
-  /**
    * Get initial navigation configuration
    * Accepts Partial<User> to handle incomplete user data from Redux state
    */
@@ -255,6 +238,43 @@ class ImprovedNavigationService {
         }),
       );
     }
+  }
+
+  /**
+   * The signed-in invitation route: the screen that shows the invitation in
+   * state.user.invitation (SignUp, testID invitation-info). deliverAppLink
+   * calls it after storing the invitation. Before the navigator is ready
+   * (cold start) the initial route decision (handleInvitationFlow) opens it.
+   */
+  navigateToInvitation() {
+    if (navigationRef.current?.isReady()) {
+      navigationRef.current.navigate(Routes.PriorAuth, { screen: Routes.Signup } as any);
+    }
+  }
+
+  /**
+   * Leaves the invitation screen: resets to the start route the user would
+   * get with no invitation (getInitialNavigation), e.g. Main on the user's
+   * tab. Used after "Accept as this account" and "Continue to the app".
+   */
+  resetToStartRoute(user: Partial<User> | User | null) {
+    if (!navigationRef.current?.isReady()) return;
+    const { initialRoute, authInitialRoute, initialMainRoute } = this.getInitialNavigation(user);
+    let route: { name: keyof RootStackParamList; state?: any };
+    if (initialRoute === Routes.Main) {
+      route = {
+        name: Routes.Main,
+        state: { index: 0, routes: [{ name: initialMainRoute ?? Routes.House }] },
+      };
+    } else if (initialRoute === Routes.PriorAuth) {
+      route = {
+        name: Routes.PriorAuth,
+        state: { index: 0, routes: [{ name: authInitialRoute ?? Routes.InitialLanding }] },
+      };
+    } else {
+      route = { name: initialRoute as keyof RootStackParamList };
+    }
+    navigationRef.current.dispatch(CommonActions.reset({ index: 0, routes: [route] }));
   }
 
   goBack() {

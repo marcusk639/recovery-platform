@@ -89,9 +89,14 @@ const LoginForm = withFormik<
         role: user?.isAdmin ? 'admin' : user?.isGuest ? 'guest' : 'unknown',
       });
 
-      // Use improved navigation service to get the correct route
-      const navigationConfig =
-        improvedNavigationService.getInitialNavigation(user);
+      // Use improved navigation service to get the correct route. An
+      // invitation held from before sign-in opens the invitation screen
+      // (SignUp shows a signed-in user Accept / Continue) for every account:
+      // the invitation flow's NewAccount route is for an account sign-up just
+      // created, and it clears the invitation without offering it.
+      const navigationConfig = (props as any).invitation
+        ? { initialRoute: Routes.PriorAuth, authInitialRoute: Routes.Signup, initialMainRoute: undefined }
+        : improvedNavigationService.getInitialNavigation(user);
 
       // Navigate after login - use setTimeout to ensure Redux state is updated
       setTimeout(() => {
@@ -117,6 +122,24 @@ const LoginForm = withFormik<
                     name: Routes.Main,
                     state: {
                       routes: [{ name: mainRoute }],
+                      index: 0,
+                    },
+                  },
+                ],
+              }),
+            );
+          } else if (
+            navigationConfig.initialRoute === Routes.PriorAuth &&
+            navigationConfig.authInitialRoute
+          ) {
+            navigationRef.current.dispatch(
+              CommonActions.reset({
+                index: 0,
+                routes: [
+                  {
+                    name: Routes.PriorAuth,
+                    state: {
+                      routes: [{ name: navigationConfig.authInitialRoute }],
                       index: 0,
                     },
                   },
@@ -156,6 +179,7 @@ const LoginFormWrapper: React.FC<any> = props => {
   const dispatch = useAppDispatch();
   const user = useAppSelector(state => state.user.user);
   const loggedIn = useAppSelector(state => state.user.loggedIn);
+  const invitation = useAppSelector(state => state.user.invitation);
   const queryClient = useQueryClient();
 
   return (
@@ -163,6 +187,7 @@ const LoginFormWrapper: React.FC<any> = props => {
       {...props}
       user={user}
       loggedIn={loggedIn}
+      invitation={invitation}
       login={(credentials: { email: string; password: string }) =>
         dispatch(login(credentials))
       }

@@ -50,6 +50,12 @@ jest.mock('@react-navigation/native', () => {
   };
 });
 
+// The caller's role in house-1: an admin unless a test says otherwise.
+let mockRole: Record<string, string> = { 'house-1': 'admin' };
+jest.mock('../../../context/auth', () => ({
+  useRoleToken: () => ({ claims: {}, role: mockRole }),
+}));
+
 // ─── Imports (after mocks) ────────────────────────────────────────────────────
 
 import DocumentListScreen from '../DocumentListScreen';
@@ -85,6 +91,7 @@ const mockExpiringDoc: HouseDocument = {
 describe('DocumentListScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRole = { 'house-1': 'admin' };
   });
 
   describe('loading state', () => {
@@ -312,5 +319,57 @@ describe('DocumentListScreen', () => {
       );
       expect(Linking.openURL).not.toHaveBeenCalled();
     });
+  });
+});
+
+// A resident opens their own documents from the limited view (launch spec
+// §4.1 item 2). The rules let them read and nothing else, so the screen
+// offers no upload and no delete.
+describe('DocumentListScreen for a resident', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockRole = { 'house-1': 'guest' };
+    (documentQueries.useDocuments as jest.Mock).mockReturnValue({
+      data: [mockDoc],
+      isLoading: false,
+    });
+  });
+
+  it('lists their own documents (the guestId from the route)', () => {
+    const { getByTestId } = render(<DocumentListScreen />);
+    expect(documentQueries.useDocuments).toHaveBeenCalledWith('house-1', 'guest-1');
+    expect(getByTestId(`document-row-${mockDoc.id}`)).toBeTruthy();
+  });
+
+  it('offers no upload button', () => {
+    const { queryByTestId } = render(<DocumentListScreen />);
+    expect(queryByTestId('upload-document-button')).toBeNull();
+  });
+
+  it('offers no delete button', () => {
+    const { queryByTestId } = render(<DocumentListScreen />);
+    expect(queryByTestId(`document-delete-${mockDoc.id}`)).toBeNull();
+  });
+
+  it('still opens a document', async () => {
+    const { Linking } = require('react-native');
+    jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    mockGetDocumentLink.mockResolvedValue('https://signed.example/doc');
+    const { getByTestId } = render(<DocumentListScreen />);
+    fireEvent.press(getByTestId(`document-open-${mockDoc.id}`));
+    await waitFor(() => expect(Linking.openURL).toHaveBeenCalledWith('https://signed.example/doc'));
+  });
+
+  it("doesn't tell them to upload when there is nothing yet", () => {
+    (documentQueries.useDocuments as jest.Mock).mockReturnValue({ data: [], isLoading: false });
+    const { getByTestId, queryByText } = render(<DocumentListScreen />);
+    expect(getByTestId('empty-documents')).toBeTruthy();
+    expect(queryByText('Tap Upload Document to add one.')).toBeNull();
+  });
+
+  it('treats a role not loaded yet as read-only', () => {
+    mockRole = {};
+    const { queryByTestId } = render(<DocumentListScreen />);
+    expect(queryByTestId('upload-document-button')).toBeNull();
   });
 });
