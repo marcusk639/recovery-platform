@@ -233,7 +233,16 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
 
   const onSend = useCallback(
     async (messageText: string) => {
-      const { sendDirectMessage, conversationId } = props;
+      const { sendDirectMessage, conversationId, user, userAsAdmin, guest } =
+        props;
+      // The sender is the admin record (staff) or the guest record. Until it
+      // has loaded, a message would go out with an empty sender id (P5 Task
+      // 19), so keep the text and say so.
+      const senderId = user?.isAdmin ? userAsAdmin?.id : guest?.id;
+      if (!senderId) {
+        Alert.alert("Still loading your account. Try again in a moment.");
+        return;
+      }
       setText("");
       const newMessages = createMessage(messageText);
       try {
@@ -249,7 +258,14 @@ const DirectChatInner: React.FC<ChatProps> = (props) => {
         );
       }
     },
-    [props.sendDirectMessage, props.conversationId, createMessage],
+    [
+      props.sendDirectMessage,
+      props.conversationId,
+      props.user,
+      props.userAsAdmin,
+      props.guest,
+      createMessage,
+    ],
   );
 
   const renderMessage = useCallback(

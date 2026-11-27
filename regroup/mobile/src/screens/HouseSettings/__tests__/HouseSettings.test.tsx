@@ -43,6 +43,11 @@ jest.mock('../../../state/queries/houseQueries', () => ({
 // Owners and managers see the house's money; peer leaders do not (the rules
 // refuse their reads of the house's payment records).
 let mockMayViewHouseMoney = true;
+// The house's owner by default; Payments (Stripe Connect setup) is theirs only.
+let mockRole: Record<string, string> = { 'house-1': 'superAdmin' };
+jest.mock('../../../context/auth', () => ({
+  useRoleToken: () => ({ claims: {}, role: mockRole }),
+}));
 jest.mock('../../../state/queries/houseTierQueries', () => ({
   useMayViewHouseMoney: () => mockMayViewHouseMoney,
 }));
@@ -418,15 +423,37 @@ describe('HouseSettings', () => {
       expect(getByText('Payment Dashboard')).toBeTruthy();
     });
 
-    it('hides the Payment Dashboard from a peer leader, who may not see house money', () => {
+    // P5 Task 20, an intended change: Stripe Connect setup (Payments) is a
+    // money screen too, and StripeSettings now refuses a peer leader itself.
+    it('hides the Payment Dashboard and Payments from a peer leader, who may not see house money', () => {
       mockMayViewHouseMoney = false;
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { queryByText } = renderScreen(store);
+        expect(queryByText('Payment Dashboard')).toBeNull();
+        expect(queryByText('Payments')).toBeNull();
+        // AdminReport refuses a peer leader (portal spec §5, owner 2026-11-09).
+        expect(queryByText('Reports')).toBeNull();
+      } finally {
+        mockRole = ownerRole;
+        mockMayViewHouseMoney = true;
+      }
+    });
+
+    // OPS-042 (owner, 2026-11-27): a manager sees the house's money but not
+    // Stripe Connect setup, which the Connect callables keep for owners.
+    it('hides Payments (Connect setup) from a manager, who still sees the Payment Dashboard', () => {
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
       try {
         const store = buildStore();
         const { queryByText, getByText } = renderScreen(store);
-        expect(queryByText('Payment Dashboard')).toBeNull();
-        expect(getByText('Payments')).toBeTruthy();
+        expect(queryByText('Payments')).toBeNull();
+        expect(getByText('Payment Dashboard')).toBeTruthy();
       } finally {
-        mockMayViewHouseMoney = true;
+        mockRole = ownerRole;
       }
     });
 
@@ -462,6 +489,100 @@ describe('HouseSettings', () => {
         const store = buildStore();
         const { queryByText } = renderScreen(store);
         expect(queryByText('Balances')).toBeNull();
+      } finally {
+        mockMayViewHouseMoney = true;
+      }
+    });
+
+    // Owner decision 2026-11-27 (#308): managers get the gear, but the
+    // owner's entries stay the owner's (house:full-edit): the house's details,
+    // its staff and Stripe Connect.
+    it("shows a manager the staff entries but not the owner's", () => {
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { queryByText, getByText } = renderScreen(store);
+        for (const owners of ['Details', 'Managers', 'Admin Management', 'Payments']) {
+          expect(queryByText(owners)).toBeNull();
+        }
+        for (const staff of [
+          'Chores',
+          'Phases',
+          'Guests',
+          'Rent',
+          'Payment Dashboard',
+          'Shift Log',
+        ]) {
+          expect(getByText(staff)).toBeTruthy();
+        }
+      } finally {
+        mockRole = ownerRole;
+      }
+    });
+
+    it("hides the owner's entries from a peer leader too", () => {
+      mockMayViewHouseMoney = false;
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { queryByText } = renderScreen(store);
+        for (const owners of ['Details', 'Managers', 'Admin Management', 'Payments']) {
+          expect(queryByText(owners)).toBeNull();
+        }
+      } finally {
+        mockRole = ownerRole;
+        mockMayViewHouseMoney = true;
+      }
+    });
+
+    // A manager holds the same admin claim as a peer leader; the tier tells
+    // them apart (mockMayViewHouseMoney).
+    it('shows the CSV import entry to a manager', () => {
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { getByText } = renderScreen(store);
+        expect(getByText('Import residents from CSV')).toBeTruthy();
+      } finally {
+        mockRole = ownerRole;
+      }
+    });
+
+    it('shows the Balances entry to a manager', () => {
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { getByText } = renderScreen(store);
+        expect(getByText('Balances')).toBeTruthy();
+      } finally {
+        mockRole = ownerRole;
+      }
+    });
+
+    // Reports is registered at manager rank (guardedScreens.ts), so its entry
+    // shows only where the screen would open.
+    it('shows Reports to a manager', () => {
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { getByText } = renderScreen(store);
+        expect(getByText('Reports')).toBeTruthy();
+      } finally {
+        mockRole = ownerRole;
+      }
+    });
+
+    it('hides Reports from a peer leader, whom AdminReport refuses', () => {
+      mockMayViewHouseMoney = false;
+      try {
+        const store = buildStore();
+        const { queryByText } = renderScreen(store);
+        expect(queryByText('Reports')).toBeNull();
       } finally {
         mockMayViewHouseMoney = true;
       }

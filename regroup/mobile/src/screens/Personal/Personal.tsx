@@ -37,6 +37,7 @@ import { Feedback } from "../../entities/Feedback";
 import { getCurrentTime } from "../../util/display";
 import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
 import { isDemo } from "../../util/user";
+import { canAddHouse } from "../../util/roles";
 import { logException } from "../../util/logging";
 // Import removed - unsubscribeAllChats does not exist in message service
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -344,7 +345,7 @@ const PersonalScreen: React.FC<PersonalProps> = ({ navigation }) => {
           navigation.navigate(Routes.InAppOrgSetup);
         },
         label: "Add Home",
-        disabled: !admin || !admin.superAdmin,
+        disabled: !canAddHouse(user, admin),
       },
       deleteAccount: {
         icon: "trash",

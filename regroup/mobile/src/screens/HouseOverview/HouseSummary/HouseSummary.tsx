@@ -19,7 +19,10 @@ import { View } from 'react-native';
 // Hooks
 import { useGuests } from '../../../state/queries';
 import { useHouseApplications } from '../../../state/queries/applicationQueries';
-import { useMayReviewApplications } from '../../../state/queries/houseTierQueries';
+import {
+  useMayReviewApplications,
+  useMyHouseTier,
+} from '../../../state/queries/houseTierQueries';
 import { useHouseWeekStats } from '../../../state/queries/activityQueries';
 import { useCurrentWeek } from '../../../hooks/activity/useCurrentWeek';
 import { useAppSelector } from '../../../state/store';
@@ -116,6 +119,9 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
   ) as boolean;
   const token = useRoleToken();
   const isHouseStaff = !!house?.id && isAdmin(token, house.id);
+  // The gear (house:settings) is for owners and managers; the tier tells a
+  // manager from a peer leader, who share the admin claim.
+  const houseTier = useMyHouseTier(house?.id ?? '', isHouseStaff);
 
   // Auto-advance chore rotation if a new week has started. Only staff may
   // update it; a resident's attempt is refused by the rules.
@@ -186,7 +192,8 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
             {({ token }) => (
               <Can
                 role={token.role[house.id]}
-                action="house:full-edit"
+                action="house:settings"
+                data={{ houseTier }}
                 yes={() => (
                   <ClickableIcon
                     containerProps={{
@@ -289,31 +296,40 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
         iconBackgroundColor={color.cobalt}
         onPress={() => navigation.navigate(Routes.MeetingSearch)}
       />
-      <Section
-        name="Drug Testing"
-        description="Log and review drug test results"
-        boxedIconName="vial"
-        iconBackgroundColor={color.dark_blue}
-        onPress={() => navigation.navigate(Routes.DrugTesting)}
-      />
-      <Section
-        name="Resident Intake"
-        description="Onboard a new resident"
-        boxedIconName="clipboard-list"
-        iconBackgroundColor={color.green}
-        onPress={() =>
-          navigation.navigate(Routes.ResidentIntake, { houseId: house.id })
-        }
-      />
-      {mayReviewApplications && (
-        <Section
-          name="Applications"
-          description="Review resident applications"
-          boxedIconName="file-alt"
-          iconBackgroundColor={color.cobalt}
-          notifications={pendingCount}
-          onPress={() => navigation.navigate(Routes.ApplicationList)}
-        />
+      {/* Staff only (P5 Task 20); each screen also checks the role itself. */}
+      {isHouseStaff && (
+        <>
+          <Section
+            testID="drug-testing-section"
+            name="Drug Testing"
+            description="Log and review drug test results"
+            boxedIconName="vial"
+            iconBackgroundColor={color.dark_blue}
+            onPress={() => navigation.navigate(Routes.DrugTesting)}
+          />
+          <Section
+            testID="intake-section"
+            name="Resident Intake"
+            description="Onboard a new resident"
+            boxedIconName="clipboard-list"
+            iconBackgroundColor={color.green}
+            onPress={() =>
+              navigation.navigate(Routes.ResidentIntake, { houseId: house.id })
+            }
+          />
+          {/* Owners and managers only (owner decision 2026-11-27, #321). */}
+          {mayReviewApplications && (
+            <Section
+              testID="applications-section"
+              name="Applications"
+              description="Review resident applications"
+              boxedIconName="file-alt"
+              iconBackgroundColor={color.cobalt}
+              notifications={pendingCount}
+              onPress={() => navigation.navigate(Routes.ApplicationList)}
+            />
+          )}
+        </>
       )}
       {house.houseType === 'oxford' && (
         <>

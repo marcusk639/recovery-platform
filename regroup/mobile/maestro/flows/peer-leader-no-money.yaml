@@ -1,0 +1,55 @@
+# A peer leader (staff of the house below a manager) has no path to the
+# house's money or the owner's settings: no House Settings gear on the House
+# tab (the gear, `house:settings`, is for owners and managers, #308) and no
+# Add Home on Profile. Each money screen
+# also refuses a peer leader itself (RequireHouseRole; the Jest guard table,
+# OPS-041/049), and the payments rules check the tier. A peer leader still
+# helps run the house: Drug Testing and Resident Intake show (Applications are
+# for owners and managers, #321: peer-leader-applications.yaml).
+# Persona: test-peer-leader, the admin claim on test-house-123 with a
+# house-roles tier of peerLeader (maestro/scripts/seed/docs.js staff()).
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/peer-leader-no-money.yaml
+appId: ${APP_ID}
+tags:
+  - peer-leader
+  - roles
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-peer-leader@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "intake-section"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- assertVisible:
+    id: "drug-testing-section"
+- swipe:
+    direction: DOWN
+- swipe:
+    direction: DOWN
+- assertNotVisible:
+    id: "house-settings-button"
+- assertNotVisible: ".*Payment Dashboard.*"
+- tapOn:
+    id: "profile-tab"
+- extendedWaitUntil:
+    visible:
+      id: "profile-screen"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: ".*Delete account.*"
+    direction: DOWN
+    timeout: 15000
+- assertNotVisible: ".*Add Home.*"
+- runFlow:
+    file: ../subflows/logout.yaml
