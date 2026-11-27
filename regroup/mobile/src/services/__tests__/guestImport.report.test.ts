@@ -95,14 +95,26 @@ describe('importGuests', () => {
     expect(written[0].data).toMatchObject({ email: 'g2@example.com', houseId: 'h1' });
   });
 
-  // The count is "already on file", not "already residents": a departed
-  // resident's record has the email too, and is not re-added.
-  it("counts a departed resident's record as already on file", async () => {
-    seedDoc('guests/left', { houseId: 'h1', email: 'g1@example.com', status: 'departed' });
+  // The count is "already on file", not "already residents": a former
+  // resident's record (status as dischargeGuest and the other exits leave it)
+  // has the email too, and is not re-added. Re-importing a file is offered as
+  // safe, so it must not bring back, and bill, someone who has left.
+  it("counts a former resident's record, whatever the exit status, as already on file", async () => {
+    const exits = ['discharged', 'inactive', 'expelled', 'archived'];
+    exits.forEach((status, i) =>
+      seedDoc(`guests/left-${i}`, {
+        houseId: 'h1',
+        email: `g${i}@example.com`,
+        status,
+        moveOutDate: '2026-10-01',
+      }),
+    );
 
-    const result = await importGuests('h1', [row(1), row(2)]);
+    const result = await importGuests('h1', [row(0), row(1), row(2), row(3), row(4)]);
 
-    expect(result).toEqual({ imported: 1, alreadyResidents: 1, failed: 0 });
+    expect(result).toEqual({ imported: 1, alreadyResidents: 4, failed: 0 });
+    const written = getOpLog().filter((e) => e.op === 'batch.set');
+    expect(written.map((e) => (e.data as { email: string }).email)).toEqual(['g4@example.com']);
   });
 
   it('reports a partial import, and a retry adds only what is missing', async () => {

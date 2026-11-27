@@ -201,9 +201,11 @@ export interface GuestImportResult {
 /**
  * Imports the rows into the house, skipping anyone whose email is already on
  * one of its guest records (current or departed), so running it again after
- * a partial failure adds only what is missing. Batches commit one after
- * another: when one fails, the ones before it stay, and the result says how
- * many did.
+ * a partial failure adds only what is missing. A departed resident counts on
+ * purpose: re-importing a roster must not bring back, and bill, someone who
+ * has left; a returning resident is added with the intake form. Batches
+ * commit one after another: when one fails, the ones before it stay, and the
+ * result says how many did.
  */
 export async function importGuests(
   houseId: string,
