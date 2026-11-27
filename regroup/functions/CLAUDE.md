@@ -32,10 +32,10 @@ npm run migrate:house-sub:dry-run
 npm run migrate:house-sub:run
 npm run migrate:payment-cents:dry-run   # / :apply
 npm run migrate:balance-cents:dry-run   # / :apply
+npm run demo:mark-account [-- --uid U] [-- --apply]   # Owner, once per project: set the demo account's `demo: true` claim and record it in config/demoAccount (dry run default)
 npm run backfill:week-summaries:dry-run -- --from YYYY-MM-DD --to YYYY-MM-DD [--house <id>]   # / :apply
 npm run backfill:dispute-identity:dry-run [-- --house <id>]   # then :apply — stamp/re-stamp residentUid, log older decisions (reopen needs them), seed house-disputes. Combined #141/#145 deploy order (regroup/CLAUDE.md): #145 step 0 and backfills → functions (build first) → the MERGED ruleset immediately after → this, at least 10 minutes later, with `-- --verify-stamps` (cutoff = run start; re-derives pre-rules stamps; flags differing ones on disputed activities, exit 3) → #145's remaining steps → app
 npm run report:ghost-guests     # Read-only: guest docs with no house claim (ids only); needs both emulator hosts to rehearse
-npm run demo:mark-account [-- --uid U] [-- --apply]   # Owner, once per project: set the demo account's `demo: true` claim and record it in config/demoAccount (dry run default)
 ```
 
 Jest config is the `jest` key in `package.json` (no `jest.config.js`). Firestore rules tests live in `../mobile/firebase/__tests__/`, not here.
