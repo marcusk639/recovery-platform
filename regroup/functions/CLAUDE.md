@@ -76,12 +76,14 @@ src/
                     sendSubscriptionUpdateEmail, reportBug, submitFeedback, and
                     re-exports the rest:
                     activityWeekSummary.ts  onActivityWritten (owns week-summaries)
+                    adminProfileSync.ts     onUserAdminProfileSync (users name/phone -> admins)
                     applicationNotice.ts    notifyOperatorOnApplication
                     guestRestamp.ts         onGuestLinkedRestamp
                     guestWrite.ts           onGuestWrite
                     houseRentSettings.ts    onHouseRentSettingsWrite
                     houseTombstone.ts       onHouseDeleted
   activities/       Week-summary recompute (syncWeekSummary) + pure week/time-zone math
+  admins/           profileSync: copies users/{uid} name and phone onto the user's admins records
   rent/             Rent charging: chargeResident (the only rentOwed writer), rates,
                     periods, anchors, the onGuestWrite rent hook
   accountDeletion/  Resumable deleteAccount orchestrator (targets, *Records, personalData)
@@ -248,6 +250,8 @@ The legacy `STRIPE_HOUSE_PRICE_ID` / `STRIPE_GUEST_PRICE_ID` / `STRIPE_OXFORD_PR
 ### Firestore gotchas
 
 **House owner fields.** `createHouses` stores the operator's uid in `ownerId` and `superAdminId`; `adminIds`/`superAdminIds` hold admin-record ids from `createAdminId()`, not uids. Find an operator's houses by `ownerId`: `adminIds array-contains uid` matches only legacy houses (#222). For the same reason, never address a notification to an `adminIds` entry: `notifyOperatorOnApplication` resolves staff uids from the role records (`staffUids` in `util/houseRoleStore.ts`) plus `superAdminId`.
+
+**admins records copy the user's name and phone.** `onUserAdminProfileSync` (`triggers/firestore/adminProfileSync.ts`, retried, `util/eventAge` cutoff) copies `firstName`, `lastName` and `phoneNumber` from `users/{uid}` onto every `admins` record with that `userId` (ids are `createAdminId()` auto-ids, so find them by `userId`; a user may have none or several) whenever one of the three changes. Each record is a transaction that re-reads the CURRENT user doc (`admins/profileSync.ts`), so out-of-order and redelivered events converge; a field the user doc doesn't hold as a string is left alone. The app's `EditUserInfoForm` still copies its fields (avatar, date of birth, phone and others) to the admins record, but only once that record has loaded; for name and phone the trigger is the backstop. The other fields have no server copy. Only `users` updates trigger it: an admins record created later takes its name from its creator (`createHouses` copies the user's), and its phone only from the next change.
 
 **Deleted houses leave a tombstone.** `onHouseDeleted` (`triggers/firestore/houseTombstone.ts`, retried) writes server-only `houseTombstones/{houseId}` (`deletedAt`), which `createHouses` (`houses/createHousesTx.ts`) reads to refuse a tombstoned id, and frees the house's slot in the owner's `subscriptionMetadata.houses` in a transaction (the property-cap count). Both happen some time after the delete, not with it.
 

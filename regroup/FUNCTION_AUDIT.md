@@ -5,11 +5,13 @@
      No CI workflow or git hook runs the script's --check mode, so nothing catches drift:
      regenerate by hand. This copy was regenerated on 2026-11-14 and then hand-corrected
      for three generator defects listed under "Generator notes" at the end; re-apply
-     those corrections after regenerating until the script is fixed. -->
+     those corrections after regenerating until the script is fixed. On 2026-11-27
+     onUserAdminProfileSync was added by hand, and the triggers/firestore/index.ts line
+     numbers moved down one with it. -->
 
 **Generated:** 2026-11-14
 **Source:** the `docs/regroup-code-doc-audit-fixes` branch (base `c1931c04` plus its code changes)
-**Total functions:** 62
+**Total functions:** 63
 
 All functions run in the default region (us-central1); none sets `region:`.
 `regroup/functions/src/init.ts` applies `setGlobalOptions({ cpu: 0.167, maxInstances: 2 })`
@@ -71,19 +73,20 @@ as a quota stopgap — see that file's comment for the constraint.
 
 | Function                             | Source                                                             | Path                                    | Secrets            |
 | ------------------------------------ | ------------------------------------------------------------------ | --------------------------------------- | ------------------ |
-| `notify`                             | `regroup/functions/src/triggers/firestore/index.ts:35`             | `/notifications/{notificationId}`       | —                  |
-| `notifyNewHouseCreated`              | `regroup/functions/src/triggers/firestore/index.ts:50`             | `/houses/{houseId}`                     | `SENDGRID_API_KEY` |
+| `notify`                             | `regroup/functions/src/triggers/firestore/index.ts:36`             | `/notifications/{notificationId}`       | —                  |
+| `notifyNewHouseCreated`              | `regroup/functions/src/triggers/firestore/index.ts:51`             | `/houses/{houseId}`                     | `SENDGRID_API_KEY` |
 | `notifyOperatorOnApplication`        | `regroup/functions/src/triggers/firestore/applicationNotice.ts:19` | `houses/{houseId}/applications/{appId}` | —                  |
-| `reportBug`                          | `regroup/functions/src/triggers/firestore/index.ts:194`            | `/bugs/{bugId}`                         | `SENDGRID_API_KEY` |
-| `sendContactEmail`                   | `regroup/functions/src/triggers/firestore/index.ts:131`            | `/contact/{contactId}`                  | `SENDGRID_API_KEY` |
-| `setHouseSubscriptionStatusOnCreate` | `regroup/functions/src/triggers/firestore/index.ts:90`             | `/houses/{houseId}`                     | —                  |
-| `submitFeedback`                     | `regroup/functions/src/triggers/firestore/index.ts:222`            | `/feedback/{feedbackId}`                | `SENDGRID_API_KEY` |
+| `reportBug`                          | `regroup/functions/src/triggers/firestore/index.ts:195`            | `/bugs/{bugId}`                         | `SENDGRID_API_KEY` |
+| `sendContactEmail`                   | `regroup/functions/src/triggers/firestore/index.ts:132`            | `/contact/{contactId}`                  | `SENDGRID_API_KEY` |
+| `setHouseSubscriptionStatusOnCreate` | `regroup/functions/src/triggers/firestore/index.ts:91`             | `/houses/{houseId}`                     | —                  |
+| `submitFeedback`                     | `regroup/functions/src/triggers/firestore/index.ts:223`            | `/feedback/{feedbackId}`                | `SENDGRID_API_KEY` |
 
 ## Firestore triggers — document updated
 
-| Function                      | Source                                                  | Path              | Secrets            |
-| ----------------------------- | ------------------------------------------------------- | ----------------- | ------------------ |
-| `sendSubscriptionUpdateEmail` | `regroup/functions/src/triggers/firestore/index.ts:161` | `/users/{userId}` | `SENDGRID_API_KEY` |
+| Function                      | Source                                                            | Path              | Secrets            |
+| ----------------------------- | ----------------------------------------------------------------- | ----------------- | ------------------ |
+| `onUserAdminProfileSync`      | `regroup/functions/src/triggers/firestore/adminProfileSync.ts:17` | `/users/{userId}` | —                  |
+| `sendSubscriptionUpdateEmail` | `regroup/functions/src/triggers/firestore/index.ts:162`           | `/users/{userId}` | `SENDGRID_API_KEY` |
 
 ## Firestore triggers — document written
 
@@ -114,11 +117,11 @@ as a quota stopgap — see that file's comment for the constraint.
 
 ## Deployment surface
 
-All 62 functions are re-exported from `regroup/functions/src/index.ts` and deploy.
+All 63 functions are re-exported from `regroup/functions/src/index.ts` and deploy.
 
 Note: `stripeWebhook` is deployed under the name `stripeEvents` (aliased in `index.ts`).
 
-`scripts/deploy-batched.sh` `ALL_FUNCTIONS` lists the same 62 deployed names; `functions/src/__tests__/deployList.test.ts` keeps it equal to the exports.
+`scripts/deploy-batched.sh` `ALL_FUNCTIONS` lists the same 63 deployed names; `functions/src/__tests__/deployList.test.ts` keeps it equal to the exports.
 
 ## Generator notes
 

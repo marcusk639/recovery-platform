@@ -152,7 +152,7 @@ This package's `functions/src/index.ts` defines exactly one function:
 **Deployed under the `web` codebase.** `../functions` owns the `default` codebase.
 Firebase deletes any function missing from the codebase being deployed, so if both
 packages shared `default`, deploying either would delete the other's functions —
-a web deploy would have removed every backend function (62 today; `ALL_FUNCTIONS` in
+a web deploy would have removed every backend function (63 today; `ALL_FUNCTIONS` in
 `../scripts/deploy-batched.sh` lists them). Keep them separate.
 
 Do not confuse the `ssr` function with `universal` in `../functions`: that one is a
