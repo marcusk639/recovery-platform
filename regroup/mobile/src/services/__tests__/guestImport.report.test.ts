@@ -95,6 +95,16 @@ describe('importGuests', () => {
     expect(written[0].data).toMatchObject({ email: 'g2@example.com', houseId: 'h1' });
   });
 
+  // The count is "already on file", not "already residents": a departed
+  // resident's record has the email too, and is not re-added.
+  it("counts a departed resident's record as already on file", async () => {
+    seedDoc('guests/left', { houseId: 'h1', email: 'g1@example.com', status: 'departed' });
+
+    const result = await importGuests('h1', [row(1), row(2)]);
+
+    expect(result).toEqual({ imported: 1, alreadyResidents: 1, failed: 0 });
+  });
+
   it('reports a partial import, and a retry adds only what is missing', async () => {
     const rows = Array.from({ length: 600 }, (_, i) => row(i));
     failNext('batch.commit', new Error('denied'), undefined, { after: 1 });

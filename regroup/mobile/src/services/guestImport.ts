@@ -188,7 +188,11 @@ function importedGuest(row: GuestImportRow, id: string, houseId: string, created
 
 export interface GuestImportResult {
   imported: number;
-  /** Rows whose email is already on a resident record of the house. */
+  /**
+   * Rows whose email is already on one of the house's guest records, a
+   * departed resident's included (so "already on file", not "already
+   * residents"). The field name predates that wording.
+   */
   alreadyResidents: number;
   /** Rows not written because a batch failed; importing again adds them. */
   failed: number;
@@ -196,7 +200,7 @@ export interface GuestImportResult {
 
 /**
  * Imports the rows into the house, skipping anyone whose email is already on
- * one of its resident records, so running it again after a partial failure
+ * one of its guest records (current or departed), so running it again after a partial failure
  * adds only what is missing. Batches commit one after another: when one
  * fails, the ones before it stay, and the result says how many did.
  */
