@@ -75,7 +75,21 @@ tags:
 - tapOn:
     id: "input-email"
 - inputText: "e2e-applicant@rats-e2e.com"
-- hideKeyboard
+# Close the keyboard: iOS through its toolbar Done (hideKeyboard is flaky
+# there), Android with the back key.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          text: "Done"
+          optional: true
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+- waitForAnimationToEnd
 - tapOn:
     id: "btn-next"
 - tapOn:
@@ -130,10 +144,12 @@ tags:
     centerElement: true
 - tapOn:
     text: ".*Review resident applications.*"
+# On iOS the row is one accessibility element with the name and the email,
+# so match the name as part of its text.
 - extendedWaitUntil:
-    visible: "Jordan Applicant"
+    visible: ".*Jordan Applicant.*"
     timeout: 30000
-- tapOn: "Jordan Applicant"
+- tapOn: ".*Jordan Applicant.*"
 - tapOn:
     id: "btn-approve"
 - extendedWaitUntil:

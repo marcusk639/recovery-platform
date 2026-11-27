@@ -692,6 +692,9 @@ service cloud.firestore {
           && applicationText(request.resource.data, 'currentSituation', 2000)
           && applicationText(request.resource.data, 'references', 1000);
         allow read: if signedIn() && (resource.data.applicantUid == request.auth.uid || isAdmin([houseId]));
+        // The applicant's own slot, while it is still empty too: the app reads
+        // it before applying (resource is null then, so the rule above fails).
+        allow get: if signedIn() && appId == houseId + '_' + request.auth.uid;
         allow update: if isAdmin([houseId]);
         allow delete: if false;
       }

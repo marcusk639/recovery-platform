@@ -538,6 +538,17 @@ describe("houses/{houseId}/applications/{appId}", () => {
       );
     });
 
+    // submitApplication reads its slot before writing, to show an earlier
+    // application instead of failing: the read must pass while the slot is
+    // still empty, and only for the caller's own slot.
+    it("lets an applicant read their own empty slot, never another's", async () => {
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
+      const at = (id: string) => doc(ctx.firestore(), `houses/${HOUSE_ID}/applications/${id}`);
+      await assertSucceeds(getDoc(at(MY_APP_ID)));
+      await assertFails(getDoc(at(`${HOUSE_ID}_${OTHER_UID}`)));
+      await assertFails(getDoc(doc(testEnv.unauthenticatedContext().firestore(), `houses/${HOUSE_ID}/applications/${MY_APP_ID}`)));
+    });
+
     it("denies a create naming another house or another id", async () => {
       const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
       await assertFails(
