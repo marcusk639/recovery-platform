@@ -20,11 +20,9 @@ import { Chores } from '../entities/Chore';
 import { HOUSE_CODE_INVALID } from '../constants/errors';
 import { Houses, Guests, Admins } from '../types';
 import * as crud from './crud';
-import { HouseSearch } from '../entities/HouseSearch';
 import Admin from '../entities/Admin';
 import { adminCollection } from './admin';
 import each from 'lodash/each';
-import filter from 'lodash/filter';
 import isEqual from 'lodash/isEqual';
 import { guestCollection, archiveCollection } from './guest';
 import { commitGuestOps, GuestBatchOp } from './guestBatch';
@@ -159,22 +157,6 @@ export async function updateHouseAwaitingVerification(
   }
   house.awaitingVerification.push(awaitingVerification);
   return updateHouse(house.id, house);
-}
-
-export async function searchForHouses(searchData: HouseSearch) {
-  const houses = await getNearbyHouses(
-    searchData.filters!.location.lat!,
-    searchData.filters!.location.lng!,
-    25,
-  );
-  // filter houses by gender
-  if (searchData?.filters?.gender) {
-    const filteredHouses = filter(houses, (house) => {
-      return house.gender === searchData?.filters?.gender;
-    });
-    return filteredHouses;
-  }
-  return houses;
 }
 
 export async function createHouseBatch(house: House, _admins: Admin[]) {

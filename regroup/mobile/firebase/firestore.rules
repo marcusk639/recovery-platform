@@ -511,6 +511,17 @@ service cloud.firestore {
       allow read: if signedIn() && resource.data.applicantUid == request.auth.uid;
     }
 
+    // A house's public listing (EMU-009, owner 2026-11-27): the only house data
+    // a signed-out visitor (the app's anonymous session) may read, for house
+    // search and the summary they apply from. Written only by the server
+    // (onHouseListingSync), with the public fields alone: no address,
+    // residents, staff, codes or billing (functions/src/houses/houseListing.ts).
+    // houses/{houseId} below stays members-only.
+    match /house-listings/{houseId} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
     match /houses/{houseId} {
       allow read: if isGuestOrAdmin([houseId]);
       // Houses are created only by the server-side createHouses callable.
