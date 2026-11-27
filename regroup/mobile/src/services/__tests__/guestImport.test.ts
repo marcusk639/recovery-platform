@@ -1,28 +1,22 @@
-// Mocks (hoisted — must be before imports)
-jest.mock('../../firebase-setup', () => {
-  const mockBatchSet = jest.fn();
-  const mockBatchCommit = jest.fn().mockResolvedValue(undefined);
-  const mockDoc = jest.fn(() => ({ id: 'new-guest-id' }));
-  return {
-    auth: { currentUser: { uid: 'admin-1' } },
-    firestore: {
-      batch: jest.fn(() => ({ set: mockBatchSet, commit: mockBatchCommit })),
-      collection: jest.fn(() => ({ doc: mockDoc })),
-      _mockBatchSet: mockBatchSet,
-      _mockBatchCommit: mockBatchCommit,
-    },
-  };
-});
+// Mocks (hoisted — must be before imports). The import cases run against the
+// operation log (importGuests reads the house's guest records, then writes).
+jest.mock('../../firebase-setup', () => require('../../../__mocks__/firebase-modular/setup'));
+jest.mock('@react-native-firebase/firestore', () =>
+  require('../../../__mocks__/firebase-modular/firestore'),
+);
+jest.mock('@react-native-firebase/functions', () =>
+  require('../../../__mocks__/firebase-modular/functions'),
+);
+jest.mock('@react-native-firebase/auth', () => require('../../../__mocks__/firebase-modular/auth'));
+jest.mock('../../util/logging', () => ({ logException: jest.fn() }));
 
-jest.mock('../guest', () => ({
-  guestCollection: {
-    doc: jest.fn(() => ({ id: 'new-guest-id' })),
-  },
-  createGuestId: jest.fn(() => 'new-guest-id'),
-}));
+import { getOpLog, resetOpLog } from '../../../__mocks__/firebase-modular/log';
+import { parseGuestCsv, importGuests, GuestImportRow, GuestCsvError } from '../guestImport';
 
-import { firestore } from '../../firebase-setup';
-import { parseGuestCsv, importGuestsFromRows, GuestImportRow, GuestCsvError } from '../guestImport';
+const { setCurrentUser } = jest.requireMock<{ setCurrentUser: (user: unknown) => void }>(
+  '@react-native-firebase/auth',
+);
+const written = () => getOpLog().filter((e) => e.op === 'batch.set').map((e) => e.data as any);
 
 describe('parseGuestCsv', () => {
   it('parses a valid CSV string into import rows', () => {
@@ -77,11 +71,14 @@ describe('parseGuestCsv', () => {
   });
 });
 
-describe('importGuestsFromRows', () => {
+// importGuestsFromRows, which these cases first pinned, had no callers left
+// after #306 and was removed (2026-11-27); they now pin importGuests.
+describe('importGuests: the records it writes', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    ((firestore as any)._mockBatchCommit as jest.Mock).mockResolvedValue(undefined);
+    resetOpLog();
+    setCurrentUser({ uid: 'admin-1' });
   });
+  afterEach(() => setCurrentUser(null));
 
   it('returns count of guests imported', async () => {
     const rows: GuestImportRow[] = [
@@ -93,16 +90,16 @@ describe('importGuestsFromRows', () => {
         drugOfChoice: 'Alcohol',
       },
     ];
-    const count = await importGuestsFromRows('house-1', rows);
-    expect(count).toBe(1);
-    expect((firestore as any)._mockBatchCommit).toHaveBeenCalled();
+    const result = await importGuests('house-1', rows);
+    expect(result).toEqual({ imported: 1, alreadyResidents: 0, failed: 0 });
+    expect(getOpLog().map((e) => e.op)).toContain('batch.commit');
   });
 
   it('marks each record as imported, so rent charging starts it at the next full period', async () => {
     // The server reads importedAt (rent/chargeRule.ts): an imported resident already
     // lived there, and their balance was entered by hand, so no prorated first charge.
     const before = Date.now();
-    await importGuestsFromRows('house-1', [
+    await importGuests('house-1', [
       {
         firstName: 'Jane',
         lastName: 'Smith',
@@ -111,9 +108,9 @@ describe('importGuestsFromRows', () => {
         drugOfChoice: 'Alcohol',
       },
     ]);
-    const written = ((firestore as any)._mockBatchSet as jest.Mock).mock.calls[0][1];
-    expect(typeof written.importedAt).toBe('string');
-    expect(Date.parse(written.importedAt)).toBeGreaterThanOrEqual(before - 1000);
+    const [record] = written();
+    expect(typeof record.importedAt).toBe('string');
+    expect(Date.parse(record.importedAt)).toBeGreaterThanOrEqual(before - 1000);
   });
 
   it('records the signed-in staff member as createdBy on every imported record', async () => {
@@ -124,16 +121,13 @@ describe('importGuestsFromRows', () => {
       sobrietyDate: '2025-01-15',
       drugOfChoice: 'Alcohol',
     };
-    await importGuestsFromRows('house-1', [row, { ...row, email: 'jo@example.com' }]);
-    const written = ((firestore as any)._mockBatchSet as jest.Mock).mock.calls.map(
-      (call) => call[1],
-    );
-    expect(written.map((g) => g.createdBy)).toEqual(['admin-1', 'admin-1']);
+    await importGuests('house-1', [row, { ...row, email: 'jo@example.com' }]);
+    expect(written().map((g) => g.createdBy)).toEqual(['admin-1', 'admin-1']);
   });
 
   it('returns 0 when given empty rows', async () => {
-    const count = await importGuestsFromRows('house-1', []);
-    expect(count).toBe(0);
+    const result = await importGuests('house-1', []);
+    expect(result.imported).toBe(0);
   });
 });
 
