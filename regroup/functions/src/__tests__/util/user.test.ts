@@ -25,8 +25,8 @@ beforeEach(() => jest.clearAllMocks());
 describe('getUsersByEmail', () => {
   it('calls getUsers with "email" field and lowercased value', async () => {
     mockGetUsers.mockResolvedValue({ docs: [] });
-    await getUsersByEmail('User@Example.COM');
-    expect(mockGetUsers).toHaveBeenCalledWith('email', 'user@example.com');
+    await getUsersByEmail('User@Rats-E2E.COM');
+    expect(mockGetUsers).toHaveBeenCalledWith('email', 'user@rats-e2e.com');
   });
 
   it('returns the result from getUsers', async () => {
@@ -112,79 +112,79 @@ describe('_verifyUserEmail', () => {
 
 describe('createConfirmationEmail', () => {
   it('sends to the provided email address', () => {
-    const email = createConfirmationEmail('test@example.com', 'https://example.com/verify');
-    expect(email.to).toBe('test@example.com');
+    const email = createConfirmationEmail('test@rats-e2e.com', 'https://example.com/verify');
+    expect(email.to).toBe('test@rats-e2e.com');
   });
 
   it('includes the verify link in html', () => {
-    const email = createConfirmationEmail('test@example.com', 'https://example.com/verify');
+    const email = createConfirmationEmail('test@rats-e2e.com', 'https://example.com/verify');
     expect(email.html).toContain('https://example.com/verify');
   });
 
   it('includes the verify link in text body', () => {
-    const email = createConfirmationEmail('test@example.com', 'https://example.com/verify');
+    const email = createConfirmationEmail('test@rats-e2e.com', 'https://example.com/verify');
     expect(email.text).toContain('https://example.com/verify');
   });
 
   it('sets subject to "Email Confirmation"', () => {
-    const email = createConfirmationEmail('test@example.com', 'https://example.com/verify');
+    const email = createConfirmationEmail('test@rats-e2e.com', 'https://example.com/verify');
     expect(email.subject).toBe('Email Confirmation');
   });
 
   it('uses generic greeting when name is not provided', () => {
-    const email = createConfirmationEmail('test@example.com', 'https://example.com/verify');
+    const email = createConfirmationEmail('test@rats-e2e.com', 'https://example.com/verify');
     expect(email.html).toContain('Hello,');
     expect(email.text).toContain('Hello,');
   });
 
   it('uses personalized greeting when name is provided', () => {
-    const email = createConfirmationEmail('test@example.com', 'https://example.com/verify', 'Alice');
+    const email = createConfirmationEmail('test@rats-e2e.com', 'https://example.com/verify', 'Alice');
     expect(email.html).toContain('Hello Alice,');
     expect(email.text).toContain('Hello Alice,');
   });
 
   it('passes an app link through unwrapped (no /redirect, no scheme rewrite)', () => {
     const appLink = 'https://regroup-app.com/verify?token=abc';
-    const email = createConfirmationEmail('test@example.com', appLink);
+    const email = createConfirmationEmail('test@rats-e2e.com', appLink);
     expect(email.html).toContain(`href="${appLink}"`);
     expect(email.text).toContain(appLink);
     expect(email.html).not.toContain('/redirect');
     expect(email.html).not.toContain('com.rats.dev');
     // A custom-scheme link is no longer wrapped either.
     const deepLink = 'regroup-app://verify?token=abc';
-    const raw = createConfirmationEmail('test@example.com', deepLink);
+    const raw = createConfirmationEmail('test@rats-e2e.com', deepLink);
     expect(raw.html).toContain(`href="${deepLink}"`);
     expect(raw.html).not.toContain('/redirect');
   });
 
   it('does not decode the link and escapes it in html', () => {
     const link = 'https://regroup-app.com/verify?a=1%26b=2&c="d"';
-    const email = createConfirmationEmail('test@example.com', link);
+    const email = createConfirmationEmail('test@rats-e2e.com', link);
     expect(email.html).toContain('href="https://regroup-app.com/verify?a=1%26b=2&amp;c=&quot;d&quot;"');
     expect(email.text).toContain('a=1%26b=2');
   });
 
   it('a stray % in the link does not throw', () => {
     expect(() =>
-      createConfirmationEmail('test@example.com', 'https://regroup-app.com/v?t=50%'),
+      createConfirmationEmail('test@rats-e2e.com', 'https://regroup-app.com/v?t=50%'),
     ).not.toThrow();
   });
 
   it('uses a regular https link directly without wrapping', () => {
     const link = 'https://example.com/verify?token=xyz';
-    const email = createConfirmationEmail('test@example.com', link);
+    const email = createConfirmationEmail('test@rats-e2e.com', link);
     expect(email.html).toContain(link);
   });
 
   it('escapes the name in the html greeting', () => {
-    const email = createConfirmationEmail('test@example.com', 'https://example.com/verify', '<a href="x">Al</a>');
+    const email = createConfirmationEmail('test@rats-e2e.com', 'https://example.com/verify', '<a href="x">Al</a>');
     expect(email.html).toContain('Hello &lt;a href=&quot;x&quot;&gt;Al&lt;/a&gt;,');
     expect(email.html).not.toContain('<a href="x">');
     expect(email.text).toContain('Hello <a href="x">Al</a>,');
   });
 
   it('sets from field using regroupEmail', () => {
-    const email = createConfirmationEmail('test@example.com', 'https://example.com/verify');
+    const email = createConfirmationEmail('test@rats-e2e.com', 'https://example.com/verify');
     expect(email.from).toContain('admin@regroup-app.com');
   });
 });
