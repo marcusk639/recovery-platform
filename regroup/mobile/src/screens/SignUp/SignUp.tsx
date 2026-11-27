@@ -22,6 +22,8 @@ import { onLink, getLinkType } from "../../services/native-deep-links";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { dayIsAfter, getTodaysDate } from "../../util/display";
 import SignUpWebView from "./SignUpWebView";
+import SignedInInvitation from "./SignedInInvitation";
+import { isSignedInUser } from "../../services/appLinks/deliverAppLink";
 import { Role } from "../../entities/Roles";
 import { useAppSelector, useAppDispatch } from "../../state/store";
 import { initializeInvitation } from "../../state/slices/userSlice";
@@ -83,6 +85,7 @@ const SignUpScreen: React.FC<SignUpScreenProps> = (props) => {
   const [peekingInvitation, setPeekingInvitation] = useState(false);
 
   const userSubscriptionRef = useRef<any>(null);
+  const signedInWhenInvited = useRef<boolean | null>(null);
   const linkSubscriptionRef = useRef<(() => void) | undefined>(undefined);
 
   const setError = useCallback((message: string) => {
@@ -227,6 +230,24 @@ const SignUpScreen: React.FC<SignUpScreenProps> = (props) => {
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color={color.baby_blue} />
       </View>
+    );
+  }
+  // Already signed in with an invitation (an invitation link opened while
+  // signed in): accept it as this account or continue, never a new sign-up.
+  // Decided when the invitation first reaches this screen, so an account
+  // that this sign-up just created keeps the form (and its errors).
+  if (!invitation) {
+    signedInWhenInvited.current = null;
+  } else if (signedInWhenInvited.current === null) {
+    signedInWhenInvited.current = isSignedInUser(user);
+  }
+  if (invitation && signedInWhenInvited.current) {
+    return (
+      <SafeAreaView style={{ flex: 1 }} testID="signup-screen">
+        <RatsScrollView keyboardShouldPersistTaps="handled">
+          <SignedInInvitation notice={stateError?.message} />
+        </RatsScrollView>
+      </SafeAreaView>
     );
   }
   return (

@@ -12,6 +12,9 @@
  *  - Auth subscription is cleaned up on unmount
  *  - Deep link listener is cleaned up on unmount
  *  - Deep link with invitation type dispatches initializeInvitation
+ *  - Links go through parseAppLink/deliverAppLink: a signed-in invitation opens
+ *    the invitation screen, a signed-out checkout return is held, and a held
+ *    link is delivered once a user signs in
  */
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
@@ -246,6 +249,8 @@ jest.mock("../../../state/slices/userSlice", () => ({
   get initializeInvitation() {
     return (global as any).__splashTestInitInvitation;
   },
+  setPendingAppLink: (payload: any) => ({ type: "user/setPendingAppLink", payload }),
+  clearPendingAppLink: () => ({ type: "user/clearPendingAppLink" }),
   get updateUser() {
     return (global as any).__splashTestUpdateUser;
   },
@@ -270,6 +275,7 @@ import { render, act } from "@testing-library/react-native";
 
 import { withSplash } from "../Splash";
 import { logException } from "../../../util/logging";
+import improvedNavigationService from "../../../navigation/improved-navigation-service";
 
 // ─── Mock implementations (assigned as globals so lazy getters can access them)
 
@@ -349,6 +355,8 @@ const baseUserState = {
   anonUser: null,
   anonymous: false,
   subscriptionStatus: null,
+  pendingAppLink: null as any,
+  pendingAppLinkReceivedAt: null as any,
 };
 
 // ─── Test component factory ────────────────────────────────────────────────────
@@ -842,29 +850,117 @@ describe("Splash (withSplash HOC)", () => {
         url: "regroup-app://?type=invitation&house=h1&email=a@b.com",
       };
       mockGetInitialLink.mockResolvedValueOnce(invitationLink);
-      mockGetLinkType.mockReturnValueOnce("invitation");
-      const invPayload = {
-        id: "",
-        type: "guest",
-        houseId: "h1",
-        inviterId: "",
-        ownerId: "",
-        email: "a@b.com",
-        initialPhase: "",
-        expirationDate: new Date(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-      mockCreateInvitationFromLink.mockReturnValueOnce(invPayload);
 
       renderSplash({ invitation: null });
       await act(async () => {});
 
-      expect(mockCreateInvitationFromLink).toHaveBeenCalledWith(invitationLink);
+      // parseAppLink + deliverAppLink build the invitation from the link.
       expect(mockInitInvitation).toHaveBeenCalledTimes(1);
       expect(mockDispatch).toHaveBeenCalledWith(
-        expect.objectContaining({ type: "user/initializeInvitation" }),
+        expect.objectContaining({
+          type: "user/initializeInvitation",
+          payload: expect.objectContaining({ houseId: "h1", email: "a@b.com" }),
+        }),
       );
+    });
+
+    describe("links delivered through parseAppLink / deliverAppLink", () => {
+      const signedInUser = { uid: "u1", isAnonymous: false, email: "g@rats-e2e.com" };
+      let navigateToInvitation: jest.SpyInstance;
+      beforeEach(() => {
+        navigateToInvitation = jest
+          .spyOn(improvedNavigationService, "navigateToInvitation")
+          .mockImplementation(() => {});
+      });
+      afterEach(() => navigateToInvitation.mockRestore());
+
+      const linkListener = () =>
+        (mockOnLink.mock.calls[0] as any[])[0] as (link: { url: string }) => void;
+
+      it("tells the user when an invitation link is broken, instead of doing nothing", async () => {
+        const { Alert } = require("react-native");
+        const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+        renderSplash({ user: signedInUser, loggedIn: true });
+        await act(async () => {});
+        act(() => linkListener()({ url: "regroup-app://invite?token=bad!" }));
+
+        expect(alert).toHaveBeenCalledTimes(1);
+        expect(navigateToInvitation).not.toHaveBeenCalled();
+        alert.mockRestore();
+      });
+
+      it("opens the invitation screen for an invitation link received while signed in", async () => {
+        renderSplash({ user: signedInUser, loggedIn: true });
+        await act(async () => {});
+        act(() => linkListener()({ url: "regroup-app://?type=invitation&token=tok-1" }));
+
+        expect(mockDispatch).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "user/initializeInvitation",
+            payload: expect.objectContaining({ token: "tok-1" }),
+          }),
+        );
+        expect(navigateToInvitation).toHaveBeenCalledTimes(1);
+      });
+
+      it("holds a checkout return received while anonymous and routes nothing", async () => {
+        renderSplash({ user: { uid: "anon", isAnonymous: true }, loggedIn: true });
+        await act(async () => {});
+        act(() => linkListener()({ url: "regroup-app://app/checkout-return?result=success" }));
+
+        expect(mockDispatch).toHaveBeenCalledWith({
+          type: "user/setPendingAppLink",
+          payload: { kind: "checkout-return", result: "success" },
+        });
+        expect(navigateToInvitation).not.toHaveBeenCalled();
+      });
+
+      it("ignores a link parseAppLink does not claim", async () => {
+        renderSplash({ user: signedInUser, loggedIn: true });
+        await act(async () => {});
+        act(() => linkListener()({ url: "https://evil.example/invite?token=abc" }));
+
+        expect(mockInitInvitation).not.toHaveBeenCalled();
+        expect(navigateToInvitation).not.toHaveBeenCalled();
+      });
+
+      it("delivers a held link once a user is signed in, clearing it", async () => {
+        const held = { kind: "invitation", token: "tok-2" };
+        renderSplash({
+          user: signedInUser,
+          loggedIn: true,
+          pendingAppLink: held,
+          pendingAppLinkReceivedAt: Date.now(),
+        });
+        await act(async () => {});
+
+        expect(mockDispatch).toHaveBeenCalledWith({ type: "user/clearPendingAppLink" });
+        expect(navigateToInvitation).toHaveBeenCalledTimes(1);
+      });
+
+      it("drops a held link older than 15 minutes on sign-in", async () => {
+        renderSplash({
+          user: signedInUser,
+          loggedIn: true,
+          pendingAppLink: { kind: "invitation", token: "tok-old" },
+          pendingAppLinkReceivedAt: Date.now() - 16 * 60 * 1000,
+        });
+        await act(async () => {});
+
+        expect(mockDispatch).toHaveBeenCalledWith({ type: "user/clearPendingAppLink" });
+        expect(navigateToInvitation).not.toHaveBeenCalled();
+      });
+
+      it("keeps a held link while the user is anonymous", async () => {
+        renderSplash({
+          user: { uid: "anon", isAnonymous: true },
+          loggedIn: true,
+          pendingAppLink: { kind: "checkout-return", result: "success" },
+        });
+        await act(async () => {});
+
+        expect(mockDispatch).not.toHaveBeenCalledWith({ type: "user/clearPendingAppLink" });
+      });
     });
   });
 

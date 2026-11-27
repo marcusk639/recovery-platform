@@ -98,8 +98,8 @@ export const debugConfig = {
     invitation:
       'regroup-app://?type=invitation&house=test123&email=test@example.com&invitationType=guest',
     // emailConfirmation removed - no longer needed
-    universalInvitation:
-      'https://regroup-app.com/?type=invitation&house=test123&email=test@example.com&invitationType=guest',
+    // The web origin accepts the token form only (parseAppLink).
+    universalInvitation: 'https://regroup-app.com/invite?token=test-token',
     // universalEmailConfirmation removed - no longer needed
   },
 

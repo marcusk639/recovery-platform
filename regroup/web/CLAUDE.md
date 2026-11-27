@@ -76,6 +76,15 @@ firebase deploy --project regroup-e2e --only hosting,functions:web:ssr --non-int
 
 The staging builds use the production build settings (optimized, hashed, no source maps) and production mode; only the environment file differs. `scripts/deploy-config.test.js` holds that parity, the predeploy wiring, and a param value per project.
 
+### Universal-link files (`apple-app-site-association`, `assetlinks.json`)
+
+One source, `../app-links.json` (claimed paths `/invite`, `/app/*`, `/checkout-return`; per project: domain, iOS app IDs, Android package + SHA-256). `scripts/generate-app-links.mjs --project <id> --out <dir> [--root <public dir>]` writes the AASA and assetlinks files; `build:ssr` (project `phoenix-cleanhouse`) and `build:ssr:e2e-staging` (`regroup-e2e`) run it after the browser build. It refuses an unknown project, and any fingerprint that isn't a real SHA-256. Marketing and account pages (`/`, `/pricing`, `/signup`, `/my-account`, `/login`) are never claimed; Android path filtering lives in the mobile manifest.
+
+- Firebase Hosting answers `/.well-known/apple-app-site-association`, `/apple-app-site-association` and `/.well-known/assetlinks.json` itself (empty AASA, `[]`), ahead of rewrites, so the build writes real files at those exact paths (`--root`), and `firebase.json`'s ignore keeps `.well-known` (`**/.!(well-known)`). The `/app-links/*.json` copies and the rewrites to them are only a fallback: what is served is the real files at the exact paths; headers set `Content-Type: application/json`.
+- **Production fingerprint is an owner input.** `phoenix-cleanhouse`'s Play app-signing SHA-256 is still `<OWNER: Play app-signing SHA-256>` in `app-links.json`, so a production web build leaves `com.regroup.app` out of `assetlinks.json` (an empty list) and prints a WARNING until the owner adds it: Android App Links don't verify in production until then, and invitees open the app from the landing page. Any other non-SHA-256 value is refused. Staging uses the standard Android debug keystore fingerprint (the e2eStaging build is debug-signed).
+- Predeploy: `scripts/verify-app-links.mjs --project "$GCLOUD_PROJECT"` (in the hosting `predeploy`) regenerates the files for the deploy's project and refuses a build whose five files are missing or differ, so a build for the wrong project can't ship its app IDs.
+- Check a deploy: `node scripts/check-app-links.mjs https://regroup-e2e.web.app --project regroup-e2e` (the origin must be https on the project's own domain; `--allow-host localhost` is the only override; all three URLs: 200, `application/json`, no redirect, body equal to the generated files). Tests: `npm run test:scripts` (`scripts/__tests__/app-links.test.mjs`).
+
 ### Cloud Functions (`cd functions`)
 
 ```bash
@@ -152,7 +161,7 @@ This package's `functions/src/index.ts` defines exactly one function:
 **Deployed under the `web` codebase.** `../functions` owns the `default` codebase.
 Firebase deletes any function missing from the codebase being deployed, so if both
 packages shared `default`, deploying either would delete the other's functions —
-a web deploy would have removed every backend function (62 today; `ALL_FUNCTIONS` in
+a web deploy would have removed every backend function (63 today; `ALL_FUNCTIONS` in
 `../scripts/deploy-batched.sh` lists them). Keep them separate.
 
 Do not confuse the `ssr` function with `universal` in `../functions`: that one is a

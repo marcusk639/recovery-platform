@@ -1,66 +1,73 @@
 /**
- * Deep Linking Configuration for React Navigation
+ * Deep linking for React Navigation, wired into <NavigationContainer> in
+ * index.js.
  *
- * Phase 6.4: Configuration ready for implementation
+ * Only an allowlist of routes resolves here: the six Main tabs and the two
+ * auth screens. Nothing that opens outside SubscriptionGate, nothing
+ * operator-only and nothing paywalled is listed. Invitation and checkout-return
+ * links are not navigation: parseAppLink / deliverAppLink handle them (Splash),
+ * so getInitialURL and subscribe hold back every URL parseAppLink claims. They
+ * see the full URL, so the guard follows the parser's per-prefix rules exactly
+ * (getStateFromPath only sees the path, which loses the prefix).
  *
- * This file defines the deep linking configuration for the app.
- * When NavigationContainer is set up, pass this config to the linking prop.
+ * An `app/*` (Main tab) link opens only for a signed-in, non-anonymous user.
+ * Signed out or anonymous, it is dropped and the app stays where it is (the
+ * landing screen): it is not held for after sign-in, because sign-in itself
+ * resets navigation to the user's own start route (LoginForm, signup).
+ * An `auth/*` link opens only signed out or anonymous: signed in, the sign-up
+ * form would create a second account from the current user's doc.
+ * Firebase Auth's currentUser is read, not the store: at cold start the store
+ * has no user yet, while the native session is restored synchronously.
  *
- * Usage:
- * ```typescript
- * import { linkingConfig } from './navigation/linking';
- *
- * <NavigationContainer linking={linkingConfig}>
- *   <RootNavigator />
- * </NavigationContainer>
- * ```
- *
- * For more info: https://reactnavigation.org/docs/deep-linking
+ * Test a link:
+ *   iOS:     xcrun simctl openurl booted "regroup-app://app/house"
+ *   Android: adb shell am start -W -a android.intent.action.VIEW -d "regroup-app://app/house"
  */
 
-import { LinkingOptions } from '@react-navigation/native';
+import {
+  getStateFromPath as defaultGetStateFromPath,
+  LinkingOptions,
+} from '@react-navigation/native';
+import { Linking } from 'react-native';
+import { getAuth } from '@react-native-firebase/auth';
+import { appLinkPrefixes } from './appLinkPrefixes';
+import { parseAppLink } from '../services/appLinks/parseAppLink';
 import { RootStackParamList, Routes } from './types';
 
+const stripLeadingSlashes = (path: string): string => path.replace(/^\/+/, '');
+
+/** Full URLs handled by parseAppLink/deliverAppLink, never by navigation state. */
+export const isHandledElsewhere = (url: string): boolean => parseAppLink(url) !== null;
+
+const isMainRoute = (path: string): boolean =>
+  /^app(\/|\?|#|$)/.test(stripLeadingSlashes(path));
+
+const isAuthRoute = (path: string): boolean =>
+  /^auth(\/|\?|#|$)/.test(stripLeadingSlashes(path));
+
+const isSignedIn = (): boolean => {
+  const user = getAuth().currentUser;
+  return !!user && !user.isAnonymous;
+};
+
 export const linkingConfig: LinkingOptions<RootStackParamList> = {
-  prefixes: [
-    // The canonical custom scheme, registered by iOS and Android (launch spec
-    // §4.2). The old 'regroup://' was registered by neither and sent by
-    // nothing (#183 item 18).
-    'regroup-app://',
-    'https://regroup-app.com',  // Universal link
-    'https://*.regroup-app.com',  // Universal link wildcard
-  ],
+  prefixes: appLinkPrefixes(),
 
   config: {
     screens: {
-      // Auth screens
       [Routes.PriorAuth]: {
         path: 'auth',
         screens: {
-          [Routes.InitialLanding]: 'landing',
           [Routes.Login]: 'login',
-          [Routes.Signup]: 'signup/:invitation?',  // Optional invitation parameter
-          [Routes.NewAccount]: 'new-account',
-          [Routes.HouseSearch]: 'house-search',
-          [Routes.ManagerIntro]: 'manager-intro',
-          [Routes.IntroHouseSummary]: 'intro-house',
+          // The :invitation param is never consumed: invitations arrive only
+          // through parseAppLink -> deliverAppLink -> initializeInvitation.
+          [Routes.Signup]: 'signup/:invitation?',
         },
       } as any,
 
-      // Setup screens
-      [Routes.Setup]: {
-        path: 'setup',
-        screens: {
-          [Routes.OrgSetup]: 'org',
-          [Routes.OperatorSetupWizard]: 'wizard',
-        },
-      } as any,
-
-      // Main app
       [Routes.Main]: {
         path: 'app',
         screens: {
-          // Tab routes
           [Routes.House]: 'house',
           [Routes.Guest]: 'guest',
           [Routes.Activities]: 'activities',
@@ -69,76 +76,26 @@ export const linkingConfig: LinkingOptions<RootStackParamList> = {
           [Routes.Personal]: 'personal',
         },
       } as any,
-
-      // House screens (modals)
-      [Routes.HouseSummary]: 'house/:houseId?',
-      [Routes.Beds]: 'house/:houseId/beds',
-      [Routes.HouseDisputes]: 'house/:houseId/disputes',
-
-      // Guest screens (modals)
-      [Routes.GuestOverview]: 'guest/:guestId',
-      [Routes.MeetingSummary]: 'guest/:guestId/meetings',
-      [Routes.WorkSummary]: 'guest/:guestId/work',
-      [Routes.ChoreSummary]: 'guest/:guestId/chores',
-      [Routes.SupporterSummary]: 'guest/:guestId/supporter',
-
-      // Contacts screens
-      [Routes.ContactsScreen]: 'contacts',
-      [Routes.DirectMessage]: 'chat/:userId',
-
-      // Personal/Utilities screens
-      [Routes.PersonalScreen]: 'personal',
-      [Routes.EditUserInfo]: 'profile/edit',
-      [Routes.InAppOrgSetup]: 'setup/org',
-
-      // Shared screens
-      [Routes.Issues]: 'issues',
-      [Routes.Complaints]: 'complaints',
-
-      // Other modal screens
-      [Routes.HouseList]: 'houses',
-      [Routes.NewMeeting]: 'meetings/new',
-      [Routes.GuestList]: 'guests',
-      [Routes.PhaseSetup]: 'setup/phase',
-      [Routes.HouseSettings]: 'settings/house',
-      [Routes.GuestInfo]: 'users/:userId',
-      [Routes.PhaseCustomization]: 'phase/customize',
-      [Routes.SubscriptionHandler]: 'subscription',
-      [Routes.SendInvites]: 'invites/send',
-      [Routes.MeetingSearch]: 'meetings/search',
-      [Routes.NewAccount]: 'account/new',
     },
   },
-};
 
-/**
- * Example deep link URLs:
- *
- * - regroup-app://auth/login
- * - regroup-app://chat/user123
- * - regroup-app://guest/guest456/meetings
- * - https://regroup-app.com/house/house789
- * - https://regroup-app.com/app/activities
- *
- * To test deep links:
- *
- * iOS (Simulator):
- * ```bash
- * xcrun simctl openurl booted "regroup-app://app/house"
- * ```
- *
- * Android (Device/Emulator):
- * ```bash
- * adb shell am start -W -a android.intent.action.VIEW -d "regroup-app://app/house"
- * ```
- *
- * Universal Links (iOS):
- * Requires apple-app-site-association file at:
- * https://regroup-app.com/.well-known/apple-app-site-association
- *
- * App Links (Android):
- * Requires assetlinks.json file at:
- * https://regroup-app.com/.well-known/assetlinks.json
- */
+  async getInitialURL() {
+    const url = await Linking.getInitialURL();
+    return url && !isHandledElsewhere(url) ? url : null;
+  },
+
+  subscribe(listener) {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      if (!isHandledElsewhere(url)) listener(url);
+    });
+    return () => subscription.remove();
+  },
+
+  getStateFromPath: (path, options) => {
+    if (isMainRoute(path) && !isSignedIn()) return undefined;
+    if (isAuthRoute(path) && isSignedIn()) return undefined;
+    return defaultGetStateFromPath(path, options);
+  },
+};
 
 export default linkingConfig;
