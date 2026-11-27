@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import Admin from '../../entities/Admin';
+import { isLogoutFulfilled } from './accountReset';
 
 /**
  * Admin State Interface
@@ -57,6 +58,10 @@ const adminSlice = createSlice({
 
     // Reset admin state
     resetAdminState: () => initialState,
+  },
+  // Admin records belong to the account that signed out.
+  extraReducers: builder => {
+    builder.addMatcher(isLogoutFulfilled, () => initialState);
   },
 });
 

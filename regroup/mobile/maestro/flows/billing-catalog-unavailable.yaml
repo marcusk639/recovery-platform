@@ -1,0 +1,83 @@
+# Catalog unreachable → no price and no trial (launch P5 Task 12, BILL-008,
+# guard money). The e2e fault e2e/faults.tierCatalogUnavailable makes
+# getTierCatalog fail; the switch is honoured only in the Functions emulator
+# running demo-regroup-e2e (regroup/functions/src/util/emulatorFaults.ts).
+# Sales are open and the operator has no Oxford plan, so without the fault the
+# card would offer "Start 7-Day Free Trial" (billing-oxford-trial-from-catalog.yaml).
+# With it, the settled card (testID oxford-upgrade-cta, not -loading) shows
+# "Oxford Plan" and "See plans": no price, no day count, no trial note.
+# Persona: oxford operator (test-house-oxford). Ends signed out, the fault off,
+# Oxford back on and sales closed. A fresh seed also resets all three.
+#
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/billing-catalog-unavailable.yaml
+appId: ${APP_ID}
+tags:
+  - oxford
+  - billing
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runScript:
+    file: ../scripts/maestro-js/set-oxford-upsell.js
+    env:
+      OXFORD_ENABLED: 'false'
+      SALES_OPEN: 'true'
+- assertTrue: ${output.upsellSet == 'ok'}
+- runScript:
+    file: ../scripts/maestro-js/set-emulator-fault.js
+    env:
+      FAULT: tierCatalogUnavailable
+      ON: 'true'
+- assertTrue: ${output.faultSet == 'tierCatalogUnavailable=true'}
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-oxford-operator@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: ".*Oxford House Hub.*"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    text: ".*Oxford House Hub.*"
+- extendedWaitUntil:
+    visible:
+      id: "oxford-upgrade-prompt"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "oxford-upgrade-button"
+    direction: DOWN
+# Settled: the catalog call has failed and the card shows its no-catalog state.
+- extendedWaitUntil:
+    visible:
+      id: "oxford-upgrade-cta"
+    timeout: 30000
+- assertVisible:
+    text: "See plans"
+- assertVisible:
+    text: "Oxford Plan"
+- assertNotVisible:
+    text: ".*\\$.*"
+- assertNotVisible:
+    text: ".*[0-9]+-Day.*"
+- assertNotVisible:
+    text: "(?i).*free trial.*"
+# Leave the seed as it was: the fault off, Oxford on, sales closed; sign out.
+- runScript:
+    file: ../scripts/maestro-js/set-emulator-fault.js
+    env:
+      FAULT: tierCatalogUnavailable
+      ON: 'false'
+- assertTrue: ${output.faultSet == 'tierCatalogUnavailable=false'}
+- runScript:
+    file: ../scripts/maestro-js/set-oxford-upsell.js
+    env:
+      OXFORD_ENABLED: 'true'
+      SALES_OPEN: 'false'
+- assertTrue: ${output.upsellSet == 'ok'}
+- runFlow: ../subflows/logout.yaml

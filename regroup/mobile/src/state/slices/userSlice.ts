@@ -134,6 +134,12 @@ export const logout = createAsyncThunk(
   "user/logout",
   async (_, { dispatch }) => {
     await userService.signOut();
+    // Cached server data (house, guests, paywall) belongs to the account that
+    // signed out; the next account fetches its own. Required here, not
+    // imported at the top, so importing this slice doesn't construct the
+    // client.
+    const { queryClient } = require("../queryClient") as typeof import("../queryClient");
+    queryClient.clear();
     const result = await dispatch(anonymouslyLogin()).unwrap();
 
     // Reset navigation to the landing screen. InitialLanding lives in the auth
@@ -357,6 +363,8 @@ const userSlice = createSlice({
         state.loggedIn = true;
         state.anonymous = true;
         state.setupRecoveryFailed = false;
+        state.subscriptionStatus = initialState.subscriptionStatus;
+        state.token = initialState.token;
       })
       .addCase(logout.rejected, (state, action) => {
         state.loggingOut = false;

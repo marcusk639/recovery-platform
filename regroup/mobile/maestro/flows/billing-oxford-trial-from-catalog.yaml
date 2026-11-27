@@ -53,7 +53,7 @@ tags:
 - assertNotVisible:
     text: ".*14-Day.*"
 - assertVisible:
-    text: "No payment required to start"
+    text: "No charge during your free trial"
 # Leave the seed as it was: Oxford back on, the sales switch closed (its
 # default: missing means closed), then sign out from the profile tab.
 - runScript:

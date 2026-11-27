@@ -340,28 +340,37 @@ describe("OxfordDashboard — upgrade card from the catalog", () => {
     trialDays: 7,
     salesOpen: true,
   };
+  // Owner decision 2026-11-27: the trial note, shown only with a trial.
+  const TRIAL_NOTE = "No charge during your free trial";
 
   it("shows the catalog's price and trial: $49/month and Start 7-Day Free Trial", async () => {
     mockGetTierCatalog.mockResolvedValue(catalog);
     const { findByText, getByText, queryByText } = renderScreen(false, OXFORD_ONBOARDED);
     expect(await findByText("Start 7-Day Free Trial")).toBeTruthy();
     expect(getByText("Oxford Plan — from $49/month")).toBeTruthy();
-    expect(getByText("No payment required to start")).toBeTruthy();
+    expect(getByText(TRIAL_NOTE)).toBeTruthy();
+    expect(queryByText("No payment required to start")).toBeNull();
     expect(queryByText(/14-Day/)).toBeNull();
     expect(mockGetTierCatalog).toHaveBeenCalledTimes(1);
   });
 
   it("with the catalog null, shows See plans and no number", async () => {
     mockGetTierCatalog.mockResolvedValue(null);
-    const { findByText, getByText, toJSON } = renderScreen(false, OXFORD_ONBOARDED);
+    const { findByText, findByTestId, getByText, toJSON } = renderScreen(
+      false,
+      OXFORD_ONBOARDED,
+    );
     await waitFor(() => expect(mockGetTierCatalog).toHaveBeenCalled());
     await act(async () => {}); // let the query settle on null
+    // The settled marker the BILL-008 flow waits for.
+    expect(await findByTestId("oxford-upgrade-cta")).toBeTruthy();
     expect(await findByText("See plans")).toBeTruthy();
     expect(getByText("Oxford Plan")).toBeTruthy();
     const text = JSON.stringify(toJSON());
     expect(text).not.toMatch(/\$\d/);
     expect(text).not.toMatch(/\d+-Day/i);
-    expect(text).not.toContain("Free Trial");
+    expect(text).not.toMatch(/free trial/i);
+    expect(text).not.toContain("No payment required");
   });
 
   it("with sales closed, shows the price but no trial, and See plans", async () => {
@@ -371,6 +380,7 @@ describe("OxfordDashboard — upgrade card from the catalog", () => {
     expect(await findByText("Oxford Plan — from $49/month")).toBeTruthy();
     expect(getByText("See plans")).toBeTruthy();
     expect(queryByText(/Free Trial/)).toBeNull();
+    expect(queryByText(TRIAL_NOTE)).toBeNull();
     expect(queryByText("No payment required to start")).toBeNull();
   });
 
@@ -380,6 +390,18 @@ describe("OxfordDashboard — upgrade card from the catalog", () => {
     expect(await findByText("Oxford Plan — from $49/month")).toBeTruthy();
     expect(getByText("See plans")).toBeTruthy();
     expect(queryByText(/Free Trial/)).toBeNull();
+    expect(queryByText(TRIAL_NOTE)).toBeNull();
+  });
+
+  it("marks the CTA as loading until the catalog settles", async () => {
+    let resolve: (value: unknown) => void = () => {};
+    mockGetTierCatalog.mockReturnValue(new Promise((r) => (resolve = r)));
+    const { getByTestId, findByTestId, queryByTestId } = renderScreen(false, OXFORD_ONBOARDED);
+    expect(getByTestId("oxford-upgrade-cta-loading")).toBeTruthy();
+    expect(queryByTestId("oxford-upgrade-cta")).toBeNull();
+    await act(async () => resolve(catalog));
+    expect(await findByTestId("oxford-upgrade-cta")).toBeTruthy();
+    expect(queryByTestId("oxford-upgrade-cta-loading")).toBeNull();
   });
 
   it("does not fetch the catalog once Oxford is enabled", () => {

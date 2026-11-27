@@ -96,7 +96,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
   // Task 12), fetched only while that card is what this screen shows.
   const showsUpgradeCard =
     !!house && house.houseType === "oxford" && !subscriptionMetadata?.oxfordEnabled;
-  const { data: catalog } = useTierCatalog(showsUpgradeCard);
+  const { data: catalog, isPending: catalogPending } = useTierCatalog(showsUpgradeCard);
   const oxfordFromCents = lowestMonthlyCents(catalog, "oxford");
   const trialDays =
     catalog?.salesOpen === true && catalog.trialDays > 0 ? catalog.trialDays : null;
@@ -210,7 +210,13 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
             />
           </View>
 
-          <View style={styles.upgradeCtaContainer}>
+          {/* The testID says when the catalog has settled (loaded, or null
+              after a failure), so a flow can tell "See plans" for good from
+              "See plans" while loading. */}
+          <View
+            style={styles.upgradeCtaContainer}
+            testID={catalogPending ? "oxford-upgrade-cta-loading" : "oxford-upgrade-cta"}
+          >
             <RatsText
               text={
                 oxfordFromCents === null
@@ -238,7 +244,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
             </TouchableOpacity>
             {trialDays !== null && (
               <RatsText
-                text="No payment required to start"
+                text="No charge during your free trial"
                 style={styles.upgradeNote}
                 translate={false}
               />
