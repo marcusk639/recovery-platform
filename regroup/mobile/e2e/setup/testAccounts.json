@@ -62,6 +62,24 @@
       "subscriptionMetadata": {
         "oxfordEnabled": true
       }
+    },
+    {
+      "id": "lapsed-operator",
+      "email": "test-lapsed-operator@rats-e2e.com",
+      "firstName": "Lapsed",
+      "lastName": "Operator",
+      "role": "admin",
+      "houseId": "test-house-lapsed",
+      "phone": "555-0600"
+    },
+    {
+      "id": "guest-lapsed",
+      "email": "test-guest-lapsed@rats-e2e.com",
+      "firstName": "Lena",
+      "lastName": "Lapsed",
+      "role": "guest",
+      "houseId": "test-house-lapsed",
+      "phone": "555-0601"
     }
   ]
 }
