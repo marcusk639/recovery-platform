@@ -149,9 +149,11 @@ export async function sendForgotPasswordEmail(email: string): Promise<void> {
   if (!SimpleValidationService.checkRateLimit(`reset_${email}`, 3, 300000)) {
     throw rateLimitError('Too many password reset attempts. Please try again later.');
   }
+  const sanitizedEmail = SimpleValidationService.sanitizeString(email);
   // The demo account's sign-in details are shared with App Review (S5); the
   // server also puts them back if changed (functions scheduled/demoAccountRestore).
-  if (isDemo(email)) {
+  // Checked on the address the reset would go to, after sanitizing.
+  if (isDemo(sanitizedEmail)) {
     throw Object.assign(new Error('The demo account password cannot be changed.'), {
       code: 'auth/demo-account',
     });
@@ -162,7 +164,6 @@ export async function sendForgotPasswordEmail(email: string): Promise<void> {
     throw invalidEmailError(emailValidation.error || 'Invalid email address.');
   }
 
-  const sanitizedEmail = SimpleValidationService.sanitizeString(email);
   return sendPasswordResetEmail(getAuth(), sanitizedEmail);
 }
 
