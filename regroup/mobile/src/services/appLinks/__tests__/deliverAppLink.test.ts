@@ -93,6 +93,50 @@ describe('deliverAppLink, signed in', () => {
     deliverAppLink(checkout, { signedIn: true, dispatch: store.dispatch });
     expect(store.getState().user.pendingAppLink).toBeNull();
   });
+
+  // Task 10: the hand-back refreshes the plan state, and the gate decides.
+  it.each(['success', 'canceled', 'portal'] as const)(
+    'refreshes the plan state once for a %s hand-back, and navigates nothing',
+    (result) => {
+      const store = makeStore();
+      const onCheckoutReturn = jest.fn();
+      deliverAppLink({ kind: 'checkout-return', result }, { signedIn: true, dispatch: store.dispatch, onCheckoutReturn });
+      expect(onCheckoutReturn).toHaveBeenCalledTimes(1);
+      expect(onCheckoutReturn).toHaveBeenCalledWith(result);
+      expect(navigateToInvitation).not.toHaveBeenCalled();
+    },
+  );
+
+  // The link's result is never trusted: the app only re-reads server state,
+  // and the gate decides. A success link must not change any state itself.
+  it('changes no app state for a success hand-back beyond asking for the refresh', () => {
+    const store = makeStore();
+    const before = store.getState().user;
+    deliverAppLink({ kind: 'checkout-return', result: 'success' }, { signedIn: true, dispatch: store.dispatch, onCheckoutReturn: jest.fn() });
+    expect(store.getState().user).toEqual(before);
+  });
+
+  it('does not refresh the plan state for an invitation', () => {
+    const store = makeStore();
+    const onCheckoutReturn = jest.fn();
+    deliverAppLink(token, { signedIn: true, dispatch: store.dispatch, onCheckoutReturn });
+    expect(onCheckoutReturn).not.toHaveBeenCalled();
+  });
+});
+
+describe('checkout hand-back while signed out', () => {
+  it('refreshes nothing until sign-in, then once', () => {
+    const store = makeStore();
+    const onCheckoutReturn = jest.fn();
+    deliverAppLink(checkout, { signedIn: false, dispatch: store.dispatch, onCheckoutReturn });
+    expect(onCheckoutReturn).not.toHaveBeenCalled();
+    const held = store.getState().user;
+    expect(
+      deliverPendingAppLink(held, { signedIn: true, dispatch: store.dispatch, onCheckoutReturn }, held.pendingAppLinkReceivedAt! + 1000),
+    ).toBe(true);
+    expect(onCheckoutReturn).toHaveBeenCalledTimes(1);
+    expect(onCheckoutReturn).toHaveBeenCalledWith('success');
+  });
 });
 
 describe('deliverPendingAppLink', () => {

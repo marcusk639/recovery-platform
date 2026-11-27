@@ -1,6 +1,7 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
 
 import { PricingOneComponent } from './pricing-one.component';
 import { TierCatalogService } from 'src/app/services/subscriptions/tier-catalog.service';
@@ -47,6 +48,7 @@ const catalog: TierCatalog = {
 describe('PricingOneComponent', () => {
   let component: PricingOneComponent;
   let fixture: ComponentFixture<PricingOneComponent>;
+  const route: any = { snapshot: { queryParamMap: convertToParamMap({}) } };
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
@@ -57,6 +59,7 @@ describe('PricingOneComponent', () => {
           provide: TierCatalogService,
           useValue: { getCatalog: () => of(catalog) },
         },
+        { provide: ActivatedRoute, useValue: route },
       ],
     }).compileComponents();
   }));
@@ -124,5 +127,15 @@ describe('PricingOneComponent', () => {
       expect(starter).not.toContain('Compliance export');
       expect(starter).not.toContain('Analytics');
     });
+  });
+
+  // Launch P5 Task 11: opened from the app, the chosen plan's signup keeps from=app.
+  it('carries from=app into the signup link only when the page has it', () => {
+    route.snapshot = { queryParamMap: convertToParamMap({ from: 'app' }) };
+    expect(component.signupQueryParams(catalog.tiers[0])).toEqual(
+      jasmine.objectContaining({ from: 'app', houseType: catalog.tiers[0].houseType }),
+    );
+    route.snapshot = { queryParamMap: convertToParamMap({}) };
+    expect(component.signupQueryParams(catalog.tiers[0]).hasOwnProperty('from')).toBe(false);
   });
 });

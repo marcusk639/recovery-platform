@@ -32,6 +32,7 @@ import { useCharterCompliance } from "../../state/queries/charterComplianceQueri
 import CharterBadge from "../../components/oxford/CharterBadge";
 import { useCurrentWeekRecord } from "../../state/queries/treasuryQueries";
 import { Routes, RootStackParamList } from "../../navigation/types";
+import { openWebBilling } from "../../services/webBilling";
 import { Officer } from "../../entities/oxford/Officer";
 import { BusinessMeeting } from "../../entities/oxford/BusinessMeeting";
 import { EESTransaction } from "../../entities/oxford/EESTransaction";
@@ -211,7 +212,7 @@ const OxfordDashboard: React.FC<Props> = ({ navigation }) => {
             />
             <TouchableOpacity
               testID="oxford-upgrade-button"
-              onPress={() => navigation.navigate(Routes.SubscriptionHandler)}
+              onPress={() => openWebBilling("my-account")}
               style={styles.upgradeButton}
             >
               <RatsText

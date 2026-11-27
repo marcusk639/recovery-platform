@@ -2,7 +2,7 @@ import { Component, OnInit, Inject, PLATFORM_ID } from "@angular/core";
 import { isPlatformBrowser } from "@angular/common";
 import { AuthService } from "src/app/services/auth/auth-service.service";
 import { FormGroup } from "@angular/forms";
-import { Router } from "@angular/router";
+import { ActivatedRoute, Router } from "@angular/router";
 
 @Component({
   selector: "login",
@@ -18,6 +18,7 @@ export class LoginComponent implements OnInit {
     @Inject(PLATFORM_ID) private platformId: Object,
     private authService: AuthService,
     private router: Router,
+    private route: ActivatedRoute,
   ) {}
 
   ngOnInit(): void {
@@ -48,7 +49,12 @@ export class LoginComponent implements OnInit {
         this.formGroup.get("email").value,
         this.formGroup.get("password").value,
       );
-      this.router.navigate(["my-account"]);
+      // Keep ?from=app (opened from the mobile app) so my-account can hand back.
+      if (this.route.snapshot?.queryParamMap?.get("from") === "app") {
+        this.router.navigate(["my-account"], { queryParams: { from: "app" } });
+      } else {
+        this.router.navigate(["my-account"]);
+      }
     } catch (error) {
       if (
         error &&

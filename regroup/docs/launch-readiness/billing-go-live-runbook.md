@@ -104,6 +104,7 @@ Remaining P0-3 work is entirely App Store Connect / Apple Developer:
 - [ ] Distribution signing cert + provisioning profile.
 - [ ] Store listing complete, incl. a **reachable privacy-policy URL** (Apple requires it; publish `docs/operations/legal/privacy-policy.md`).
 - [ ] Push/APNs key uploaded to Firebase for `com.rats.dev` (production).
+- [ ] App Review notes say plans are bought on the web: the app opens `regroup-app.com/pricing` or `/my-account` in the system browser and takes no payment in-app (launch P5 Task 9; there is no billing WebView).
 
 ---
 

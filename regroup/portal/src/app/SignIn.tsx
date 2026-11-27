@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { WEB_BASE_URL } from '@mobile/screens/Subscription/SubscriptionRequiredScreen';
+import { webBaseUrl } from '@mobile/config/env';
 import { signInErrorMessage } from './access';
 import { SIGN_OUT_REASON_KEY, useSignIn } from './session';
 
@@ -49,7 +49,7 @@ export function SignIn() {
         {busy ? 'Signing in...' : 'Sign in'}
       </button>
       {error && <p role="alert" style={{ margin: 0, color: '#b53f22' }}>{error}</p>}
-      <a href={`${WEB_BASE_URL}/reset`}>Forgot password?</a>
+      <a href={`${webBaseUrl()}/reset`}>Forgot password?</a>
     </form>
   );
 }
