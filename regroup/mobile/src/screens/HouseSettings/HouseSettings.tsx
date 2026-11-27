@@ -37,6 +37,7 @@ import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 import { useGuests } from '../../state/queries/guestQueries';
 import { useMayViewHouseMoney } from '../../state/queries/houseTierQueries';
 import { useRoleToken } from '../../context/auth';
+import { can } from '../../components/auth/can';
 import { Routes, RootStackParamList } from '../../navigation/types';
 
 interface Props {
@@ -68,9 +69,11 @@ const HouseSettings: React.FC<Props> = (props) => {
   const dispatch = useAppDispatch();
   const { house, houseId } = useSelectedHouse();
   const mayViewHouseMoney = useMayViewHouseMoney(houseId ?? '');
-  // Stripe Connect setup is the owner's: the Connect callables refuse managers.
+  // Managers open this screen too (owner decision 2026-11-27, #308), but the
+  // owner's entries stay behind house:full-edit: the house's details, its
+  // staff, and Stripe Connect setup (the Connect callables refuse managers).
   const token = useRoleToken();
-  const isOwner = !!houseId && token?.role?.[houseId] === 'superAdmin';
+  const isOwner = !!houseId && can(token?.role?.[houseId], 'house:full-edit');
   const queryClient = useQueryClient();
 
   // Refetch on focus so returning from a sub-screen that mutated settings
@@ -185,13 +188,17 @@ const HouseSettings: React.FC<Props> = (props) => {
 
   const SETTINGS = useMemo(
     () => ({
-      details: {
-        action: startHouseSetupModal,
-        label: 'Details',
-        description: 'Update basic info about your house',
-        iconName: 'cog',
-        color: color.medium_grey,
-      },
+      ...(isOwner
+        ? {
+            details: {
+              action: startHouseSetupModal,
+              label: 'Details',
+              description: 'Update basic info about your house',
+              iconName: 'cog',
+              color: color.medium_grey,
+            },
+          }
+        : {}),
       chores: {
         action: startChoreSetup,
         label: 'Chores',
@@ -199,20 +206,26 @@ const HouseSettings: React.FC<Props> = (props) => {
         iconName: 'dolly',
         color: color.medium_grey,
       },
-      manager: {
-        action: () => showFormModal(<ManagerSettings {...setupProps()} />, null, true),
-        label: 'Managers',
-        description: 'Add or remove managers',
-        iconName: 'gavel',
-        color: color.medium_grey,
-      },
-      adminManagement: {
-        action: () => showFormModal(<AdminManagement navigation={navigation} />, null, true),
-        label: 'Admin Management',
-        description: 'View, invite, and remove admins',
-        iconName: 'user-shield',
-        color: color.medium_grey,
-      },
+      // The house's staff: the owner's (house:full-edit). The rules refuse a
+      // manager's write of adminIds / superAdminIds anyway.
+      ...(isOwner
+        ? {
+            manager: {
+              action: () => showFormModal(<ManagerSettings {...setupProps()} />, null, true),
+              label: 'Managers',
+              description: 'Add or remove managers',
+              iconName: 'gavel',
+              color: color.medium_grey,
+            },
+            adminManagement: {
+              action: () => showFormModal(<AdminManagement navigation={navigation} />, null, true),
+              label: 'Admin Management',
+              description: 'View, invite, and remove admins',
+              iconName: 'user-shield',
+              color: color.medium_grey,
+            },
+          }
+        : {}),
       phases: {
         action: startPhaseSetup,
         label: 'Phases',

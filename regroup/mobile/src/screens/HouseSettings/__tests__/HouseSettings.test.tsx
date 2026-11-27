@@ -494,6 +494,49 @@ describe('HouseSettings', () => {
       }
     });
 
+    // Owner decision 2026-11-27 (#308): managers get the gear, but the
+    // owner's entries stay the owner's (house:full-edit): the house's details,
+    // its staff and Stripe Connect.
+    it("shows a manager the staff entries but not the owner's", () => {
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { queryByText, getByText } = renderScreen(store);
+        for (const owners of ['Details', 'Managers', 'Admin Management', 'Payments']) {
+          expect(queryByText(owners)).toBeNull();
+        }
+        for (const staff of [
+          'Chores',
+          'Phases',
+          'Guests',
+          'Rent',
+          'Payment Dashboard',
+          'Shift Log',
+        ]) {
+          expect(getByText(staff)).toBeTruthy();
+        }
+      } finally {
+        mockRole = ownerRole;
+      }
+    });
+
+    it("hides the owner's entries from a peer leader too", () => {
+      mockMayViewHouseMoney = false;
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { queryByText } = renderScreen(store);
+        for (const owners of ['Details', 'Managers', 'Admin Management', 'Payments']) {
+          expect(queryByText(owners)).toBeNull();
+        }
+      } finally {
+        mockRole = ownerRole;
+        mockMayViewHouseMoney = true;
+      }
+    });
+
     // A manager holds the same admin claim as a peer leader; the tier tells
     // them apart (mockMayViewHouseMoney).
     it('shows the CSV import entry to a manager', () => {

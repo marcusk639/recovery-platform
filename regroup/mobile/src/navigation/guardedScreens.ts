@@ -34,9 +34,9 @@ const SCREENS: Record<string, [React.ComponentType<any>, HouseRank]> = {
   [Routes.ApplicationDetail]: [ApplicationDetailScreen, 'admin'],
   // Owners and managers (owner, 2026-11-27): bulk-adding residents.
   [Routes.GuestImport]: [GuestImportScreen, 'manager'],
-  // Staff rank, though its only entry (HouseSummary's gear, house:full-edit)
-  // is the owner's: the screen hides its money, Connect and Reports entries
-  // by rank itself.
+  // Staff rank. Its entry, HouseSummary's gear (house:settings), is for owners
+  // and managers; the screen hides the owner's rows (house:full-edit) and the
+  // money ones by rank itself.
   [Routes.HouseSettings]: [HouseSettings, 'admin'],
   [Routes.StaffNotes]: [StaffNotesFeed, 'admin'],
   [Routes.BalanceDashboard]: [BalanceDashboard, 'manager'],

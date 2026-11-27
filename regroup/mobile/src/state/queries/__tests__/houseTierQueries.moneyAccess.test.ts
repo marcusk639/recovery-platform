@@ -5,7 +5,7 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useHouseMoneyAccess } from '../houseTierQueries';
+import { useHouseMoneyAccess, useMyHouseTier } from '../houseTierQueries';
 import { getMyHouseTiers } from '../../../services/houseTiers';
 
 jest.mock('../../../services/houseTiers', () => ({
@@ -53,6 +53,32 @@ describe('useHouseMoneyAccess', () => {
 
   it('asks nothing when not needed', () => {
     expect(renderFor('h1', false).result.current).toBe('no');
+    expect(mockGetMyHouseTiers).not.toHaveBeenCalled();
+  });
+});
+
+// The House Settings gear asks for the caller's tier in the house (#308).
+describe('useMyHouseTier', () => {
+  beforeEach(() => mockGetMyHouseTiers.mockReset());
+
+  const renderTier = (houseId: string, enabled = true) => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: queryClient }, children);
+    return renderHook(() => useMyHouseTier(houseId, enabled), { wrapper });
+  };
+
+  it("is the caller's tier in that house", async () => {
+    mockGetMyHouseTiers.mockResolvedValue({ h1: 'manager', h2: 'owner' });
+    const { result } = renderTier('h1');
+    await waitFor(() => expect(result.current).toBe('manager'));
+  });
+
+  it('is undefined while loading, and asks nothing when not needed', () => {
+    mockGetMyHouseTiers.mockReturnValue(new Promise(() => {}));
+    expect(renderTier('h1').result.current).toBeUndefined();
+    mockGetMyHouseTiers.mockClear();
+    expect(renderTier('h1', false).result.current).toBeUndefined();
     expect(mockGetMyHouseTiers).not.toHaveBeenCalled();
   });
 });

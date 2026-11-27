@@ -36,6 +36,7 @@ import { RatsIcon, ClickableIcon } from '../../../components/rats-icon';
 import WeekStatSummary from '../../../components/week-stat-summary';
 import Section from '../../../components/rats-interactable-section';
 import { Can } from '../../../components/auth';
+import { useMyHouseTier } from '../../../state/queries/houseTierQueries';
 
 // Types & Entities
 import { House } from '../../../entities/House';
@@ -115,6 +116,9 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
   ) as boolean;
   const token = useRoleToken();
   const isHouseStaff = !!house?.id && isAdmin(token, house.id);
+  // The gear (house:settings) is for owners and managers; the tier tells a
+  // manager from a peer leader, who share the admin claim.
+  const houseTier = useMyHouseTier(house?.id ?? '', isHouseStaff);
 
   // Auto-advance chore rotation if a new week has started. Only staff may
   // update it; a resident's attempt is refused by the rules.
@@ -177,7 +181,8 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
             {({ token }) => (
               <Can
                 role={token.role[house.id]}
-                action="house:full-edit"
+                action="house:settings"
+                data={{ houseTier }}
                 yes={() => (
                   <ClickableIcon
                     containerProps={{

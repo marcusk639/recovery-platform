@@ -1,10 +1,12 @@
 # OPS-042 — A manager (staff of the house, not its owner) doesn't see the
-# owner's entry points: no Add Home on Profile, and no House Settings gear on
-# the House tab, so no Payments (Stripe Connect setup, whose callables accept
-# only owners) and no subscription entry. House Settings is the owner's
-# (`house:full-edit`, superAdmin only, context/rules.ts); each owner screen
-# also refuses a manager itself (RequireHouseRole). The manager still runs the
-# house: Drug Testing, Resident Intake and Applications show.
+# owner's entry points: no Add Home on Profile, and in House Settings no
+# Details, Managers, Admin Management or Payments (Stripe Connect setup, whose
+# callables accept only owners). Managers do get the House Settings gear
+# (owner decision 2026-11-27, #308: `house:settings`, owners and managers,
+# context/rules.ts); the owner's rows inside stay behind `house:full-edit`, and
+# each owner screen also refuses a manager itself (RequireHouseRole). The
+# manager still runs the house: Drug Testing, Resident Intake and Applications
+# show, and so does the Rent entry in House Settings.
 # Persona: test-staff-manager, the admin claim on test-house-123 with a
 # house-roles tier of manager (maestro/scripts/seed/docs.js staff()).
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/manager-no-owner-entry-points.yaml
@@ -23,7 +25,7 @@ tags:
     visible:
       id: "main-app-screen"
     timeout: 30000
-# House tab: staff sections, but no owner's settings gear.
+# House tab: staff sections.
 - scrollUntilVisible:
     element:
       id: "applications-section"
@@ -38,8 +40,33 @@ tags:
     direction: DOWN
 - swipe:
     direction: DOWN
-- assertNotVisible:
+# The gear opens House Settings for a manager, without the owner's rows.
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-button"
+    timeout: 15000
+- tapOn:
     id: "house-settings-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 15000
+- assertVisible: "Chores"
+- assertNotVisible: "Details"
+- assertNotVisible:
+    id: "managers-section"
+- assertNotVisible: "Admin Management"
+- scrollUntilVisible:
+    element:
+      id: "rent-settings-section"
+    direction: DOWN
+    timeout: 15000
+- assertNotVisible: "Payments"
+- tapOn: "Done"
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 15000
 # Profile: no Add Home.
 - tapOn:
     id: "profile-tab"
