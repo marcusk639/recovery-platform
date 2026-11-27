@@ -1,9 +1,10 @@
-# A peer leader (staff of the house below a manager) sees none of the house's
-# money: House Settings has no Payments, Payment Dashboard or Balances, and
-# Profile has no Add Home. Each money screen also refuses a peer leader
-# itself (RequireHouseRole, the Jest guard table), and the payments rules
-# check the tier. No path in the app leads a peer leader to those screens, so
-# this flow proves the entry points; the screens' own refusal is OPS-041/048.
+# A peer leader (staff of the house below a manager) has no path to the
+# house's money or the owner's settings: no House Settings gear on the House
+# tab (House Settings, with Payments, the Payment Dashboard and Balances, is the
+# owner's, `house:full-edit`) and no Add Home on Profile. Each money screen
+# also refuses a peer leader itself (RequireHouseRole; the Jest guard table,
+# OPS-041/048), and the payments rules check the tier. A peer leader still
+# helps run the house: Drug Testing, Resident Intake and Applications show.
 # Persona: test-peer-leader, the admin claim on test-house-123 with a
 # house-roles tier of peerLeader (maestro/scripts/seed/docs.js staff()).
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/peer-leader-no-money.yaml
@@ -22,36 +23,21 @@ tags:
     visible:
       id: "main-app-screen"
     timeout: 30000
-- tapOn:
-    id: "house-settings-button"
-- extendedWaitUntil:
-    visible:
-      id: "house-settings-screen"
-    timeout: 30000
-# The money entries would sit right above Reports. The tier comes from a
-# callable, so give it time before checking they stay hidden.
-- waitForAnimationToEnd:
-    timeout: 5000
 - scrollUntilVisible:
     element:
-      text: ".*Reports.*"
+      id: "applications-section"
     direction: DOWN
     centerElement: true
     timeout: 20000
-- assertNotVisible: ".*Payment Dashboard.*"
-- assertNotVisible:
-    id: "balances-section"
-- assertNotVisible: ".*Connect Stripe to accept rent payments.*"
-- scrollUntilVisible:
-    element:
-      text: ".*Shift Log.*"
+- assertVisible:
+    id: "drug-testing-section"
+- swipe:
     direction: DOWN
-    timeout: 20000
-- assertNotVisible: ".*Payment Dashboard.*"
+- swipe:
+    direction: DOWN
 - assertNotVisible:
-    id: "balances-section"
-- tapOn:
-    text: "Done"
+    id: "house-settings-button"
+- assertNotVisible: ".*Payment Dashboard.*"
 - tapOn:
     id: "profile-tab"
 - extendedWaitUntil:
