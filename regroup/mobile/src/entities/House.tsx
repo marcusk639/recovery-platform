@@ -138,9 +138,11 @@ export const houseSchema = yup.object().shape({
     .required(SchemaConstants.REQUIRED)
     .max(5000, SchemaConstants.numberMax(5000))
     .min(0, SchemaConstants.numberMin(0)),
+  // Matches the rules' monthly limit (dollars); a stricter cap here refused the
+  // whole house save for a price House Settings → Rent may set.
   monthlyRent: yup
     .number()
-    .max(5000, SchemaConstants.numberMax(5000))
+    .max(10000, SchemaConstants.numberMax(10000))
     .min(0, SchemaConstants.numberMin(0)),
   // Matches the rules' weekly limit; above it the whole house save is refused.
   weeklyRent: yup

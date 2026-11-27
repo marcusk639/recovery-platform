@@ -65,8 +65,8 @@ const APP_LINK_PATH = /^\/(invite|checkout-return|app|redirect)(\/|$)/;
 
 /**
  * Turns Google Analytics off for a page load that starts on an app-link page.
- * Its automatic page_view sends the full URL, and an invitation link's query
- * carries the token. gtag reads `ga-disable-<id>` when it sends, so this must
+ * Its automatic page_view sends the full URL, and an invitation link carries
+ * the token (in the fragment; older links in the query). gtag reads `ga-disable-<id>` when it sends, so this must
  * run before bootstrap: firebase's own setAnalyticsCollectionEnabled only lands
  * after the page_view is queued.
  */

@@ -48,6 +48,7 @@ import {
   useAddMeeting,
   useCheckIntoMeeting,
 } from "../../state/queries/meetingQueries";
+import { meetingLimitMessage } from "../../services/meetingErrors";
 
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
@@ -423,7 +424,13 @@ export async function submitNewMeeting(
       added ? "NewMeeting: check-in after add failed" : "NewMeeting: addMeeting failed"
     );
     if (added) {
-      Alert.alert("Meeting added, but check-in failed. Check in from the meeting list.");
+      // Over the hourly limit, checking in from the list fails too until it resets.
+      const limit = meetingLimitMessage(error);
+      Alert.alert(
+        limit
+          ? `Meeting added, but check-in failed. ${limit}`
+          : "Meeting added, but check-in failed. Check in from the meeting list."
+      );
       navigation.navigate(Routes.MeetingSearch);
     } else {
       Alert.alert("Failed to add meeting.");

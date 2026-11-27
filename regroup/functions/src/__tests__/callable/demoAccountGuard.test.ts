@@ -72,7 +72,8 @@ const REFUSED_ELSEWHERE = ['deleteAccount'];
  * Reads the demo needs; the rules and claims scope them as for any account.
  * findMeetings and userIsAtMeeting reach paid APIs (recovery-api, Google
  * geocoding), but any free signup can call them too, so refusing the demo
- * account would not lower that exposure; limiting them is a separate item.
+ * account would not lower that exposure; each account's calls are limited
+ * instead (util/rateLimit.ts, #316). previewRentCharges (#307) only reads.
  */
 const ALLOWED = [
   'complianceExport',
@@ -86,6 +87,7 @@ const ALLOWED = [
   'listPayments',
   'myHouseTiers',
   'peekInvitation',
+  'previewRentCharges',
   'rentRoiMetrics',
   'userIsAtMeeting',
 ];

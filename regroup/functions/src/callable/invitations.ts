@@ -123,11 +123,14 @@ export function webBaseUrl(): string {
 
 /**
  * Build the invitation link the recipient will tap: an https app link on the
- * web origin. The mobile parser (src/services/appLinks/parseAppLink.ts)
- * accepts `https://<web origin>/invite?token=<...>`.
+ * web origin, `https://<web origin>/invite#token=<...>`. The token is in the
+ * fragment, which a browser never sends, so it stays out of the Hosting and
+ * Cloud Run request logs and any Referer. The mobile parser
+ * (src/services/appLinks/parseAppLink.ts) and the web landing page
+ * (app-link-landing) read it from there.
  */
 export function buildInviteLink(token: string, webOrigin: string): string {
-  return `${webOrigin}/invite?token=${encodeURIComponent(token)}`;
+  return `${webOrigin}/invite#token=${encodeURIComponent(token)}`;
 }
 
 // The invitation email (util/email) reads SENDGRID_API_KEY from process.env,

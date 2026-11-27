@@ -53,19 +53,14 @@ tags:
     text: "Amount ($)"
 - inputText: "33.33"
 # Dismiss the keyboard so the buttons are reachable. The iOS decimal pad has
-# no return key, so tap the modal title; Android leaves that title out of the
-# accessibility tree but its number pad closes with hideKeyboard.
+# no return key, so tap the modal title. On Android hideKeyboard closed the
+# modal itself (a back press; OPS-002), so tapping the method below closes it.
 - runFlow:
     when:
       platform: iOS
     commands:
       - tapOn:
           text: "Record Manual Payment"
-- runFlow:
-    when:
-      platform: Android
-    commands:
-      - hideKeyboard
 - tapOn:
     text: "Zelle"
 - tapOn:

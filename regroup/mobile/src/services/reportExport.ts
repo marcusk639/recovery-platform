@@ -1,10 +1,18 @@
 import { Platform } from 'react-native';
-import { csvCell, recordAmountCsv, recordNetCsv, recordRefundedCsv } from '../util/paymentDisplay';
+import {
+  chargeDetail,
+  chargeLabel,
+  csvCell,
+  recordAmountCsv,
+  recordNetCsv,
+  recordRefundedCsv,
+} from '../util/paymentDisplay';
 import { format, parseISO } from 'date-fns';
 import { toDateSafe } from '../util/firestore';
 import { generatePDF } from 'react-native-html-to-pdf';
 
 import { RentPayment } from './payments';
+import type { RentCharge } from './rentCharges';
 import { paymentDisplayStatus } from '../util/paymentStatus';
 
 import { Guest } from '../entities/Guest';
@@ -70,13 +78,26 @@ function paymentDate(createdAt: unknown): string {
 /**
  * Generates a CSV string for a payment history export.
  * guestNames maps guestId → display name for the name column.
+ * With `charges` (Payment History passes them), a "Charged ($)" column is added and
+ * each rent charge is a row with its amount there, Status "Rent charge", dated by
+ * the first day charged; Amount and Net stay what was paid, so they still sum to
+ * money received. Rows then run newest first by date.
  */
 export function exportPaymentHistoryCSV(
   payments: RentPayment[],
   guestNames: Record<string, string>,
+  charges?: RentCharge[],
 ): string {
-  const header = ['Date', 'Guest', 'Amount ($)', 'Refunded ($)', 'Net ($)', 'Status', 'Description'].join(',');
-  const rows = payments.map((p) => {
+  const columns = ['Date', 'Guest', 'Amount ($)', 'Refunded ($)', 'Net ($)', 'Status', 'Description'];
+  const header = (charges ? [...columns, 'Charged ($)'] : columns).join(',');
+  const chargeRows = (charges ?? []).map((c) => {
+    const detail = chargeDetail(c);
+    const description = escapeCsvField(detail ? `${chargeLabel(c)} (${detail})` : chargeLabel(c));
+    const guest = escapeCsvField(guestNames[c.guestId] ?? c.guestId);
+    const charged = (c.amountCents / 100).toFixed(2);
+    return [c.firstDay, guest, '', '', '', 'Rent charge', description, charged].join(',');
+  });
+  const paymentRows = payments.map((p) => {
     const date = paymentDate(p.createdAt);
     const guest = escapeCsvField(guestNames[p.guestId] ?? p.guestId);
     const amount = recordAmountCsv(p);
@@ -84,8 +105,12 @@ export function exportPaymentHistoryCSV(
     const net = recordNetCsv(p);
     const status = escapeCsvField(paymentDisplayStatus(p).label);
     const description = escapeCsvField(p.description ?? '');
-    return [date, guest, amount, refunded, net, status, description].join(',');
+    const row = [date, guest, amount, refunded, net, status, description];
+    return (charges ? [...row, ''] : row).join(',');
   });
+  if (chargeRows.length === 0) return [header, ...paymentRows].join('\n');
+  // yyyy-MM-dd sorts as text; a stable sort keeps same-day rows as given.
+  const rows = [...paymentRows, ...chargeRows].sort((a, b) => b.slice(0, 10).localeCompare(a.slice(0, 10)));
   return [header, ...rows].join('\n');
 }
 

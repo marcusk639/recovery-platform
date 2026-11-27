@@ -223,6 +223,33 @@ function payments(Timestamp, now) {
 }
 
 /**
+ * One rent charge for resident A, as chargeResident writes it (functions
+ * src/rent/chargeResident.ts): a full week at $175.00, in CENTS. Fixed dates, so
+ * guest-payment-history.yaml can assert "Rent, Nov 16–22" on any run day. Only the
+ * record: rentOwed is left as the payment flows expect it.
+ */
+function rentCharges(now) {
+  return [
+    {
+      // The server's id: `${guestId}_${from}` (chargeDocId).
+      id: 'guest-a_2026-11-16',
+      guestId: 'guest-a',
+      houseId: HOUSE,
+      guestUserId: uidOf('guest-a'),
+      from: '2026-11-16',
+      through: '2026-11-22',
+      daysCovered: 7,
+      daysInPeriod: 7,
+      amountCents: 17500,
+      rateCents: 17500,
+      rateSource: 'house',
+      frequency: 'weekly',
+      createdAtMs: now,
+    },
+  ];
+}
+
+/**
  * Document records for guest-my-documents.yaml: one filed under guest-a's own
  * record and one under guest-b's, which guest-a must not see. Records only;
  * the flow lists them and opens none (the emulator can't sign links).
@@ -290,4 +317,5 @@ module.exports = {
   house,
   activity,
   payments,
+  rentCharges,
 };
