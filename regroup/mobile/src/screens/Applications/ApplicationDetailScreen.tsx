@@ -28,7 +28,7 @@ export default function ApplicationDetailScreen() {
 
   const [note, setNote] = useState('');
   // Owners and managers only (owner decision 2026-11-27).
-  const access = useApplicationsAccess(houseId);
+  const { access, retry } = useApplicationsAccess(houseId);
   const { data: apps, isLoading } = useHouseApplications(houseId, access === 'yes');
   const app = apps?.find(a => a.id === appId);
   const updateMutation = useUpdateApplicationStatus(houseId);
@@ -102,7 +102,7 @@ export default function ApplicationDetailScreen() {
   };
 
   if (access !== 'yes') {
-    return <ApplicationsAccessState access={access} />;
+    return <ApplicationsAccessState access={access} retry={retry} />;
   }
 
   if (isLoading) {

@@ -19,8 +19,12 @@ jest.mock('../../../state/queries/applicationQueries', () => ({
   useHouseApplications: (...args: unknown[]) => mockUseHouseApplications(...args),
   useUpdateApplicationStatus: () => ({ mutateAsync: jest.fn(), isPending: false }),
 }));
-let mockAccess: 'yes' | 'no' | 'checking' = 'yes';
-const mockUseApplicationsAccess = jest.fn((_houseId: string) => mockAccess);
+let mockAccess: 'yes' | 'no' | 'checking' | 'error' = 'yes';
+const mockRetry = jest.fn();
+const mockUseApplicationsAccess = jest.fn((_houseId: string) => ({
+  access: mockAccess,
+  retry: mockRetry,
+}));
 jest.mock('../../../state/queries/houseTierQueries', () => ({
   useApplicationsAccess: (houseId: string) => mockUseApplicationsAccess(houseId),
 }));
@@ -37,6 +41,14 @@ jest.mock('../../../components/rats-loading-indicator/rats-loading-indicator', (
   const { View } = require('react-native');
   return () => <View testID="loading-indicator" />;
 });
+jest.mock('../../../components/rats-button/rats-button', () => {
+  const { TouchableOpacity, Text } = require('react-native');
+  return ({ title, onPress, testID }: any) => (
+    <TouchableOpacity testID={testID} onPress={onPress}>
+      <Text>{title}</Text>
+    </TouchableOpacity>
+  );
+});
 jest.mock('../../../components/rats-text', () => ({
   RatsText: ({ text }: { text: string }) => {
     const { Text } = require('react-native');
@@ -45,10 +57,13 @@ jest.mock('../../../components/rats-text', () => ({
 }));
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import ApplicationListScreen from '../ApplicationListScreen';
 import ApplicationDetailScreen from '../ApplicationDetailScreen';
-import { APPLICATIONS_NO_ACCESS_MESSAGE } from '../ApplicationsAccessState';
+import {
+  APPLICATIONS_ACCESS_ERROR_MESSAGE,
+  APPLICATIONS_NO_ACCESS_MESSAGE,
+} from '../ApplicationsAccessState';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -78,6 +93,16 @@ describe.each([
     expect(getByTestId('applications-no-access')).toBeTruthy();
     expect(getByText(APPLICATIONS_NO_ACCESS_MESSAGE)).toBeTruthy();
     expect(queryByText('Alice Applicant')).toBeNull();
+  });
+
+  it('offers a retry, never a refusal, when the tier could not be read', () => {
+    mockAccess = 'error';
+    const { getByTestId, getByText, queryByText } = render(<Screen />);
+    expect(mockUseHouseApplications).not.toHaveBeenCalledWith('house-1', true);
+    expect(getByText(APPLICATIONS_ACCESS_ERROR_MESSAGE)).toBeTruthy();
+    expect(queryByText(APPLICATIONS_NO_ACCESS_MESSAGE)).toBeNull();
+    fireEvent.press(getByTestId('applications-access-retry'));
+    expect(mockRetry).toHaveBeenCalledTimes(1);
   });
 
   it('waits, reading nothing, while the tier loads', () => {

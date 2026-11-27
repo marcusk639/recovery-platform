@@ -74,5 +74,23 @@ export const useMayEditGuestMoney = (
  */
 export const useMayReviewApplications = useMayEditRentMoney;
 
-/** The same check for the application screens, which wait for the answer. */
-export const useApplicationsAccess = useHouseMoneyAccess;
+export type ApplicationsAccess = 'yes' | 'no' | 'checking' | 'error';
+
+/**
+ * The same check for the application screens, which wait for the answer:
+ * 'checking' while the tier loads, 'error' when it could not be read (the
+ * screen offers a retry rather than telling a manager they may not), 'no'
+ * once it is known to be a peer leader's or missing.
+ */
+export const useApplicationsAccess = (
+  houseId: string,
+): { access: ApplicationsAccess; retry: () => void } => {
+  const { data, status, refetch } = useMyHouseTiers(!!houseId);
+  const retry = () => {
+    refetch();
+  };
+  if (!houseId) return { access: 'no', retry };
+  if (status === 'pending') return { access: 'checking', retry };
+  if (status === 'error') return { access: 'error', retry };
+  return { access: RENT_MONEY_TIERS.has(data?.[houseId] ?? '') ? 'yes' : 'no', retry };
+};

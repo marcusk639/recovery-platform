@@ -28,7 +28,7 @@ jest.mock('../../state/queries/applicationQueries', () => ({
 
 // An owner or manager: the application screens are theirs only.
 jest.mock('../../state/queries/houseTierQueries', () => ({
-  useApplicationsAccess: () => 'yes',
+  useApplicationsAccess: () => ({ access: 'yes', retry: jest.fn() }),
 }));
 
 jest.mock('../../hooks/useSelectedHouse', () => ({

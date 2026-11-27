@@ -57,7 +57,7 @@ export default function ApplicationListScreen() {
 
   // Owners and managers only (owner decision 2026-11-27): a peer leader's
   // read is refused by the rules, so it is never made.
-  const access = useApplicationsAccess(houseId);
+  const { access, retry } = useApplicationsAccess(houseId);
   const { data: apps, isLoading } = useHouseApplications(houseId, access === 'yes');
   const filtered = (apps ?? []).filter(
     a => statusToTab(a.status) === activeTab,
@@ -67,7 +67,7 @@ export default function ApplicationListScreen() {
     (apps ?? []).filter(a => statusToTab(a.status) === tab).length;
 
   if (access !== 'yes') {
-    return <ApplicationsAccessState access={access} />;
+    return <ApplicationsAccessState access={access} retry={retry} />;
   }
 
   return (
