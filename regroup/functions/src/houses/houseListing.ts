@@ -9,8 +9,9 @@
  * public fields live in their own server-written document. Only the fields
  * below are copied, each only with its expected type. Left out on purpose:
  * the street address and exact coordinates (a sober living house's residents
- * may not want it findable; the geohash is cut to ~1 km), rooms and beds
- * (they name residents), health, chores, phases, disputes, complaints,
+ * may not want it findable; the geohash is cut to ~1 km), rooms, beds and
+ * phases (rooms and beds name residents; only their counts are kept),
+ * health, chores, disputes, complaints,
  * issues, applications, the house code, staff and owner ids, and all
  * subscription and Stripe fields.
  *

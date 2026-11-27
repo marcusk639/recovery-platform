@@ -137,3 +137,40 @@ it('lists nothing for a demo house', async () => {
   expect(await syncHouseListing(H)).toBe('unchanged');
   expect(listing()).toBeUndefined();
 });
+
+// Two writes to a house close together: the older event's handler reads the
+// house, the newer write lands and its handler syncs, then the older handler
+// writes. Reading and writing in one transaction makes the older handler see
+// the newer house instead of writing a listing for a house that is gone.
+it('does not restore a stale listing when the house changes mid-sync', async () => {
+  const api = require('../helpers/memFirestore').apiFirestore;
+  const realDoc = api.houseCollection.doc;
+  mem.seed(`houses/${H}`, house());
+  await syncHouseListing(H);
+  // The older event: a resident moved in, so its handler has a listing to write.
+  mem.seed(`houses/${H}`, house({ currentCapacity: 3 }));
+  let raced = false;
+  api.houseCollection.doc = (id: string) => {
+    const ref = realDoc(id);
+    return {
+      ...ref,
+      get: async () => {
+        const snap = await ref.get();
+        if (!raced) {
+          raced = true;
+          // The subscription lapses after this handler read the house.
+          mem.seed(`houses/${H}`, house({ subscriptionStatus: 'canceled' }));
+          await syncHouseListing(H);
+        }
+        return snap;
+      },
+    };
+  };
+  try {
+    await syncHouseListing(H);
+  } finally {
+    api.houseCollection.doc = realDoc;
+  }
+  expect(raced).toBe(true);
+  expect(listing()).toBeUndefined();
+});

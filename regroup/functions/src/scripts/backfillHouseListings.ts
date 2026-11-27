@@ -13,6 +13,9 @@
  *
  * Run it after the functions deploy, so the trigger covers every write from
  * then on. Re-running is safe: an unchanged listing is not rewritten.
+ * It plans every house from one read, so a house written while it runs can
+ * get a listing from before that write: run the dry run again afterwards,
+ * and apply again if it reports any change.
  * Logs counts and house ids only.
  */
 import './scriptBootstrap';
