@@ -1,0 +1,67 @@
+# Resident applications are for the house's owners and managers (owner
+# decision 2026-11-27). A peer leader of the house sees no Applications card on
+# the House tab, and the rules refuse their reads of the house's applications;
+# the owner still reads them (operator-applications.yaml covers deciding one).
+# Persona: a peer leader of test-house-123, added by
+# maestro/scripts/maestro-js/seed-peer-leader.js (the seed has none), and the
+# seeded manager, who owns the house.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu -e E2E_TEST_PASSWORD=... maestro/flows/peer-leader-applications.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - applications
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runScript:
+    file: ../scripts/maestro-js/seed-peer-leader.js
+    env:
+      HOUSE_ID: test-house-123
+      EMAIL: test-peer-leader@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+# The rules: the peer leader is refused, the owner is not.
+- runScript:
+    file: ../scripts/maestro-js/applications-read-as.js
+    env:
+      EMAIL: test-peer-leader@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+      HOUSE_ID: test-house-123
+      APP_ID: test-app-1
+- assertTrue:
+    condition: ${output.docStatus === 403 && output.listStatus === 403}
+    label: the rules refuse a peer leader's reads of the house's applications
+- runScript:
+    file: ../scripts/maestro-js/applications-read-as.js
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+      HOUSE_ID: test-house-123
+      APP_ID: test-app-1
+- assertTrue:
+    condition: ${output.docStatus === 200 && output.listStatus === 200}
+    label: the owner still reads them
+# The app: no Applications card for the peer leader.
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-peer-leader@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+# Resident Intake, a staff card the peer leader keeps, sits right above where
+# the Applications card was, at the end of a traditional house's list (Manage
+# Guests is the owner's). Scroll to it and past it, to the end of the list.
+- scrollUntilVisible:
+    element:
+      text: ".*Onboard a new resident.*"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- scroll
+- assertVisible:
+    text: ".*Onboard a new resident.*"
+- assertNotVisible:
+    text: ".*Review resident applications.*"
+- runFlow:
+    file: ../subflows/logout.yaml

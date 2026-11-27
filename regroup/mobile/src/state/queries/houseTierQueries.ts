@@ -50,3 +50,15 @@ export const useHouseMoneyAccess = (
  * offered.
  */
 export const useMayViewHouseMoney = useMayEditRentMoney;
+
+/**
+ * Whether the caller may review and decide the house's resident applications:
+ * owners and managers, not peer leaders (owner decision 2026-11-27). The
+ * applications rules check the same tiers (callerRank >= 2). False while the
+ * tier is loading or could not be read, so an entry point the rules would
+ * refuse is never offered.
+ */
+export const useMayReviewApplications = useMayEditRentMoney;
+
+/** The same check for the application screens, which wait for the answer. */
+export const useApplicationsAccess = useHouseMoneyAccess;

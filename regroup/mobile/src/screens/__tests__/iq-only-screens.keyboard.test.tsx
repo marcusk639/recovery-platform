@@ -26,6 +26,11 @@ jest.mock('../../state/queries/applicationQueries', () => ({
   useUpdateApplicationStatus: () => ({ mutateAsync: jest.fn(), isPending: false }),
 }));
 
+// An owner or manager: the application screens are theirs only.
+jest.mock('../../state/queries/houseTierQueries', () => ({
+  useApplicationsAccess: () => 'yes',
+}));
+
 jest.mock('../../hooks/useSelectedHouse', () => ({
   useSelectedHouse: () => ({ house: { id: 'h1', name: 'House' }, houseId: 'h1' }),
 }));

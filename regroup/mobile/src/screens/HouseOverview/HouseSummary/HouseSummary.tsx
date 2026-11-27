@@ -19,6 +19,7 @@ import { View } from 'react-native';
 // Hooks
 import { useGuests } from '../../../state/queries';
 import { useHouseApplications } from '../../../state/queries/applicationQueries';
+import { useMayReviewApplications } from '../../../state/queries/houseTierQueries';
 import { useHouseWeekStats } from '../../../state/queries/activityQueries';
 import { useCurrentWeek } from '../../../hooks/activity/useCurrentWeek';
 import { useAppSelector } from '../../../state/store';
@@ -126,8 +127,14 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
   const { data: queryGuests } = useGuests(house?.id || '', !!house?.id);
 
   // Fetch pending application count for operator badge
-  // Only admins may read applications; a resident's query is refused (#197).
-  const { data: appList } = useHouseApplications(house?.id || '', isHouseStaff);
+  // Only owners and managers may read applications (owner decision
+  // 2026-11-27): a resident's or a peer leader's query is refused (#197), so
+  // neither makes it, and the Applications card is theirs only.
+  const mayReviewApplications = useMayReviewApplications(house?.id ?? '');
+  const { data: appList } = useHouseApplications(
+    house?.id || '',
+    isHouseStaff && mayReviewApplications,
+  );
   const pendingCount = (appList ?? []).filter(
     (a: { status: string }) => a.status === 'pending',
   ).length;
@@ -296,14 +303,16 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
           navigation.navigate(Routes.ResidentIntake, { houseId: house.id })
         }
       />
-      <Section
-        name="Applications"
-        description="Review resident applications"
-        boxedIconName="file-alt"
-        iconBackgroundColor={color.cobalt}
-        notifications={pendingCount}
-        onPress={() => navigation.navigate(Routes.ApplicationList)}
-      />
+      {mayReviewApplications && (
+        <Section
+          name="Applications"
+          description="Review resident applications"
+          boxedIconName="file-alt"
+          iconBackgroundColor={color.cobalt}
+          notifications={pendingCount}
+          onPress={() => navigation.navigate(Routes.ApplicationList)}
+        />
+      )}
       {house.houseType === 'oxford' && (
         <>
           <Section

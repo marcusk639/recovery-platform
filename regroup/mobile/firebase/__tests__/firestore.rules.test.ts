@@ -581,7 +581,15 @@ describe("houses/{houseId}/applications/{appId}", () => {
       await assertSucceeds(getDoc(appDoc(ctx)));
     });
 
-    it("allows house admin to read applications", async () => {
+    // Owners and managers only (owner decision 2026-11-27); peer leaders are
+    // covered in applicationsAccess.rules.test.ts.
+    it("allows a manager of the house to read applications", async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context
+          .firestore()
+          .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+          .set({ houseId: HOUSE_ID, tier: "manager" });
+      });
       const ctx = testEnv.authenticatedContext(ADMIN_UID, {
         admin: { [HOUSE_ID]: true },
       });
@@ -667,7 +675,13 @@ describe("houses/{houseId}/applications/{appId}", () => {
       });
     });
 
-    it("allows house admin to update status", async () => {
+    it("allows a manager of the house to update status", async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context
+          .firestore()
+          .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+          .set({ houseId: HOUSE_ID, tier: "manager" });
+      });
       const ctx = testEnv.authenticatedContext(ADMIN_UID, {
         admin: { [HOUSE_ID]: true },
       });

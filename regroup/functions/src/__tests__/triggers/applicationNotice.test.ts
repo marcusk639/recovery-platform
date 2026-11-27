@@ -54,10 +54,11 @@ describe('notifyOperatorOnApplication', () => {
     expect(trigger.path).toBe('houses/{houseId}/applications/{appId}');
   });
 
-  it('notifies each staff uid once, plus the superAdminId, never adminIds entries', async () => {
+  it('notifies each owner and manager uid once, plus the superAdminId, never adminIds entries', async () => {
     await trigger.handler(event({ applicantName: 'Sam' }));
 
-    expect(staffUids).toHaveBeenCalledWith('h1');
+    // Peer leaders may not read applications (owner decision 2026-11-27).
+    expect(staffUids).toHaveBeenCalledWith('h1', { peerLeaders: false });
     expect(recipients()).toEqual(['manager-uid', 'owner-uid']);
     expect(recipients()).not.toContain('admin-record-id');
     expect(batchSet.mock.calls[0][1]).toMatchObject({
