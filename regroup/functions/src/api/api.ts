@@ -29,6 +29,22 @@ import { AAMeetingResponse } from "../entities/AAMeetingResponse";
 import { getNaMeetings } from "./firestore";
 import { RatsMeeting } from "../entities/Meeting";
 
+// Every Maps URL holds the API key (and a geocode URL the address). An axios
+// error keeps the URL in config, request and toJSON(), so a caller logging it
+// would log the key. Rethrow a bare error carrying only the status.
+const mapsGet = async <T>(url: string): Promise<T> => {
+  try {
+    const response = await Axios.get<T>(url);
+    return response.data;
+  } catch (error) {
+    const failure = error as
+      | { response?: { status?: number }; code?: string }
+      | undefined;
+    const reason = failure?.response?.status ?? failure?.code ?? "no response";
+    throw new Error(`Google Maps request failed (${reason})`);
+  }
+};
+
 export const getAreaMeetings = async (areaApi: string) => {
   const meetings = await Axios.get<MeetingLocation[]>(areaApi);
   return meetings.data;
@@ -43,20 +59,15 @@ export const reverseGeocode = async (
   lat: number,
   lng: number,
 ): Promise<GeocodeResponse> => {
-  const location = await Axios.get<GeocodeResponse>(REVERSE_GEOCODE(lat, lng));
-  return location.data;
+  return mapsGet<GeocodeResponse>(REVERSE_GEOCODE(lat, lng));
 };
 
 export const geocode = async (street: string, city: string, state: string) => {
-  const location = await Axios.get<GeocodeResponse>(
-    GEOCODE(street, city, state),
-  );
-  return location.data;
+  return mapsGet<GeocodeResponse>(GEOCODE(street, city, state));
 };
 
 export const partialGeocode = async (query: string) => {
-  const location = await Axios.get<GeocodeResponse>(PARTIAL_GEOCODE(query));
-  return location.data;
+  return mapsGet<GeocodeResponse>(PARTIAL_GEOCODE(query));
 };
 
 /**
@@ -85,8 +96,8 @@ export const getTimezone = async (
   const time = _time || new Date().getUTCSeconds();
   try {
     const url = timezoneUrl(lat, lng, time);
-    const result = await Axios.get<{ timeZoneId: string }>(url);
-    return result.data.timeZoneId;
+    const result = await mapsGet<{ timeZoneId: string }>(url);
+    return result.timeZoneId;
   } catch (error) {
     return "unknown";
   }

@@ -1,5 +1,7 @@
 // Custom meetings are searchable from every house (owner decision), so the
 // result must not say which resident added a meeting or which house owns it.
+// Owner rule: a custom meeting shows what a directory (Meeting Guide) meeting
+// shows, plus daysAndTimes, which is where a custom meeting keeps its schedule.
 // Drives the real findMeetings -> getCustomMeetings path; only the Firestore
 // read and the recovery-api directory are mocked.
 
@@ -31,29 +33,35 @@ jest.mock('../../api/firestore', () => ({
 
 import { findMeetings } from '../../callable/meetings';
 import { toPublicMeeting } from '../../util/meetings';
+import { mapDirectoryToRats } from '../../util/directoryMapping';
+import { DirectoryMeeting } from '../../entities/DirectoryMeeting';
 
-const PUBLIC_KEYS = [
-  'id',
-  'name',
-  'time',
-  'day',
-  'daysAndTimes',
-  'type',
-  'types',
-  'street',
-  'city',
-  'state',
-  'zip',
-  'locationName',
-  'lat',
-  'lng',
-  'online',
-  'link',
-  'onlineNotes',
-  'verified',
-  'Location',
-  'dataAsOf',
-];
+const fullDirectoryMeeting: DirectoryMeeting = {
+  id: 'dir-1',
+  source: 'external',
+  provider: 'AA',
+  name: 'AA Meeting',
+  day: 'monday',
+  time: '19:30',
+  location: {
+    address: '1 Main St',
+    city: 'Austin',
+    state: 'TX',
+    zip: '78701',
+    lat: 30.2,
+    lng: -97.7,
+  },
+  online: true,
+  link: 'https://zoom.example/j/9',
+  onlineNotes: 'Use the side door',
+  dataAsOf: '2026-11-01',
+};
+
+// The fields a directory search result carries when every field is set.
+const DIRECTORY_KEYS = Object.entries(mapDirectoryToRats(fullDirectoryMeeting))
+  .filter(([, value]) => value !== undefined)
+  .map(([key]) => key);
+const PUBLIC_KEYS = [...DIRECTORY_KEYS, 'daysAndTimes'];
 const PRIVATE_KEYS = ['addedBy', 'houseId', 'createdAt', 'updatedAt', 'forced'];
 
 const callerLocation = { lat: 30.267, lng: -97.743 };
@@ -78,7 +86,9 @@ const houseBOnlineMeeting = {
   online: true,
   link: 'https://zoom.example/j/123',
   onlineNotes: 'Passcode on the house board',
+  dataAsOf: '2026-11-01',
   verified: false,
+  Location: ['Back room', '9 Elm St', 'Austin, TX 78701'],
   daysAndTimes: { monday: ['19:00'] },
   addedBy: 'Jane Resident',
   houseId: 'house-b',
@@ -140,6 +150,12 @@ describe.each(['Custom', 'all'])('findMeetings type %s: custom meeting fields', 
     const results = await search(type, { name: 'house b' });
     expect(results.length).toBeGreaterThan(0);
     expectOnlyPublicKeys(results);
+  });
+
+  it('returns exactly the fields a directory meeting shows, plus daysAndTimes', async () => {
+    const results = await search(type);
+    const online = results.find((m: { id: string }) => m.id === 'custom-b-1');
+    expect(Object.keys(online).sort()).toEqual([...PUBLIC_KEYS].sort());
   });
 
   it('keeps the link and online notes of a custom online meeting', async () => {

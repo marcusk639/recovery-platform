@@ -31,8 +31,9 @@ const getMeetingsWithinDistance = (
   );
 };
 
-// Custom meetings are searchable from every house, so a result carries only what
-// the search screen shows: never who added the meeting or which house owns it.
+// Custom meetings are searchable from every house, so a result carries what a
+// directory meeting carries (mapDirectoryToRats), plus daysAndTimes, where a
+// custom meeting keeps its schedule: never who added it or which house owns it.
 // An allowlist, so a field added to meetings later stays out of results.
 const PUBLIC_MEETING_FIELDS = [
   "id",
@@ -41,19 +42,15 @@ const PUBLIC_MEETING_FIELDS = [
   "day",
   "daysAndTimes",
   "type",
-  "types",
   "street",
   "city",
   "state",
   "zip",
-  "locationName",
   "lat",
   "lng",
   "online",
   "link",
   "onlineNotes",
-  "verified",
-  "Location",
   "dataAsOf",
 ] as const;
 
