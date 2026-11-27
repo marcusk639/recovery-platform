@@ -112,10 +112,11 @@ jest.mock(
 
 jest.mock("../../../components/avatar-item", () => {
   const { View, Text } = require("react-native");
-  return ({ name, type }: any) => (
+  return ({ name, type, avatarUrl }: any) => (
     <View testID="avatar-item">
       <Text testID="avatar-name">{name}</Text>
       <Text testID="avatar-type">{type}</Text>
+      <Text testID="avatar-url">{avatarUrl}</Text>
     </View>
   );
 });
@@ -492,6 +493,37 @@ describe("PersonalScreen", () => {
     it("displays admin full name when user is an admin", () => {
       const { getByTestId } = renderScreen({ admin: BASE_ADMIN });
       expect(getByTestId("avatar-name").props.children).toBe("Alice Manager");
+    });
+
+    // The user doc can be newer than the admin/guest copy: the profile form
+    // saves the user doc first, and a copy whose own save failed keeps the
+    // old photo.
+    it("shows the account's own saved photo over an older admin copy", () => {
+      const url = "https://storage.example/users%2Fu1%2Favatar?alt=media&v=2";
+      const { getByTestId } = renderScreen({
+        user: { ...BASE_USER_ADMIN, avatar: url },
+        admin: { ...BASE_ADMIN, avatar: "https://storage.example/old.jpg" },
+      });
+      expect(getByTestId("avatar-url").props.children).toBe(url);
+    });
+
+    it("falls back to the admin copy when the account's own value is a phone path", () => {
+      const { getByTestId } = renderScreen({
+        user: { ...BASE_USER_ADMIN, avatar: "file:///var/mobile/IMG_1.jpg" },
+        admin: { ...BASE_ADMIN, avatar: "https://storage.example/a.jpg" },
+      });
+      expect(getByTestId("avatar-url").props.children).toBe("https://storage.example/a.jpg");
+    });
+
+    // "" is every account's default, so on its own it doesn't mean "removed":
+    // the copy is the fallback. A removal saves "" to the copies too, and
+    // EditUserInfoForm refreshes them in the store.
+    it("shows the admin copy's photo when the account's own value is empty", () => {
+      const { getByTestId } = renderScreen({
+        user: { ...BASE_USER_ADMIN, avatar: "" },
+        admin: { ...BASE_ADMIN, avatar: "https://storage.example/a.jpg" },
+      });
+      expect(getByTestId("avatar-url").props.children).toBe("https://storage.example/a.jpg");
     });
 
     it('displays "Admin" role label when user.isAdmin is true', () => {
