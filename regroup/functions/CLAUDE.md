@@ -67,6 +67,7 @@ src/
     account.ts      deleteAccount
     houses.ts       createHouses
     finishOperatorSetup.ts, getTierCatalog.ts
+    getAppConfig.ts  public minimum app version per platform (the app's version gate)
     myHouseTiers.ts  the caller's own tier per house, for the operator portal's display
     resolveFailedPayment.ts  resolveFailedPaymentOffline: money staff mark a failed payment
                      resolved off-platform (status only; payments is server-written)
@@ -126,6 +127,8 @@ Oxford houses are never charged this way: their dues are the members' equal expe
 
 Sales-open switch: `config/sales.open` (`util/salesSwitch.ts`) decides whether new tier subscriptions can start. Missing, non-boolean or unreadable means closed. `createOperatorSubscription` and the canceled branch of `reactivateOperatorSubscription` read it on every call and refuse while it's closed; `getTierCatalog` reports it as `salesOpen` (cached 60s) with `trialDays`. Closed in production from the backend deploy until launch step 10.5; open on staging and the emulators (the payment suite's `globalSetup` opens it). Set it with `npm run switch:set`.
 
+Minimum app version: `config/app.minVersion.{ios,android}` (`x.y` or `x.y.z`), served by the public `getAppConfig`. An app build older than its platform's value shows the update screen; anything missing, malformed or unreadable lets everyone in. Change it without a deploy: `npm run switch:set -- --switch=minVersion --platform=ios --value=1.54` (dry run; add `--apply` to write), and `--value=none` removes it. Callers see a change within 60 s (per-instance cache; the emulator doesn't cache). Set it only once that version is downloadable in that store (launch step 10.6), or nobody on that platform can get in; lowering it or `none` lets them straight back in.
+
 ### Stripe amounts
 
 All Stripe amounts are in **US cents** (integers). `50000` = $500.00. Convert only at the UI boundary — never inside function logic.
@@ -182,6 +185,7 @@ The house's initial `subscriptionStatus` comes from the operator's status: `crea
 - **`createPaymentIntent`** (`callable/payments.ts`): the house must have a Connect account with `stripeStatus === "active"`; currency is USD only; `amount` (integer cents) must be positive and at most what is owed (`rentOwed` + `choreFees`, nothing owed refuses); `paymentMethodType` is `card` (default) or `us_bank_account` and picks the method-aware `computeApplicationFee` (`util/rentFee.ts`). The idempotency key is the client's or `${guestId}-${houseId}-${day}`. Returns `{ clientSecret }`, or `{ alreadyPaid: true }` when Stripe replays an already-succeeded intent.
 - **`listPayments` / `listHousePayments`**: `stripe.charges.list` on the house's connected account (empty when it has none), amounts returned in **dollars** (`amount / 100`). `listPayments` is for the resident named by `guestId` or an admin of their house; `listHousePayments` is house admins only.
 - **`getTierCatalog`** (`callable/getTierCatalog.ts`): **no auth**, by design (the public pricing page a logged-out visitor sees; it returns no user data and no price ids). Prices come from `stripe.prices.retrieve` on the configured price ids, not from the config's `amountCents`; a missing or unretrievable price degrades to `null` for that interval instead of failing the catalog. Per-instance cache: prices 1 h, the sales switch 60 s. Returns `trialDays` and `salesOpen` too.
+- **`getAppConfig`** (`callable/getAppConfig.ts`): **no auth**, by design (the version gate runs before sign-in; it returns no user data). Returns `{ minVersion: { ios: string | null, android: string | null } }` from `config/app`; a missing doc, a value that isn't `x.y[.z]`, or a failed read gives `null` (no minimum), never an error. Cached 60 s per instance (a failed read is not cached; the Functions emulator reads every call).
 - **`deleteAccount`** (`callable/account.ts`, App Store 5.1.1(v)): no input, always the caller's own account. Requires a sign-in at most 300 s old (`auth_time`, else `failed-precondition`); the App Review demo account is refused (`permission-denied`); a subscription that can't be verified as the caller's (`BillingNotVerifiedError`) is `failed-precondition` and is not cancelled; any other failure is `internal`, with `details.partial: true` when earlier steps already removed data. Runs the resumable orchestrator in `accountDeletion/`.
 - **`finishOperatorSetup`** (`callable/finishOperatorSetup.ts`): recovers only houses with a primary owner record for the caller (`house-roles/{houseId}_{uid}`, tier `owner`, `primary: true`); candidates are `users.housesOwned` then the subscription houses map, capped at 25 (`MAX_CANDIDATE_HOUSES`, logged as `truncated`); it re-grants missing house claims and writes the operator setup flags.
 
