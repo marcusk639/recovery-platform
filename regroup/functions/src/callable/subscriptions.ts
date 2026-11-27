@@ -42,7 +42,11 @@ import {
   withinResidentCap,
   totalResidents,
 } from "../util/tierCaps";
-import { isTierAvailableForSale, resolveTierPriceId } from "../util/tierPricing";
+import {
+  isTierAvailableForSale,
+  resolveTierPriceId,
+  storedBillingInterval,
+} from "../util/tierPricing";
 import {
   addHousesToSubscription,
   removeHouseFromSubscription,
@@ -50,6 +54,7 @@ import {
 import { grantPotentialSuperAdminClaim } from "../util/superAdminClaim";
 import { writeOperatorSubscription } from "../util/operatorSubscriptionWrite";
 import {
+  assertCheckoutHeld,
   claimCheckout,
   claimReactivation,
   releaseCheckout,
@@ -65,7 +70,7 @@ import {
   upsertSubscriptionDoc,
   type SubscriptionDoc,
 } from "../api/firestore";
-import { closeOperatorBilling } from "../api/stripeDeletion";
+import { closeOperatorBilling, subscriptionEnded } from "../api/stripeDeletion";
 import { parseInput, safeReturnUrlSchema } from "../validation";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -199,18 +204,40 @@ async function reverseUnrecordedCheckout(
   try {
     await closeOperatorBilling(userId, subscriptionId, customerId);
   } catch (cancelError) {
-    logger.error("Checkout subscription left live with no records: cancel it by hand", {
+    const error = cancelError instanceof Error ? cancelError.message : String(cancelError);
+    // closeOperatorBilling cancels, then deletes the customer: if only the
+    // delete failed (or the cancel's response was lost), nothing bills.
+    if (!(await endedInStripe(subscriptionId))) {
+      logger.error("Checkout subscription left live with no records: cancel it by hand", {
+        userId,
+        subscriptionId,
+        customerId,
+        error,
+      });
+      throw new HttpsError("internal", CHECKOUT_ORPHANED_MESSAGE);
+    }
+    // Nothing bills, but the customer (with the card) may be left in Stripe,
+    // and the restored record no longer names it.
+    logger.error("Checkout subscription cancelled, but its customer may remain: delete it by hand", {
       userId,
       subscriptionId,
       customerId,
-      error: cancelError instanceof Error ? cancelError.message : String(cancelError),
+      error,
     });
-    throw new HttpsError("internal", CHECKOUT_ORPHANED_MESSAGE);
   }
   // Cancelled, so nothing bills: the operator may retry at once, as the
   // message says. (A live orphan above keeps the lock until it expires.)
   await restoreReversedCheckout(claim, subscriptionId);
   throw new HttpsError("internal", CHECKOUT_REVERSED_MESSAGE);
+}
+
+/** Whether Stripe shows the subscription ended; false when it can't be read. */
+async function endedInStripe(subscriptionId: string): Promise<boolean> {
+  try {
+    return await subscriptionEnded(subscriptionId);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -219,10 +246,16 @@ async function reverseUnrecordedCheckout(
  * checkout whose record write failed and whose cancel failed too). Refused, so
  * a retry, another plan or the next day's idempotency key can't add a second.
  */
-async function refuseUnrecordedSubscription(claim: CheckoutClaim, email: string): Promise<void> {
+async function refuseUnrecordedSubscription(
+  claim: CheckoutClaim,
+  email: string,
+  knownCustomerId?: string,
+): Promise<void> {
   let live: Awaited<ReturnType<typeof findLiveSubscriptionForUser>>;
   try {
-    live = await findLiveSubscriptionForUser(claim.uid, email);
+    live = knownCustomerId
+      ? await findLiveSubscriptionForUser(claim.uid, email, knownCustomerId)
+      : await findLiveSubscriptionForUser(claim.uid, email);
   } catch (error) {
     await releaseCheckout(claim);
     logger.error("Checkout could not check Stripe for an existing subscription", {
@@ -305,12 +338,20 @@ export const createOperatorSubscription = onCall(
       );
     }
 
-    const priceId = process.env[tierConfig.priceEnvVar];
-    if (!priceId) {
-      throw new HttpsError(
-        "internal",
-        `Price ID not configured for env var: ${tierConfig.priceEnvVar}`,
-      );
+    // The price of the interval chosen: an annual plan's subscriptions doc
+    // names the annual price, and a missing one is refused before Stripe.
+    const billingInterval = data.billingInterval ?? "month";
+    let priceId: string;
+    try {
+      priceId = resolveTierPriceId(data.houseType, data.tier as TierKey, billingInterval);
+    } catch (error) {
+      logger.error("Checkout price not configured", {
+        houseType: data.houseType,
+        tier: data.tier,
+        billingInterval,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw new HttpsError("internal", "This plan isn't available right now. Please try again later.");
     }
 
     // From the stored record, never the client's subscriptionMetadata: refuses
@@ -337,7 +378,8 @@ export const createOperatorSubscription = onCall(
           data.houseType,
           data.tier as TierKey,
           data.user.id,
-          data.billingInterval ?? "month",
+          billingInterval,
+          { key: String(claim.startedAt), beforeCreate: () => assertCheckoutHeld(claim) },
         );
       } catch (stripeError) {
         // Before any subscription could exist (a declined card, say), free the
@@ -525,13 +567,14 @@ export const reactivateOperatorSubscription = onCall(
       // The checkout lock, then Stripe: no second subscription from a
       // concurrent checkout or Reactivate, or one a failed record write left.
       const claim = await claimReactivation(data.user.id);
-      await refuseUnrecordedSubscription(claim, email);
+      await refuseUnrecordedSubscription(claim, email, storedMetadata.customerId);
       let freshMetadata: Awaited<ReturnType<typeof reactivateSubscription>>;
       try {
         freshMetadata = await reactivateSubscription(
           storedMetadata.customerId,
           storedMetadata,
           data.user.id,
+          { key: String(claim.startedAt), beforeCreate: () => assertCheckoutHeld(claim) },
         );
       } catch (stripeError) {
         // As at checkout: free the lock only when no subscription can exist.
@@ -566,6 +609,7 @@ export const reactivateOperatorSubscription = onCall(
         planId: resolveTierPriceId(
           storedMetadata.houseType as HouseType,
           storedMetadata.tier as TierKey,
+          storedBillingInterval(storedMetadata.billingInterval),
         ),
         guestCount: 0,
         userId: data.user.id,

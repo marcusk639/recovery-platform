@@ -174,6 +174,46 @@ describe('reactivateOperatorSubscription: one subscription per account', () => {
     expect(mockStored!.subscriptionMetadata.checkoutStartedAt).toBeGreaterThan(0);
   });
 
+  // Keyed by day, a restart after the replacement was cancelled the same day got
+  // the cancelled subscription back from Stripe and recorded it as live.
+  it('gives each restart its own Stripe attempt, keyed by its checkout lock', async () => {
+    storeUser(CANCELED);
+    let lockDuringCreate: unknown;
+    mockReactivate.mockImplementation(
+      async (_c: unknown, _m: unknown, _u: unknown, attempt: { beforeCreate: () => Promise<void> }) => {
+        lockDuringCreate = mockStored!.subscriptionMetadata.checkoutStartedAt;
+        await attempt.beforeCreate(); // still holds its lock: goes ahead
+        return { ...NEW_SUB };
+      },
+    );
+    await reactivate();
+    expect(mockReactivate).toHaveBeenCalledWith(
+      'cus_1',
+      expect.anything(),
+      'user-1',
+      expect.objectContaining({ key: String(lockDuringCreate) }),
+    );
+    // The lookup lists the stored customer, which the replacement is created on.
+    expect(mockFindLive).toHaveBeenCalledWith('user-1', 'op@rats-e2e.com', 'cus_1');
+  });
+
+  it('names the annual price on the subscriptions doc when the plan restarted was annual', async () => {
+    process.env.STRIPE_PRICE_TRAD_STARTER_ANNUAL = 'price_starter_year';
+    try {
+      storeUser({ ...CANCELED, billingInterval: 'year' });
+      mockReactivate.mockResolvedValue({ ...NEW_SUB, billingInterval: 'year' });
+      await reactivate();
+      const { upsertSubscriptionDoc } = jest.requireMock<{ upsertSubscriptionDoc: jest.Mock }>(
+        '../../api/firestore',
+      );
+      expect(upsertSubscriptionDoc).toHaveBeenCalledWith(
+        expect.objectContaining({ planId: 'price_starter_year' }),
+      );
+    } finally {
+      delete process.env.STRIPE_PRICE_TRAD_STARTER_ANNUAL;
+    }
+  });
+
   it('refuses a tier no longer for sale, so the operator picks a plan at checkout', async () => {
     storeUser({ ...CANCELED, houseType: 'oxford', tier: 'network' });
     await expect(reactivate()).rejects.toMatchObject({

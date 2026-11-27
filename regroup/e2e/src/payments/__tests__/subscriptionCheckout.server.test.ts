@@ -114,7 +114,7 @@ test('SUB-004: a tier held back from sale is refused, leaving no subscription', 
 
 test('SUB-004: a price that isn’t configured is refused, leaving no subscription', async () => {
   const op = await seedOperator({ status: '' });
-  await expect(runWithEnv({ TIER_BILLING_ENABLED: 'true', STRIPE_PRICE_TRAD_STARTER: '' }, op, checkout(op, 'traditional', 'starter'))).rejects.toThrow(/Price ID not configured/);
+  await expect(runWithEnv({ TIER_BILLING_ENABLED: 'true', STRIPE_PRICE_TRAD_STARTER: '' }, op, checkout(op, 'traditional', 'starter'))).rejects.toThrow(/isn't available right now/);
   expect(await subscriptionsOf(op.email)).toHaveLength(0);
 });
 

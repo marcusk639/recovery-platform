@@ -17,7 +17,11 @@ jest.mock("stripe", () =>
 );
 
 import { logger } from "firebase-functions";
-import { cancelSubscriptionNow, deleteCustomer } from "../../api/stripeDeletion";
+import {
+  cancelSubscriptionNow,
+  deleteCustomer,
+  subscriptionEnded,
+} from "../../api/stripeDeletion";
 
 const warn = jest.spyOn(logger, "warn").mockImplementation(() => undefined);
 
@@ -125,5 +129,25 @@ describe("Stripe deletion helpers", () => {
     );
     await expect(cancelSubscriptionNow("sub_1")).rejects.toThrow("boom");
     expect(mockSubscriptionsRetrieve).not.toHaveBeenCalled();
+  });
+
+  // A reversed checkout asks this when closeOperatorBilling errored: only an
+  // ended subscription is known not to bill.
+  describe("subscriptionEnded", () => {
+    it.each(["canceled", "incomplete_expired"])("is true for a %s subscription", async (status) => {
+      mockSubscriptionsRetrieve.mockResolvedValue({ id: "sub_1", status });
+      await expect(subscriptionEnded("sub_1")).resolves.toBe(true);
+      expect(mockSubscriptionsRetrieve).toHaveBeenCalledWith("sub_1");
+    });
+
+    it.each(["trialing", "active", "past_due"])("is false for a %s subscription", async (status) => {
+      mockSubscriptionsRetrieve.mockResolvedValue({ id: "sub_1", status });
+      await expect(subscriptionEnded("sub_1")).resolves.toBe(false);
+    });
+
+    it("throws when Stripe can't be read, rather than guess", async () => {
+      mockSubscriptionsRetrieve.mockRejectedValue(new Error("network"));
+      await expect(subscriptionEnded("sub_1")).rejects.toThrow("network");
+    });
   });
 });

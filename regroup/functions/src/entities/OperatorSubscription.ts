@@ -1,3 +1,5 @@
+import type { BillingInterval } from "../util/tierPricing";
+
 export default class OperatorSubscription {
   subscriptionId: string = "";
   currentPeriodEnd: number = 0;
@@ -25,6 +27,8 @@ export default class OperatorSubscription {
   tier?: string;
   maxResidents?: number | null;
   maxProperties?: number | null;
+  // Written at checkout and by syncOperatorTier; Reactivate restarts on it.
+  billingInterval?: BillingInterval;
 
   // Tier model uses a single flat-fee line item rather than house/guest items.
   subscriptionItemId?: string;

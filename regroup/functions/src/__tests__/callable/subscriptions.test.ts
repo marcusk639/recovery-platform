@@ -290,6 +290,7 @@ describe("createOperatorSubscription", () => {
       "professional",
       fakeUser.id,
       "month",
+      expect.objectContaining({ key: expect.any(String) }),
     );
   });
 
@@ -343,6 +344,7 @@ describe("createOperatorSubscription", () => {
       "professional",
       fakeUser.id,
       "month",
+      expect.objectContaining({ key: expect.any(String) }),
     );
   });
 
@@ -1380,6 +1382,7 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
       "starter",
       fakeUser.id,
       "month",
+      expect.objectContaining({ key: expect.any(String) }),
     );
     expect(mockInitializeCustomer).not.toHaveBeenCalled();
     // Tier caps from SUBSCRIPTION_TIERS.traditional.starter are persisted.
@@ -1436,6 +1439,7 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
   it("forwards an annual billingInterval to initializeTierCustomer", async () => {
     process.env.TIER_BILLING_ENABLED = "true";
     process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    process.env.STRIPE_PRICE_TRAD_STARTER_ANNUAL = "price_starter_year";
     mockGetUser.mockResolvedValue(freshUser);
     mockInitializeTierCustomer.mockResolvedValue({
       customerId: "cus_tier",
@@ -1462,7 +1466,31 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
       "starter",
       fakeUser.id,
       "year",
+      expect.objectContaining({ key: expect.any(String) }),
     );
+    // The subscriptions doc names the price the plan is on, not the monthly one.
+    expect(mockUpsertSubscriptionDoc).toHaveBeenCalledWith(
+      expect.objectContaining({ planId: "price_starter_year" }),
+    );
+    delete process.env.STRIPE_PRICE_TRAD_STARTER_ANNUAL;
+  });
+
+  it("refuses an annual checkout before Stripe when no annual price is configured", async () => {
+    process.env.TIER_BILLING_ENABLED = "true";
+    process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
+    delete process.env.STRIPE_PRICE_TRAD_STARTER_ANNUAL;
+    mockGetUser.mockResolvedValue(freshUser);
+
+    await expect(
+      call(createOperatorSubscription, {
+        user: fakeUser,
+        paymentMethod: "pm_test",
+        houseType: "traditional",
+        tier: "starter",
+        billingInterval: "year",
+      }),
+    ).rejects.toMatchObject({ code: "internal" });
+    expect(mockInitializeTierCustomer).not.toHaveBeenCalled();
   });
 
   it("rejects an invalid billingInterval with invalid-argument", async () => {

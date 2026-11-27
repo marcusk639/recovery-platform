@@ -366,6 +366,42 @@ describe("subscription lifecycle idempotency keys", () => {
     delete process.env.STRIPE_PRICE_TRAD_PROFESSIONAL;
   });
 
+  // A declined card or a reversed checkout deletes the customer it created.
+  // With one key per day, the retry got that deleted customer back from Stripe
+  // (or, with a new card, a key-reuse error) until the next UTC day. A retry is
+  // a new checkout attempt, under a new lock, so it gets new keys.
+  it("gives each checkout attempt its own keys", async () => {
+    const keysFor = async (attempt: string) => {
+      jest.clearAllMocks();
+      mockCustomersCreate.mockResolvedValue({ id: "cus_new" });
+      mockSetupIntentsCreate.mockResolvedValue({ status: "succeeded" });
+      mockSubscriptionsCreate.mockResolvedValue({
+        id: "sub_1",
+        items: { data: [{ id: "si_1" }] },
+        status: "trialing",
+      });
+      await initializeTierCustomer(
+        "op@example.com",
+        "pm_1",
+        "traditional",
+        "starter",
+        "uid_1",
+        "month",
+        { key: attempt, beforeCreate: async () => undefined },
+      );
+      return [
+        optionsOf(mockCustomersCreate)?.idempotencyKey,
+        optionsOf(mockSubscriptionsCreate)?.idempotencyKey,
+      ];
+    };
+    const [firstCustomer, firstSubscription] = await keysFor("1700000000000");
+    const [retryCustomer, retrySubscription] = await keysFor("1700000060000");
+    expect(retryCustomer).not.toBe(firstCustomer);
+    expect(retrySubscription).not.toBe(firstSubscription);
+    // The same attempt (Stripe's own network retries) keeps its keys.
+    expect(await keysFor("1700000060000")).toEqual([retryCustomer, retrySubscription]);
+  });
+
   it("does not put the operator email in the key", async () => {
     // Keys end up in logs and Stripe request records; keep PII out of them.
     await initializeTierCustomer(
