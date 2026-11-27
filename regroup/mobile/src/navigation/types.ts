@@ -4,6 +4,7 @@ import {
   NavigatorScreenParams,
 } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { BusinessMeeting } from '../entities/oxford/BusinessMeeting';
 
 // Define all route names as constants
 export enum Routes {
@@ -62,6 +63,7 @@ export enum Routes {
   OfficerManagement = 'officerManagement',
   EESTracker = 'eesTracker',
   BusinessMeetings = 'businessMeetings',
+  BusinessMeetingDetail = 'businessMeetingDetail',
   OxfordVoting = 'oxfordVoting',
   CharterCompliance = 'charterCompliance',
 
@@ -113,6 +115,8 @@ export enum Routes {
   PhaseSetup = 'phaseSetup',
   HouseSettings = 'houseSettings',
   StripeSettings = 'stripeSettings',
+  RentSettings = 'rentSettings',
+  GuestBalance = 'guestBalance',
   GuestInfo = 'guestInfo',
   PhaseCustomization = 'phaseCustomization',
   SubscriptionHandler = 'subscriptionHandler',
@@ -198,6 +202,8 @@ export type RootStackParamList = {
   [Routes.PhaseSetup]: undefined;
   [Routes.HouseSettings]: undefined;
   [Routes.StripeSettings]: undefined;
+  [Routes.RentSettings]: undefined;
+  [Routes.GuestBalance]: undefined;
   [Routes.GuestInfo]: { userId: string };
   [Routes.PhaseCustomization]: undefined;
   [Routes.SubscriptionHandler]: undefined;
@@ -217,6 +223,7 @@ export type RootStackParamList = {
   [Routes.OfficerManagement]: undefined;
   [Routes.EESTracker]: undefined;
   [Routes.BusinessMeetings]: undefined;
+  [Routes.BusinessMeetingDetail]: { meeting: BusinessMeeting };
   [Routes.OxfordVoting]: undefined;
   [Routes.CharterCompliance]: undefined;
 
@@ -261,7 +268,11 @@ export type RootStackParamList = {
 
   // Application screens
   [Routes.Apply]: { houseId: string; houseName: string };
-  [Routes.ApplicationStatus]: { houseId: string; houseName?: string };
+  [Routes.ApplicationStatus]: {
+    houseId: string;
+    houseName?: string;
+    applicationId?: string;
+  };
   [Routes.ApplicationList]: undefined;
   [Routes.ApplicationDetail]: { houseId: string; appId: string };
 };

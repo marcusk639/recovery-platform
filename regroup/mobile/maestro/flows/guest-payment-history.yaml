@@ -44,5 +44,16 @@ tags:
     id: "payment-row-e2e-pay-b"
 - assertNotVisible:
     id: "payment-history-empty"
+# The seeded rent charge (seed docs.js rentCharges) shows beside the payments,
+# so the resident sees why the balance went up (rent spec §4.5, launch plan Task 24).
+- scrollUntilVisible:
+    element:
+      id: "charge-row-guest-a_2026-11-16"
+    direction: DOWN
+    timeout: 10000
+- assertVisible:
+    text: "Rent, Nov 16–22"
+- assertVisible:
+    text: ".*175[.]00.*"
 - runFlow:
     file: ../subflows/logout.yaml

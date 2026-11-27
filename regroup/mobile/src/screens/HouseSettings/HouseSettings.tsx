@@ -20,6 +20,7 @@ import {
 } from '../../state/slices/setupSlice';
 import map from 'lodash/map';
 import cloneDeep from 'lodash/cloneDeep';
+import omit from 'lodash/omit';
 import ChoreSetup from '../SetupWizards/ChoreSetup';
 import ManagerSettings from './ManagerSettings';
 import AdminManagement from './AdminManagement';
@@ -104,9 +105,11 @@ const HouseSettings: React.FC<Props> = (props) => {
     async (values: House) => {
       dismissFormModal();
       dispatch(updateSetupHouse(values));
+      // Rent is the Rent screen's alone (it previews charges first). These whole-house
+      // saves start from a cached copy, which would write an older schedule back.
       await updateHouseMutation.mutateAsync({
         houseId: values.id,
-        values,
+        values: omit(values, ['rentFrequency', 'weeklyRent', 'monthlyRent']),
       });
       initializeHouseSetup();
     },
@@ -174,6 +177,8 @@ const HouseSettings: React.FC<Props> = (props) => {
     showFormModal(<HouseSetup {...setupProps()} />, null, true);
   }, [showFormModal, setupProps]);
 
+  const rentOn = house?.rentFrequency === 'weekly' || house?.rentFrequency === 'monthly';
+
   const SETTINGS = useMemo(
     () => ({
       details: {
@@ -218,6 +223,16 @@ const HouseSettings: React.FC<Props> = (props) => {
         iconName: 'user',
         color: color.medium_grey,
       },
+      // Rent spec §4.1: with charging off, the entry prompts the manager to set it up.
+      rent: {
+        action: () => navigation.navigate(Routes.RentSettings),
+        label: 'Rent',
+        description: rentOn
+          ? 'Rent schedule and price'
+          : 'Not set up: residents are not charged rent',
+        iconName: 'money-bill',
+        color: color.medium_grey,
+      },
       payments: {
         action: () => navigation.navigate(Routes.StripeSettings),
         label: 'Payments',
@@ -229,11 +244,27 @@ const HouseSettings: React.FC<Props> = (props) => {
       // rules refuse their reads of the house's payment records.
       ...(mayViewHouseMoney
         ? {
+            // Owner decision 2026-11-27: bulk-adding residents is for owners
+            // and managers too; the screen checks the same itself.
+            guestImport: {
+              action: () => navigation.navigate(Routes.GuestImport),
+              label: 'Import residents from CSV',
+              description: 'Add current residents from a spreadsheet',
+              iconName: 'file-import',
+              color: color.medium_grey,
+            },
             paymentDashboard: {
               action: () => navigation.navigate(Routes.PaymentDashboard),
               label: 'Payment Dashboard',
               description: 'View all resident payment activity',
               iconName: 'chart-bar',
+              color: color.medium_grey,
+            },
+            balances: {
+              action: () => navigation.navigate(Routes.BalanceDashboard),
+              label: 'Balances',
+              description: 'What each resident owes now',
+              iconName: 'balance-scale',
               color: color.medium_grey,
             },
           }
@@ -265,6 +296,7 @@ const HouseSettings: React.FC<Props> = (props) => {
       setupProps,
       navigation,
       mayViewHouseMoney,
+      rentOn,
     ],
   );
 
@@ -307,7 +339,13 @@ const HouseSettings: React.FC<Props> = (props) => {
                   ? 'managers-section'
                   : key === 'guests'
                     ? 'manage-guests-button'
-                    : undefined
+                    : key === 'rent'
+                      ? 'rent-settings-section'
+                      : key === 'guestImport'
+                        ? 'guest-import-section'
+                        : key === 'balances'
+                          ? 'balances-section'
+                          : undefined
               }
             />
           );

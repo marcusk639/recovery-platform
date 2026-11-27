@@ -89,6 +89,11 @@ function maybeFail(op, path) {
   if (i === -1) {
     return;
   }
+  // failNext(op, error, path, { after: n }): let n matching calls through first.
+  if (state.failures[i].after > 0) {
+    state.failures[i].after -= 1;
+    return;
+  }
   const [failure] = state.failures.splice(i, 1);
   throw failure.error;
 }
@@ -250,8 +255,8 @@ function seedCall(name, data) {
 }
 
 /** The next `op` (on `path`, when given) throws `error`. */
-function failNext(op, error, path) {
-  state.failures.push({ op, path, error });
+function failNext(op, error, path, options = {}) {
+  state.failures.push({ op, path, error, after: options.after ?? 0 });
 }
 
 module.exports = {

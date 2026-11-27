@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { format, addDays, parseISO } from 'date-fns';
-import { RootStackParamList } from '../../navigation/types';
+import { RootStackParamList, Routes } from '../../navigation/types';
 import DatePicker from 'react-native-date-picker';
 
 import RatsScrollView from '../../components/rats-scroll-view';
@@ -105,8 +105,9 @@ const BusinessMeetings: React.FC<Props> = ({ navigation }) => {
   const renderMeeting = useCallback(
     ({ item }: { item: BusinessMeeting }) => (
       <TouchableOpacity
+        testID={`business-meeting-row-${item.id}`}
         onPress={() =>
-          navigation.navigate('BusinessMeetingDetail', { meeting: item })
+          navigation.navigate(Routes.BusinessMeetingDetail, { meeting: item })
         }
         style={[
           CARD_STYLE,

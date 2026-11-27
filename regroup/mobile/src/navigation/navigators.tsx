@@ -55,6 +55,8 @@ import GuestList from '../screens/GuestList/GuestList';
 import { PhaseConfigSetup } from '../screens/SetupWizards/PhaseSetup/PhaseConfigSetup';
 import HouseSettings from '../screens/HouseSettings/HouseSettings';
 import StripeSettingsScreen from '../screens/HouseSettings/StripeSettingsScreen';
+import RentSettingsScreen from '../screens/HouseSettings/RentSettingsScreen';
+import GuestBalanceScreen from '../screens/GuestUpdate/GuestBalanceScreen';
 import UserInfo from '../screens/Profile/UserInfo';
 import PhaseCustomization from '../screens/Profile/PhaseCustomization';
 import SubscriptionHandler from '../screens/SubscriptionHandler/SubscriptionHandler';
@@ -65,6 +67,7 @@ import OxfordOnboardingWizard from '../screens/Oxford/OxfordOnboardingWizard';
 import OfficerManagement from '../screens/Oxford/OfficerManagement';
 import EESTracker from '../screens/Oxford/EESTracker';
 import BusinessMeetings from '../screens/Oxford/BusinessMeetings';
+import BusinessMeetingDetail from '../screens/Oxford/BusinessMeetingDetail';
 import OxfordVoting from '../screens/Oxford/Voting';
 import CharterCompliance from '../screens/Oxford/CharterCompliance';
 import { ResidentPayment, PaymentHistory } from '../screens/Payments';
@@ -354,6 +357,14 @@ export const RootNavigator = ({
         name={Routes.StripeSettings}
         component={StripeSettingsScreen}
       />
+      <RootStack.Screen
+        name={Routes.RentSettings}
+        component={RentSettingsScreen}
+      />
+      <RootStack.Screen
+        name={Routes.GuestBalance}
+        component={GuestBalanceScreen}
+      />
       <RootStack.Screen name={Routes.GuestInfo} component={UserInfo} />
       <RootStack.Screen
         name={Routes.PhaseCustomization}
@@ -440,6 +451,10 @@ export const RootNavigator = ({
       <RootStack.Screen
         name={Routes.BusinessMeetings}
         component={BusinessMeetings}
+      />
+      <RootStack.Screen
+        name={Routes.BusinessMeetingDetail}
+        component={BusinessMeetingDetail}
       />
       <RootStack.Screen name={Routes.OxfordVoting} component={OxfordVoting} />
       <RootStack.Screen

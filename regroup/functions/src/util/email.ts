@@ -26,6 +26,9 @@ export const sendEmail = async (email: Email): Promise<void> => {
       text: email.text,
       subject: email.subject,
       ...(email.html ? { html: email.html } : {}),
+      ...(email.clickTracking === false
+        ? { trackingSettings: { clickTracking: { enable: false, enableText: false } } }
+        : {}),
     };
 
     await sendgrid.send(emailData);

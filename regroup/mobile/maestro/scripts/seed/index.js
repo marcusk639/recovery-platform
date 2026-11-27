@@ -152,11 +152,18 @@ async function main() {
   for (const p of [...d.payments(Timestamp, now), ...lapsed.payments]) {
     await db.doc(`payments/${p.id}`).set(p);
   }
+  // Server-written in the app (rentCharges is client read-only); the Admin SDK may.
+  for (const c of d.rentCharges(now)) {
+    await db.doc(`rentCharges/${c.id}`).set(c);
+  }
   for (const doc of [...d.documents(now), ...lapsed.documents]) {
     await db.doc(`documents/${doc.id}`).set(doc);
   }
 
   await db.doc(`houses/${d.HOUSE}/applications/test-app-1`).set(d.application(now));
+  await db
+    .doc(`houses/${d.OXFORD}/business-meetings/e2e-meeting-1`)
+    .set(d.businessMeeting(oxford.uid, now));
 
   // An unredeemed guest invitation with a known token, for the token-form deep
   // link flows (deep-link-invitation-token*.yaml). The doc id is the token

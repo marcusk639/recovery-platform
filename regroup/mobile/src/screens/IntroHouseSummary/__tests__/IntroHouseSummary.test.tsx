@@ -535,12 +535,17 @@ describe("IntroHouseSummary", () => {
       expect(getByTestId("apply-button")).toBeTruthy();
     });
 
-    it("navigates to Signup when pressed", () => {
+    // P5 Task 16 (D1 = option (a)): APPLY opens the in-app application on
+    // the anonymous session, not Signup.
+    it("opens the in-app application for this house when pressed", () => {
       const { getByTestId } = renderScreen({
-        selectedHouse: makeHouse({ id: "house-1" }),
+        selectedHouse: makeHouse({ id: "house-1", name: "Hope House" }),
       });
       fireEvent.press(getByTestId("apply-button"));
-      expect(mockNavigation.navigate).toHaveBeenCalledWith("signup", {});
+      expect(mockNavigation.navigate).toHaveBeenCalledWith("apply", {
+        houseId: "house-1",
+        houseName: "Hope House",
+      });
     });
   });
 });

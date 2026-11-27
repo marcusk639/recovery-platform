@@ -160,13 +160,14 @@ jest.mock('../../../components/screen-header', () => {
 jest.mock('../../../components/rats-interactable-section', () => {
   const React = require('react');
   const { TouchableOpacity, Text } = require('react-native');
-  return ({ name, onPress, testID }: any) =>
+  return ({ name, onPress, testID, description }: any) =>
     React.createElement(
       TouchableOpacity,
       {
         onPress,
         testID: testID || `section-${name}`,
         accessibilityLabel: name,
+        accessibilityHint: description,
       },
       React.createElement(Text, null, name),
     );
@@ -429,6 +430,43 @@ describe('HouseSettings', () => {
       }
     });
 
+    // P5 Tasks 17 and 18: entry points for two screens nothing opened.
+    it('renders the CSV import entry next to Guests', () => {
+      const store = buildStore();
+      const { getByText } = renderScreen(store);
+      expect(getByText('Import residents from CSV')).toBeTruthy();
+    });
+
+    // Owner decision 2026-11-27: bulk-adding residents is for owners and
+    // managers, not peer leaders.
+    it('hides the CSV import entry from a peer leader', () => {
+      mockMayViewHouseMoney = false;
+      try {
+        const store = buildStore();
+        const { queryByText } = renderScreen(store);
+        expect(queryByText('Import residents from CSV')).toBeNull();
+      } finally {
+        mockMayViewHouseMoney = true;
+      }
+    });
+
+    it('renders the Balances entry for owners and managers', () => {
+      const store = buildStore();
+      const { getByText } = renderScreen(store);
+      expect(getByText('Balances')).toBeTruthy();
+    });
+
+    it('hides the Balances entry from a peer leader, who may not see house money', () => {
+      mockMayViewHouseMoney = false;
+      try {
+        const store = buildStore();
+        const { queryByText } = renderScreen(store);
+        expect(queryByText('Balances')).toBeNull();
+      } finally {
+        mockMayViewHouseMoney = true;
+      }
+    });
+
     it('renders the Done button', () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);
@@ -468,6 +506,44 @@ describe('HouseSettings', () => {
       const { getByText } = renderScreen(store);
       fireEvent.press(getByText('Payment Dashboard'));
       expect(mockNavigation.navigate).toHaveBeenCalledWith('paymentDashboard');
+    });
+
+    it('navigates to RentSettings when the Rent entry is pressed', () => {
+      const store = buildStore();
+      const { getByTestId } = renderScreen(store);
+      fireEvent.press(getByTestId('rent-settings-section'));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('rentSettings');
+    });
+
+    // Rent spec §4.1: a house with charging off prompts the manager to set it up.
+    it('the Rent entry says rent is not set up while charging is off', () => {
+      const store = buildStore({ ...BASE_HOUSE, rentFrequency: 'both' });
+      const { getByTestId } = renderScreen(store);
+      expect(getByTestId('rent-settings-section').props.accessibilityHint).toBe(
+        'Not set up: residents are not charged rent',
+      );
+    });
+
+    it('the Rent entry describes the schedule once charging is on', () => {
+      const store = buildStore({ ...BASE_HOUSE, rentFrequency: 'weekly', weeklyRent: 175 });
+      const { getByTestId } = renderScreen(store);
+      expect(getByTestId('rent-settings-section').props.accessibilityHint).toBe(
+        'Rent schedule and price',
+      );
+    });
+
+    it('navigates to GuestImport when the CSV import entry is pressed', () => {
+      const store = buildStore();
+      const { getByText } = renderScreen(store);
+      fireEvent.press(getByText('Import residents from CSV'));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('guestImport');
+    });
+
+    it('navigates to BalanceDashboard when the Balances entry is pressed', () => {
+      const store = buildStore();
+      const { getByText } = renderScreen(store);
+      fireEvent.press(getByText('Balances'));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith('balanceDashboard');
     });
 
     it('calls navigation.goBack when Done button is pressed', () => {
@@ -577,10 +653,32 @@ describe('HouseSettings', () => {
       const houseSetupElement = mockShowFormModal.mock.calls[0][0];
       await houseSetupElement.props.handleSubmit(BASE_HOUSE);
 
+      // Rent is left to the Rent screen (see below).
+      const { rentFrequency, weeklyRent, monthlyRent, ...withoutRent } = BASE_HOUSE;
       expect(defaultUpdateHouseMutation.mutateAsync).toHaveBeenCalledWith({
         houseId: BASE_HOUSE.id,
-        values: BASE_HOUSE,
+        values: withoutRent,
       });
+    });
+
+    // A Details, Chores or Guests save starts from a cached copy of the house. Sending its
+    // rent back would undo a schedule or price the Rent screen saved meanwhile.
+    it('never writes rentFrequency, weeklyRent or monthlyRent from a whole-house save', async () => {
+      const store = buildStore();
+      const { getByText } = renderScreen(store);
+      fireEvent.press(getByText('Details'));
+      const houseSetupElement = mockShowFormModal.mock.calls[0][0];
+      await houseSetupElement.props.handleSubmit({
+        ...BASE_HOUSE,
+        rentFrequency: 'weekly',
+        weeklyRent: 175,
+        monthlyRent: 800,
+      });
+      const { values } = (defaultUpdateHouseMutation.mutateAsync as jest.Mock).mock.calls[0][0];
+      expect(values).not.toHaveProperty('rentFrequency');
+      expect(values).not.toHaveProperty('weeklyRent');
+      expect(values).not.toHaveProperty('monthlyRent');
+      expect(values).toMatchObject({ name: BASE_HOUSE.name });
     });
 
     it('submits phase updates through the real update-house mutation', async () => {

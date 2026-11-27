@@ -17,6 +17,11 @@ jest.mock('firebase-functions', () => ({
   logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn(), debug: jest.fn() },
 }));
 
+// The per-account limit has its own suite (meetingsRateLimit.test.ts).
+jest.mock('../../util/rateLimit', () => ({
+  enforceAccountRateLimit: jest.fn().mockResolvedValue(undefined),
+}));
+
 const mockFetchDirectoryMeetings = jest.fn();
 jest.mock('../../api/recoveryApi', () => ({
   fetchDirectoryMeetings: mockFetchDirectoryMeetings,

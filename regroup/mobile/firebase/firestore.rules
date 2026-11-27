@@ -503,6 +503,14 @@ service cloud.firestore {
       allow read, update, delete: if isSameUser(resource.data.reporter);
     }
     
+    // An applicant's own applications, across houses: the landing screen's
+    // "Check my application" (owner, 2026-11-27). Only a query filtered on the
+    // caller's own applicantUid passes; staff list a house's applications
+    // through the houses/{houseId}/applications rule below.
+    match /{path=**}/applications/{appId} {
+      allow read: if signedIn() && resource.data.applicantUid == request.auth.uid;
+    }
+
     match /houses/{houseId} {
       allow read: if isGuestOrAdmin([houseId]);
       // Houses are created only by the server-side createHouses callable.
@@ -651,10 +659,42 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // Resident applications: applicant creates own; admin reads + updates status
+      // Resident applications: applicant creates own; admin reads + updates status.
+      // Any session may apply, the app's anonymous one included (P5 D1 = option
+      // (a)), so a create carries exactly the fields submitApplication writes
+      // (services/applications.ts), for this house, as pending: no operator
+      // fields (operatorNote, reviewedBy, ...) and no self-approval.
+      // An application's text field: absent, or a string of at most n characters.
+      function applicationText(d, field, n) {
+        return !(field in d) || (d[field] is string && d[field].size() <= n);
+      }
+
       match /applications/{appId} {
-        allow create: if signedIn() && request.resource.data.applicantUid == request.auth.uid;
+        // One application per applicant per house (owner, 2026-11-27): the id
+        // is `${houseId}_${uid}`, so a second create is an update, which only
+        // house admins may make.
+        allow create: if signedIn()
+          && appId == houseId + '_' + request.auth.uid
+          && exists(/databases/$(database)/documents/houses/$(houseId))
+          && request.resource.data.applicantUid == request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'id', 'houseId', 'applicantUid', 'applicantName', 'applicantEmail',
+            'applicantPhone', 'sobrietyDate', 'programType', 'currentSituation',
+            'references', 'status', 'createdAt', 'updatedAt'])
+          && request.resource.data.houseId == houseId
+          && request.resource.data.get('id', appId) == appId
+          && request.resource.data.status == 'pending'
+          && applicationText(request.resource.data, 'applicantName', 200)
+          && applicationText(request.resource.data, 'applicantEmail', 320)
+          && applicationText(request.resource.data, 'applicantPhone', 40)
+          && applicationText(request.resource.data, 'sobrietyDate', 40)
+          && applicationText(request.resource.data, 'programType', 40)
+          && applicationText(request.resource.data, 'currentSituation', 2000)
+          && applicationText(request.resource.data, 'references', 1000);
         allow read: if signedIn() && (resource.data.applicantUid == request.auth.uid || isAdmin([houseId]));
+        // The applicant's own slot, while it is still empty too: the app reads
+        // it before applying (resource is null then, so the rule above fails).
+        allow get: if signedIn() && appId == houseId + '_' + request.auth.uid;
         allow update: if isAdmin([houseId]);
         allow delete: if false;
       }
@@ -684,10 +724,12 @@ service cloud.firestore {
 
     // Rent charges (functions src/rent/chargeResident): one record per resident
     // and period, written only by the server in the same transaction as the
-    // rentOwed increment. Read like payments: the house's admins, or the
-    // resident the charge is for.
+    // rentOwed increment. Read like payments (owner decision 2026-11-26): the
+    // house's managers and owners (rank >= 2), or the resident the charge is for.
+    // A peer leader also owes rent here, so they read only their own.
     match /rentCharges/{chargeId} {
-      allow read: if isAdmin([resource.data.houseId]) ||
+      allow read: if (isAdmin([resource.data.houseId]) &&
+          callerRank(resource.data.houseId) >= 2) ||
         (isGuest([resource.data.houseId]) && isSameUser(resource.data.guestUserId));
       allow write: if false;
     }
@@ -698,6 +740,13 @@ service cloud.firestore {
     match /rentHouseStates/{houseId} {
       allow read: if isAdmin([houseId]);
       allow write: if false;
+    }
+
+    // Per-account call counters for the paid 12-step meeting callables
+    // (functions util/rateLimit.ts). Server-only: a client that could reset
+    // its own counter would have no limit.
+    match /rateLimits/{limitId} {
+      allow read, write: if false;
     }
 
     // Each resident's chargedThrough / chargeFrom. Server-only: a client that

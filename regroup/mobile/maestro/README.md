@@ -84,12 +84,18 @@ The Storage emulator writes upload chunks under `$TMPDIR/firebase/storage/blobs`
 
 Payments (`seed/docs.js`): resident A has card payments of $22.22, dated 30 days after the seed, and $11.11, five days old. Resident B has $77.77. They are stored as the webhook writes them, with a Timestamp `createdAt`.
 
+Also seeded: a pending application `test-app-1` ("Test Applicant") in the test house, and one upcoming business meeting `e2e-meeting-1` in the Oxford house. `operator-guest-import.yaml` picks `maestro/fixtures/guests.csv` (two fictional residents, one with a quoted comma); `stage-picker-files.sh` stages it beside the PDF.
+
 ## Writing flows
 
 - iOS merges a row's child labels into one accessibility label, often prefixed with an icon glyph: match text with `.*Name.*`.
 - A pushed screen covers the tab bar. To sign out from one, relaunch with `launchApp: { stopApp: true }` (the session is kept), wait for `house-tab`, then run `subflows/logout.yaml`.
 - Elements below the fold need `scrollUntilVisible` before a tap.
 - Android leaves some text out of the accessibility tree (the manual payment modal's title, for one). Wait on a testID, and branch with `runFlow: when: platform:` where the platforms need different steps.
+- `childOf` a plain `View` testID doesn't resolve on iOS. To pin a value to its place, combine `below:` and `above:` text selectors (`operator-balances.yaml`). Maestro text is a regex: escape `$` and `.` in amounts.
+- A screen that renders while its modal is still sliding in can lose a tap: `waitForAnimationToEnd` first, or `retryTapIfNoChange`.
+- Android's document picker opens on Recent, which may not list a pushed file: go to Downloads through "Show roots" (`operator-guest-import.yaml`).
+- Expected values that depend on seeded data are computed from the emulator in a `runScript` (`maestro-js/house-outstanding.js`, `maestro-js/count-where.js`), not typed into the flow.
 - The emulators bind to `127.0.0.1` only (`regroup/firebase.e2e.json`); they have no auth and the functions emulator holds the sandbox Stripe key.
 
 ## Meeting directory
