@@ -6,9 +6,11 @@
 
 class HttpsError extends Error {
   code: string;
-  constructor(code: string, message: string) {
+  details?: unknown;
+  constructor(code: string, message: string, details?: unknown) {
     super(message);
     this.code = code;
+    this.details = details;
   }
 }
 jest.mock('firebase-functions/v2/https', () => ({
@@ -38,11 +40,23 @@ const mockReactivate = jest.fn(async (_customer: string, meta: { houses?: object
   tier: 'professional',
   houses: meta.houses ?? {},
 }));
+const mockFindLive = jest.fn();
+const mockIsUnrecordedReplacement = jest.fn();
 jest.mock('../../api/stripe', () => ({
   reactivateSubscription: (customer: string, meta: { houses?: object }) =>
     mockReactivate(customer, meta),
-  findLiveSubscriptionForUser: async () => null,
+  findLiveSubscriptionForUser: (...a: unknown[]) => mockFindLive(...a),
   failedBeforeSubscription: () => false,
+  // Which live subscription is a replacement is tested in api/reactivate.test.ts.
+  isUnrecordedReplacement: (...a: unknown[]) => mockIsUnrecordedReplacement(...a),
+  replacementMetadataFrom: (sub: { id: string; status: string }) => ({
+    subscriptionId: sub.id,
+    customerId: 'cus_1',
+    status: sub.status,
+    houseType: 'traditional',
+    tier: 'professional',
+    houses: {},
+  }),
 }));
 
 // One stored user doc; getUser returns the copy read before it moved on.
@@ -107,11 +121,13 @@ const setOperatorHousesStatus = () =>
     .setOperatorHousesStatus;
 const loggedError = () =>
   jest.requireMock<{ logger: { error: jest.Mock } }>('firebase-functions').logger.error;
-const UNFINISHED = /plan restarted, but we couldn't finish updating your account/i;
+const UNFINISHED = /plan restarted, but we couldn't finish setting up your account/i;
 
 beforeEach(() => {
   jest.clearAllMocks();
   mockFailRecordWrite = false;
+  mockFindLive.mockResolvedValue(null);
+  mockIsUnrecordedReplacement.mockReturnValue(false);
   process.env.TIER_BILLING_ENABLED = 'true';
   process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = 'price_pro';
 });
@@ -190,4 +206,61 @@ describe('after Stripe created the replacement', () => {
       );
     },
   );
+});
+
+// Seeding the subscriptions doc first doesn't let the webhooks write the record
+// or the houses for a subscription the record doesn't name. So a retry finishes
+// the job: the replacement an earlier attempt left live is recorded instead of
+// refused, and a plan already live has its house statuses set again.
+describe('a retry after the replacement was left unfinished', () => {
+  const LEFT_LIVE = { id: 'sub_new', status: 'active' };
+
+  it('records the replacement left live in Stripe, creating no other', async () => {
+    storeOperator({ h1: { numberOfGuests: 1 } });
+    mockFindLive.mockResolvedValue(LEFT_LIVE);
+    mockIsUnrecordedReplacement.mockReturnValue(true);
+
+    await reactivate();
+
+    expect(mockReactivate).not.toHaveBeenCalled();
+    expect(mockIsUnrecordedReplacement).toHaveBeenCalledWith(
+      LEFT_LIVE,
+      expect.objectContaining({ customerId: 'cus_1', tier: 'professional' }),
+    );
+    expect(mockStored.subscriptionMetadata).toMatchObject({
+      subscriptionId: 'sub_new',
+      status: 'active',
+      houses: { h1: { numberOfGuests: 1 } },
+    });
+    expect(upsertSubscriptionDoc()).toHaveBeenCalledWith(
+      expect.objectContaining({ stripeSubscriptionId: 'sub_new' }),
+    );
+    expect(setOperatorHousesStatus()).toHaveBeenCalledWith('op', 'active');
+  });
+
+  it('still refuses any other live subscription the record does not show', async () => {
+    storeOperator();
+    mockFindLive.mockResolvedValue({ id: 'sub_other', status: 'active' });
+
+    await expect(reactivate()).rejects.toMatchObject({
+      code: 'failed-precondition',
+      details: { reason: 'unrecorded-subscription' },
+    });
+    expect(mockReactivate).not.toHaveBeenCalled();
+    expect(mockStored.subscriptionMetadata.subscriptionId).toBe('sub_old');
+  });
+
+  it('sets the house statuses of a plan already live again', async () => {
+    mockStaleRead = {
+      id: 'op',
+      email: 'op@test.com',
+      subscriptionMetadata: { ...CANCELED, subscriptionId: 'sub_new', status: 'active' },
+    };
+    mockStored = JSON.parse(JSON.stringify(mockStaleRead));
+
+    await reactivate();
+
+    expect(mockReactivate).not.toHaveBeenCalled();
+    expect(setOperatorHousesStatus()).toHaveBeenCalledWith('op', 'active');
+  });
 });

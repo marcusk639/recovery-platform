@@ -31,6 +31,8 @@ import {
   applyBundleDiscountToSubscription,
   failedBeforeSubscription,
   findLiveSubscriptionForUser,
+  isUnrecordedReplacement,
+  replacementMetadataFrom,
 } from "../api/stripe";
 import {
   createStripeClient,
@@ -180,7 +182,7 @@ const SALES_CLOSED_MESSAGE = "Subscriptions open when the new Regroup app is rel
 const CHECKOUT_REVERSED_MESSAGE =
   "We couldn't finish setting up your subscription, so we cancelled it. You have not been charged. Please try again.";
 const REACTIVATE_UNFINISHED_MESSAGE =
-  "Your plan restarted, but we couldn't finish updating your account. Please contact support before trying again.";
+  "Your plan restarted, but we couldn't finish setting up your account. Please try Reactivate again in a few minutes.";
 const CHECKOUT_ORPHANED_MESSAGE =
   "We couldn't finish setting up your subscription. Please contact support before trying again, so you aren't billed twice.";
 
@@ -259,12 +261,14 @@ async function writeStatusOf(
 
 /**
  * Records Reactivate's replacement, which Stripe has already created and, with
- * no trial, charged for. The webhooks find a subscription only through its
- * subscriptions doc, and the replacement's first events can arrive before the
- * record points at it, so the doc is seeded first: if a later write fails, the
- * next event still finds it and writes the status to the record and houses.
- * A failure is logged with the new ids for support, and the operator is told
- * the plan restarted; a retry is refused as unrecorded-subscription until fixed.
+ * no trial, charged for: the subscriptions doc (the webhooks find a
+ * subscription only through it, and its first events can arrive before the
+ * record points at it), the record, then the house statuses. The webhooks
+ * don't write the record or houses for a subscription the record doesn't name,
+ * so a failure here is finished by the operator's next Reactivate: it records
+ * the replacement left live (isUnrecordedReplacement), or, once the record
+ * names it, sets the house statuses again. A failure is logged with the new ids
+ * at ERROR in case that retry never comes.
  */
 async function recordReplacement(
   uid: string,
@@ -313,14 +317,19 @@ async function endedInStripe(subscriptionId: string): Promise<boolean> {
  * checkout whose record write failed and whose cancel failed too). Refused, so
  * a retry, another plan or the next day's idempotency key can't add a second.
  */
-async function refuseUnrecordedSubscription(
+async function refuseUnrecordedSubscription(claim: CheckoutClaim, email: string): Promise<void> {
+  const live = await findUnrecordedSubscription(claim, email);
+  if (live) await refuseUnrecorded(claim, live);
+}
+
+/** The live subscription Stripe holds for the operator that the record doesn't show, or null. */
+async function findUnrecordedSubscription(
   claim: CheckoutClaim,
   email: string,
   knownCustomerId?: string,
-): Promise<void> {
-  let live: Awaited<ReturnType<typeof findLiveSubscriptionForUser>>;
+): Promise<Awaited<ReturnType<typeof findLiveSubscriptionForUser>>> {
   try {
-    live = knownCustomerId
+    return knownCustomerId
       ? await findLiveSubscriptionForUser(claim.uid, email, knownCustomerId)
       : await findLiveSubscriptionForUser(claim.uid, email);
   } catch (error) {
@@ -331,7 +340,12 @@ async function refuseUnrecordedSubscription(
     });
     throw new HttpsError("unavailable", "We couldn't start checkout. Please try again in a minute.");
   }
-  if (!live) return;
+}
+
+async function refuseUnrecorded(
+  claim: CheckoutClaim,
+  live: NonNullable<Awaited<ReturnType<typeof findLiveSubscriptionForUser>>>,
+): Promise<never> {
   await releaseCheckout(claim);
   logger.error("Checkout refused: Stripe has a live subscription the record doesn't show", {
     userId: claim.uid,
@@ -592,8 +606,10 @@ export const reactivateOperatorSubscription = onCall(
     if (status === "active" || status === "trialing") {
       // Already live. Creating another Stripe subscription here would bill the
       // operator twice over and orphan the original, which would keep charging
-      // with nothing in Firestore pointing at it. Nothing changed, so there is
-      // nothing to persist or log.
+      // with nothing in Firestore pointing at it. The house statuses are set
+      // again (idempotent): a replacement whose house write failed after the
+      // record named it is finished here (recordReplacement).
+      await setOperatorHousesStatus(data.user.id, status);
       return { ...data.user, subscriptionMetadata: storedMetadata };
     }
 
@@ -635,19 +651,34 @@ export const reactivateOperatorSubscription = onCall(
       // The checkout lock, then Stripe: no second subscription from a
       // concurrent checkout or Reactivate, or one a failed record write left.
       const claim = await claimReactivation(data.user.id);
-      await refuseUnrecordedSubscription(claim, email, storedMetadata.customerId);
+      const unrecorded = await findUnrecordedSubscription(
+        claim,
+        email,
+        storedMetadata.customerId,
+      );
       let freshMetadata: Awaited<ReturnType<typeof reactivateSubscription>>;
-      try {
-        freshMetadata = await reactivateSubscription(
-          storedMetadata.customerId,
-          storedMetadata,
-          data.user.id,
-          { key: String(claim.startedAt), beforeCreate: () => assertCheckoutHeld(claim) },
-        );
-      } catch (stripeError) {
-        // As at checkout: free the lock only when no subscription can exist.
-        if (failedBeforeSubscription(stripeError)) await releaseCheckout(claim);
-        throw stripeError;
+      if (unrecorded && isUnrecordedReplacement(unrecorded, storedMetadata)) {
+        // An earlier Reactivate's replacement, live in Stripe and paid for, whose
+        // records failed: recorded now instead of refused or created again.
+        logger.warn("Reactivate recording the replacement an earlier attempt left unrecorded", {
+          userId: data.user.id,
+          subscriptionId: unrecorded.id,
+        });
+        freshMetadata = replacementMetadataFrom(unrecorded, storedMetadata, storedMetadata.customerId);
+      } else {
+        if (unrecorded) await refuseUnrecorded(claim, unrecorded);
+        try {
+          freshMetadata = await reactivateSubscription(
+            storedMetadata.customerId,
+            storedMetadata,
+            data.user.id,
+            { key: String(claim.startedAt), beforeCreate: () => assertCheckoutHeld(claim) },
+          );
+        } catch (stripeError) {
+          // As at checkout: free the lock only when no subscription can exist.
+          if (failedBeforeSubscription(stripeError)) await releaseCheckout(claim);
+          throw stripeError;
+        }
       }
       subscriptionMetadata = { ...freshMetadata, status: freshMetadata.status || "pending" };
       replacement = true;

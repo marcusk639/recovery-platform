@@ -1,7 +1,6 @@
-// Writers of one part of subscriptionMetadata write only what they change, in a
-// transaction. Writing back a whole copy read earlier put back what changed in
-// between: the checkout lock erased (a checkout under way refused), or houses
-// createHouses had just added dropped (freed property-cap slots).
+// Writers of part of subscriptionMetadata write only what they change, in a
+// transaction. Writing back a copy read earlier erased a checkout lock taken in
+// between, or dropped houses createHouses had just added (freed cap slots).
 
 class HttpsError extends Error {
   code: string;
@@ -32,9 +31,8 @@ jest.mock('../../api/stripe', () => ({
   uncancelSubscription: jest.fn(async () => ({ status: 'active', cancel_at_period_end: false })),
 }));
 
-// One stored user doc. getUser returns the copy read before the record moved
-// on; transactions read the stored doc. Updates apply dotted keys as Firestore
-// does, so a write of the whole map replaces it.
+// One user doc: getUser returns the copy read before it moved on, transactions
+// the stored doc. Updates apply dotted keys as Firestore does.
 let mockStored: Record<string, any>;
 let mockStaleRead: Record<string, any>;
 const mockApplyUpdate = (data: Record<string, unknown>) => {
@@ -99,7 +97,11 @@ const recordMovedOn = (read: object, now: object) => {
   mockStored = { ...OPERATOR, subscriptionMetadata: now };
 };
 
-beforeEach(() => jest.clearAllMocks());
+const getHouse = () => jest.requireMock<{ getHouse: jest.Mock }>('../../api/firestore').getHouse;
+beforeEach(() => {
+  jest.clearAllMocks();
+  getHouse().mockReset(); // drops a once-value an earlier test left unused (no house)
+});
 
 describe('a resident added or removed', () => {
   it('leaves a checkout lock taken after the read', async () => {
@@ -152,17 +154,16 @@ describe('a resident added or removed', () => {
     expect(mockStored.subscriptionMetadata.houses).toEqual({ h1: { numberOfGuests: 3 } });
   });
 
-  // The invitation check admits a house missing from the owner's map (counting
-  // its pending invitations), so the accepted resident is counted there too,
-  // else every redeem would free a slot and the cap would never hold.
+  // The invitation check admits such a house (deleted: subscriptionFieldWrites).
   it('on accepting an invitation, counts a house missing from the map, and logs it', async () => {
     recordMovedOn({ ...TIER_PLAN, houses: {} }, { ...TIER_PLAN, houses: {} });
+    getHouse().mockResolvedValueOnce({ id: 'h1' });
     await recordResidentAccepted('op', 'h1');
 
     expect(mockStored.subscriptionMetadata.houses).toEqual({ h1: { numberOfGuests: 1 } });
-    const { logger } = jest.requireMock<{ logger: { warn: jest.Mock } }>('firebase-functions');
-    expect(logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining('not on the plan'),
+    const { logger } = jest.requireMock<{ logger: { error: jest.Mock } }>('firebase-functions');
+    expect(logger.error).toHaveBeenCalledWith(
+      expect.stringContaining('property slot'),
       expect.objectContaining({ ownerId: 'op', houseId: 'h1' }),
     );
   });

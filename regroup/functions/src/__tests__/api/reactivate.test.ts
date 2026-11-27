@@ -18,7 +18,11 @@ jest.mock("stripe", () =>
 );
 
 import { logger } from "firebase-functions";
-import { failedBeforeSubscription, reactivateSubscription } from "../../api/stripe";
+import {
+  failedBeforeSubscription,
+  isUnrecordedReplacement,
+  reactivateSubscription,
+} from "../../api/stripe";
 import OperatorSubscription from "../../entities/OperatorSubscription";
 
 const warn = jest.spyOn(logger, "warn").mockImplementation(() => undefined);
@@ -252,5 +256,55 @@ describe("reactivateSubscription", () => {
       expect(error).toBeInstanceOf(Error);
       expect(failedBeforeSubscription(error)).toBe(false);
     });
+  });
+});
+
+// A Reactivate whose records failed after Stripe's create leaves its replacement
+// live. A retry records it instead of being refused, but only when it is that
+// replacement: this operator's (findLiveSubscriptionForUser checks the userId),
+// on the stored customer, on the stored plan's price, and the only item.
+describe("isUnrecordedReplacement", () => {
+  const stored = () =>
+    Object.assign(new OperatorSubscription(), {
+      tier: "standard",
+      houseType: "oxford",
+      billingInterval: "year",
+      customerId: "cus_8",
+      status: "canceled",
+      houses: {},
+    });
+  const live = (over: { customer?: string; price?: string; items?: unknown[] } = {}) =>
+    ({
+      id: "sub_8",
+      status: "active",
+      customer: over.customer ?? "cus_8",
+      metadata: { userId: "uid_8" },
+      items: { data: over.items ?? [{ id: "si_8", price: { id: over.price ?? "price_year" } }] },
+    }) as never;
+
+  beforeEach(() => {
+    process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_month";
+    process.env.STRIPE_PRICE_OXFORD_STANDARD_ANNUAL = "price_year";
+  });
+  afterEach(() => delete process.env.STRIPE_PRICE_OXFORD_STANDARD_ANNUAL);
+
+  it("is true for a subscription on the stored customer at the stored plan's price", () => {
+    expect(isUnrecordedReplacement(live(), stored())).toBe(true);
+  });
+
+  it.each([
+    ["another customer", { customer: "cus_other" }],
+    ["another price (the monthly one)", { price: "price_month" }],
+    [
+      "a second item",
+      { items: [{ id: "si_8", price: { id: "price_year" } }, { id: "si_9", price: { id: "price_x" } }] },
+    ],
+  ])("is false for %s", (_label, over) => {
+    expect(isUnrecordedReplacement(live(over), stored())).toBe(false);
+  });
+
+  it("is false for a plan whose price isn't configured", () => {
+    delete process.env.STRIPE_PRICE_OXFORD_STANDARD_ANNUAL;
+    expect(isUnrecordedReplacement(live(), stored())).toBe(false);
   });
 });

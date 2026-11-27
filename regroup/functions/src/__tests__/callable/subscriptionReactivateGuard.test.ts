@@ -38,6 +38,9 @@ jest.mock('../../api/stripe', () => ({
   uncancelSubscription: jest.fn(),
   findLiveSubscriptionForUser: (...a: unknown[]) => mockFindLive(...a),
   failedBeforeSubscription: (e: { beforeSubscription?: boolean } | null) => !!e?.beforeSubscription,
+  // The live subscriptions here are never Reactivate's own replacement
+  // (subscriptionReactivateReplacement.test.ts covers that one).
+  isUnrecordedReplacement: () => false,
 }));
 
 // One stored user doc, read by getUser and through the guard's transaction.

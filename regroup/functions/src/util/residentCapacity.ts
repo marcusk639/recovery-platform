@@ -1,6 +1,6 @@
 import { logger } from 'firebase-functions';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { getUser, getInvitationsForHouse } from '../api/firestore';
+import { getHouse, getUser, getInvitationsForHouse } from '../api/firestore';
 import { changeSubscriptionHouses } from './operatorSubscriptionWrite';
 import { totalResidents } from './tierCaps';
 import { Invitation, InvitationRole } from '../entities/Invitation';
@@ -106,10 +106,12 @@ export async function assertResidentCapacityAvailable(
  * `numberOfGuests` counter and tier-only guard as updateSubscriptionGuests'
  * add branch, but it neither refuses nor checks the cap: the cap was checked
  * when the invitation was created and redeemed, and the redeem has happened.
- * A house missing from the owner's map is counted there all the same and
- * logged: assertResidentCapacityAvailable admits such a house, so leaving the
- * resident out would let every redeem past the cap. No-op for non-tier
- * subscriptions and when the owner can't be resolved.
+ * A house missing from the owner's map is counted there all the same, which
+ * takes a property slot, and logged at error for ops to reconcile:
+ * assertResidentCapacityAvailable admits such a house, so leaving the resident
+ * out would let every redeem past the cap. A house whose doc is gone (deleted
+ * since the invitation) isn't brought back: onHouseDeleted freed its slot. No-op
+ * for non-tier subscriptions and when the owner can't be resolved.
  */
 export async function recordResidentAccepted(
   ownerId: string | undefined,
@@ -120,14 +122,28 @@ export async function recordResidentAccepted(
   const meta = owner?.subscriptionMetadata;
   if (!meta?.tier) return;
 
+  const houseExists = !!(await getHouse(houseId));
   // From the stored map, writing only it: see changeSubscriptionHouses.
-  let notOnPlan = false;
+  // Set in the transaction's callback, which may run more than once: the last run wins.
+  let outcome = 'counted' as 'counted' | 'added' | 'deleted';
   await changeSubscriptionHouses(ownerId, (houses) => {
-    notOnPlan = !(houseId in houses);
+    if (houseId in houses) {
+      outcome = 'counted';
+    } else if (!houseExists) {
+      outcome = 'deleted';
+      return houses;
+    } else {
+      outcome = 'added';
+    }
     return { ...houses, [houseId]: { numberOfGuests: (houses[houseId]?.numberOfGuests ?? 0) + 1 } };
   });
-  if (notOnPlan) {
-    logger.warn('residentCapacity: accepted resident for a house not on the plan; counted there', {
+  if (outcome === 'added') {
+    logger.error(
+      'residentCapacity: accepted resident for a house not on the plan; it now takes a property slot there',
+      { ownerId, houseId },
+    );
+  } else if (outcome === 'deleted') {
+    logger.warn('residentCapacity: accepted resident for a deleted house; not counted', {
       ownerId,
       houseId,
     });

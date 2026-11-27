@@ -3,10 +3,18 @@
 // changed before the commit, as Firestore's do. mem.beforeCommit lands a
 // competing write between a writer's read and its commit.
 
-jest.mock('../../api/firestore', () => ({
-  ...require('../helpers/memFirestore').apiFirestore,
-  // Stand-in for the real deep strip (the real module needs an initialized app).
-  stripUndefinedDeep: (v: unknown) => JSON.parse(JSON.stringify(v)),
+jest.mock('../../api/firestore', () => {
+  const { apiFirestore, mem } = require('../helpers/memFirestore');
+  return {
+    ...apiFirestore,
+    // Stand-in for the real deep strip (the real module needs an initialized app).
+    stripUndefinedDeep: (v: unknown) => JSON.parse(JSON.stringify(v)),
+    getUser: async (id: string) => mem.get(`users/${id}`),
+    getHouse: async (id: string) => mem.get(`houses/${id}`),
+  };
+});
+jest.mock('firebase-functions', () => ({
+  logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
 
 import { mem } from '../helpers/memFirestore';
@@ -16,6 +24,7 @@ import {
   writeReplacementSubscription,
   type SubscriptionHouses,
 } from '../../util/operatorSubscriptionWrite';
+import { recordResidentAccepted } from '../../util/residentCapacity';
 
 const PLAN = { subscriptionId: 'sub_1', status: 'active', tier: 'professional', maxResidents: 3 };
 const seed = (meta: object, extra: object = {}) =>
@@ -118,5 +127,30 @@ describe('writeReplacementSubscription', () => {
       houses: { h1: { numberOfGuests: 3 } },
     });
     expect(mem.get('users/op')!.potentialSuperAdmin).toBe(false);
+  });
+});
+
+// recordResidentAccepted, through changeSubscriptionHouses: a resident accepted
+// by invitation is counted on the stored map.
+describe('recordResidentAccepted', () => {
+  const TIER = { ...PLAN, houseType: 'traditional' };
+
+  it('counts alongside a racing increment', async () => {
+    seed({ ...TIER, houses: { h1: { numberOfGuests: 1 } } });
+    mem.seed('houses/h1', { id: 'h1' });
+    raceOnce(() => changeSubscriptionHouses('op', addOne));
+    await recordResidentAccepted('op', 'h1');
+
+    expect(stored().houses).toEqual({ h1: { numberOfGuests: 3 } });
+  });
+
+  // A late redeem for a deleted house must not bring back the slot
+  // onHouseDeleted freed: the operator would be over the property cap with a
+  // phantom house. (A house that exists but isn't on the plan is counted.)
+  it("doesn't bring back a house deleted since the invitation", async () => {
+    seed({ ...TIER, houses: { h2: { numberOfGuests: 0 } } });
+    await recordResidentAccepted('op', 'h1');
+
+    expect(stored().houses).toEqual({ h2: { numberOfGuests: 0 } });
   });
 });

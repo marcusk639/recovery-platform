@@ -248,6 +248,62 @@ const assertCustomerOnFile = async (customerId: string, userId?: string): Promis
   }
 };
 
+/**
+ * Reactivate's replacement as the operator record holds it: the stored tier
+ * plan, on the subscription Stripe created for it.
+ */
+export const replacementMetadataFrom = (
+  subscription: Stripe.Subscription,
+  stored: OperatorSubscription,
+  customerId: string,
+): OperatorSubscription => {
+  const houseType = stored.houseType as HouseType;
+  const freshMetadata = new OperatorSubscription();
+  freshMetadata.houseType = houseType;
+  freshMetadata.tier = stored.tier;
+  freshMetadata.billingInterval = storedBillingInterval(stored.billingInterval);
+  // The replacement replaces the whole plan: left at its default false, an
+  // Oxford operator lost the Oxford features they pay for.
+  freshMetadata.oxfordEnabled = houseType === "oxford";
+  freshMetadata.maxResidents = stored.maxResidents;
+  freshMetadata.maxProperties = stored.maxProperties;
+  // Replaced with the stored map when written (writeReplacementSubscription).
+  freshMetadata.houses = stored.houses ?? {};
+  mapSubscriptionToMetadata(subscription, freshMetadata, customerId);
+  freshMetadata.subscriptionItemId = subscription.items.data[0].id;
+  // Stripe's status (incomplete when the first payment needs action), not an assumed "active".
+  freshMetadata.status = subscription.status;
+  return freshMetadata;
+};
+
+/**
+ * Whether a live subscription the record doesn't show is the replacement a
+ * Reactivate left when its writes failed after Stripe's create: on the stored
+ * customer, with the stored plan's price as its only item. (That it is this
+ * operator's, by metadata.userId, findLiveSubscriptionForUser already checked.)
+ * A retry records that one instead of being refused, so the operator isn't
+ * left paying for a plan the record calls canceled; any other is refused.
+ */
+export const isUnrecordedReplacement = (
+  live: Stripe.Subscription,
+  stored: OperatorSubscription,
+): boolean => {
+  const customer = typeof live.customer === "string" ? live.customer : live.customer?.id;
+  const items = live.items?.data ?? [];
+  if (customer !== stored.customerId || items.length !== 1) return false;
+  let price: string;
+  try {
+    price = resolveTierPriceId(
+      stored.houseType as HouseType,
+      stored.tier as TierKey,
+      storedBillingInterval(stored.billingInterval),
+    );
+  } catch {
+    return false;
+  }
+  return (items[0].price?.id ?? items[0].plan?.id) === price;
+};
+
 export const reactivateSubscription = async (
   customerId: string,
   subscriptionMetadata: OperatorSubscription,
@@ -286,22 +342,7 @@ export const reactivateSubscription = async (
       },
       { idempotencyKey: `${reactivateKey}-tier` },
     );
-    const freshMetadata = new OperatorSubscription();
-    freshMetadata.houseType = houseType;
-    freshMetadata.tier = tier;
-    freshMetadata.billingInterval = billingInterval;
-    // The replacement replaces the whole plan: left at its default false, an
-    // Oxford operator lost the Oxford features they pay for.
-    freshMetadata.oxfordEnabled = houseType === "oxford";
-    freshMetadata.maxResidents = subscriptionMetadata.maxResidents;
-    freshMetadata.maxProperties = subscriptionMetadata.maxProperties;
-    // Replaced with the stored map when written (writeReplacementSubscription).
-    freshMetadata.houses = subscriptionMetadata.houses ?? {};
-    mapSubscriptionToMetadata(subscription, freshMetadata, customerId);
-    freshMetadata.subscriptionItemId = subscription.items.data[0].id;
-    // Stripe's status (incomplete when the first payment needs action), not an assumed "active".
-    freshMetadata.status = subscription.status;
-    return freshMetadata;
+    return replacementMetadataFrom(subscription, subscriptionMetadata, customerId);
   }
 
   const subscription = await stripe.subscriptions.create(
