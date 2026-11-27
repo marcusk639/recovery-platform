@@ -17,6 +17,7 @@ import { isNil, map } from "lodash";
 import { Admins } from "../../types";
 import RatsAvatar from "../../components/rats-avatar";
 import RatsButton from "../../components/rats-button/rats-button";
+import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
 import { callNumber } from "../../util/phone";
 import ImageHeader from "../../components/image-header";
 import { getAddressDisplay } from "../../util/address";
@@ -25,7 +26,6 @@ import { houseImage } from "../../../assets/index";
 import WeekStatSummary from "../../components/week-stat-summary";
 import { camelCaseToDisplayForm } from "../../util/display";
 import { useAppSelector } from "../../state/store";
-import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { useHouseListing } from "../../state/queries/houseListingQueries";
 import { STAT_BUTTON_TEXT } from "../../styles/theme";
 
@@ -65,9 +65,14 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
   // RTK Typed Selectors (no more 'as any')
   // A prospective resident is signed out (the app's anonymous session), so
   // this reads the house's public listing, not houses/{id}, which is for its
-  // members only (EMU-009).
-  const { houseId } = useSelectedHouse();
-  const { data: house } = useHouseListing(houseId);
+  // members only (EMU-009). The id comes from the store, not
+  // useSelectedHouse(), which would also read houses/{id} and be refused.
+  const houseId = useAppSelector((state) => state.houses.selectedHouseId);
+  const {
+    data: house,
+    isLoading: loadingListing,
+    isError: listingFailed,
+  } = useHouseListing(houseId);
   const admins = useAppSelector((state) => state.admin.houseAdmins);
   // A signed-out visitor (the anonymous session) sees no ADMINISTRATORS
   // section (owner, 2026-11-27): admins' records aren't public.
@@ -480,8 +485,42 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  if (!house) {
+  if (!houseId) {
     return null;
+  }
+
+  if (!house) {
+    if (loadingListing) {
+      return <RatsLoadingIndicator testID="house-summary-loading" />;
+    }
+    // Delisted since the search, or the read failed. The auth stack has no
+    // header, so give the visitor a way back instead of a blank screen.
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          padding: normalize(20),
+        }}
+      >
+        <RatsText
+          translate={false}
+          text={
+            listingFailed
+              ? "Could not load this house. Please try again."
+              : "This house is no longer listed."
+          }
+          style={{ textAlign: "center", marginBottom: normalize(15) }}
+        />
+        <RatsButton
+          testID="house-summary-back"
+          title="BACK"
+          onPress={() => navigation.goBack()}
+          light
+        />
+      </View>
+    );
   }
 
   return (

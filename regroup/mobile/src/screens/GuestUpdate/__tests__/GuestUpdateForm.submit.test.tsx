@@ -44,7 +44,7 @@ jest.mock('../../../state/queries/guestQueries', () => ({
 // The money fields are shown only to a manager or above
 // (GuestUpdateForm.money.test.tsx); these tests edit them as one.
 jest.mock('../../../state/queries/houseTierQueries', () => ({
-  useMayEditRentMoney: () => true,
+  useMayEditGuestMoney: () => true,
 }));
 
 jest.mock('../../../util/logging', () => ({ logException: jest.fn(), logDebug: jest.fn() }));
@@ -136,12 +136,61 @@ describe('GuestUpdateForm submit guard', () => {
     fireEvent.changeText(getByTestId('guest-rentowed-input'), '400');
     fireEvent.press(getByTestId('create-guest-button'));
 
+    // Rent spec §4.6: say what it is now and ask before saving the typed figure.
     await waitFor(() =>
       expect(Alert.alert).toHaveBeenCalledWith(
         'The balance changed',
-        "Rent owed is now $150.00, probably from a payment. Check it and save again.",
+        'Rent owed is now $150.00, probably from a payment or a rent charge. Save $400.00 anyway?',
+        [
+          expect.objectContaining({ text: 'Cancel', style: 'cancel' }),
+          expect.objectContaining({ text: 'Save $400.00' }),
+        ],
       ),
     );
+  });
+
+  it('confirming saves the typed figure against the balance as it is now', async () => {
+    const { Alert } = require('react-native');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockMutateAsync
+      .mockReset()
+      .mockRejectedValueOnce(
+        Object.assign(new Error('changed'), {
+          kind: 'balance-changed',
+          field: 'rentOwed',
+          currentCents: 67500,
+        }),
+      )
+      .mockResolvedValueOnce(undefined);
+    const { getByTestId } = renderForm();
+
+    fireEvent.changeText(getByTestId('guest-rentowed-input'), '400');
+    fireEvent.press(getByTestId('create-guest-button'));
+    await waitFor(() => expect(alert).toHaveBeenCalled());
+    const buttons = alert.mock.calls[0][2] as Array<{ text: string; onPress?: () => void }>;
+    await act(async () => {
+      buttons.find((b) => b.text === 'Save $400.00')!.onPress!();
+    });
+
+    expect(mockMutateAsync).toHaveBeenCalledTimes(2);
+    expect(mockMutateAsync.mock.calls[1][0].moneyEdits).toEqual({
+      rentOwed: { from: 67500, to: 40000 },
+    });
+  });
+
+  it('cancelling saves nothing more', async () => {
+    const { Alert } = require('react-native');
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockMutateAsync.mockReset().mockRejectedValue(
+      Object.assign(new Error('changed'), { kind: 'balance-changed', field: 'rentOwed', currentCents: 67500 }),
+    );
+    const { getByTestId } = renderForm();
+    fireEvent.changeText(getByTestId('guest-rentowed-input'), '400');
+    fireEvent.press(getByTestId('create-guest-button'));
+    await waitFor(() => expect(alert).toHaveBeenCalled());
+    const buttons = alert.mock.calls[0][2] as Array<{ text: string; onPress?: () => void }>;
+    buttons.find((b) => b.text === 'Cancel')?.onPress?.();
+    expect(mockMutateAsync).toHaveBeenCalledTimes(1);
   });
 });
 

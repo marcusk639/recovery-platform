@@ -26,7 +26,7 @@ const MONEY_FIELD_PLACEHOLDERS: Record<string, string> = {
 const GuestUpdateFormView: React.FC<
   GuestUpdateProps & FormikProps<any>
 > = props => {
-  const { handleSubmit, isSubmitting, status, guest, canEditMoney } = props;
+  const { handleSubmit, isSubmitting, status, guest, canEditMoney, moneyOnly } = props;
 
   const scrollRef = useRef<any>(null);
 
@@ -94,17 +94,17 @@ const GuestUpdateFormView: React.FC<
         scrollRef.current = ref;
       }}>
       <View style={{ width: '100%' }}>
-        {getField('firstName', guest.firstName)}
-        {getField('lastName', guest.lastName)}
-        {getField('email', guest.email)}
-        {getField('phoneNumber', guest.phoneNumber)}
-        {getField('sobrietyDate', guest.sobrietyDate)}
-        {getField('drugOfChoice', guest.drugOfChoice)}
-        {getField('dailyHabit', guest.dailyHabit)}
+        {!moneyOnly && getField('firstName', guest.firstName)}
+        {!moneyOnly && getField('lastName', guest.lastName)}
+        {!moneyOnly && getField('email', guest.email)}
+        {!moneyOnly && getField('phoneNumber', guest.phoneNumber)}
+        {!moneyOnly && getField('sobrietyDate', guest.sobrietyDate)}
+        {!moneyOnly && getField('drugOfChoice', guest.drugOfChoice)}
+        {!moneyOnly && getField('dailyHabit', guest.dailyHabit)}
         {/* A hidden field keeps its seeded value, so guestMoneyUpdate leaves it out of the write. */}
         {canEditMoney && getField('rentOwed', guest.rentOwed)}
         {canEditMoney && getField('choreFees', guest.choreFees)}
-        {getField('phase', guest.phase)}
+        {!moneyOnly && getField('phase', guest.phase)}
       </View>
       <View style={{ alignSelf: 'center', marginBottom: normalize(50) }}>
         <RatsButton

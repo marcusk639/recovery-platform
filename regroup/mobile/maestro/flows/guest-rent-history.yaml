@@ -25,6 +25,15 @@ tags:
       text: "\\$22\\.22"
 - assertNotVisible:
     text: "\\$77\\.77"
+# The seeded rent charge (seed docs.js rentCharges) shows in the same history, so
+# the resident sees why the balance went up (owner decision 2026-11-26).
+- scrollUntilVisible:
+    element:
+      id: "charge-row-guest-a_2026-11-16"
+    direction: DOWN
+    timeout: 10000
+- assertVisible:
+    text: "Rent, Nov 16–22"
 # Pay Rent covers the tab bar: relaunch, keeping the session, then sign out.
 - launchApp:
     stopApp: true

@@ -3,18 +3,19 @@
  *
  * Covers:
  *  - Returns null when selectedHouse is not set
+ *  - Reads the public listing, never the members-only house doc
  *  - Renders without crashing when a house is selected
  *  - Shows the house name in the subheader
  *  - Renders cost section: monthly rent label
  *  - Renders cost section: weekly rent label
  *  - Renders cost section: deposits label
  *  - Renders the LOCATION section
- *  - Shows house street address
+ *  - Never shows a street address (the public listing has none)
  *  - Shows phone number when present
  *  - Shows "No Contact Info" when phone number is absent
  *  - Renders the ADMINISTRATORS heading
  *  - Renders admin names when admins are present
- *  - Renders HOUSE HEALTH stat summary
+ *  - Renders the OPENINGS stat summary (open beds of capacity)
  *  - Pressing sign-up initiates dispatch (startSignUp callback)
  *  - Renders correctly with a fully certified house
  */
@@ -28,8 +29,9 @@ jest.mock("../../../hooks/useSelectedHouse", () => ({
 
 // The screen reads the selected house's public listing (EMU-009); the
 // fixtures below stand in for it.
+const mockUseHouseListing = jest.fn();
 jest.mock("../../../state/queries/houseListingQueries", () => ({
-  useHouseListing: () => ({ data: mockUseSelectedHouse().house ?? undefined }),
+  useHouseListing: (houseId: string | null) => mockUseHouseListing(houseId),
 }));
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
@@ -254,12 +256,17 @@ function buildStore({
   selectedHouse = null as any,
   houseAdmins = {} as any,
   anonymous = false,
+  selectedHouseId = undefined as string | undefined,
+  listingState = undefined as any,
 } = {}) {
   mockUseSelectedHouse.mockReturnValue({
     house: selectedHouse,
     houseId: selectedHouse?.id ?? null,
     isLoading: false,
   });
+  mockUseHouseListing.mockReturnValue(
+    listingState ?? { data: selectedHouse ?? undefined }
+  );
 
   return configureStore({
     reducer: {
@@ -288,6 +295,7 @@ function buildStore({
       } as any,
       houses: {
         selectedHouse,
+        selectedHouseId: selectedHouseId ?? selectedHouse?.id ?? null,
         houses: [],
         loading: false,
         error: null,
@@ -307,7 +315,13 @@ const mockNavigation: any = {
 };
 
 function renderScreen(
-  storeOptions: { selectedHouse?: any; houseAdmins?: any; anonymous?: boolean } = {}
+  storeOptions: {
+    selectedHouse?: any;
+    houseAdmins?: any;
+    anonymous?: boolean;
+    selectedHouseId?: string;
+    listingState?: any;
+  } = {}
 ) {
   const store = buildStore(storeOptions);
   return render(
@@ -329,6 +343,56 @@ describe("IntroHouseSummary", () => {
     it("renders nothing (null) when selectedHouse is not set", () => {
       const { toJSON } = renderScreen({ selectedHouse: null });
       expect(toJSON()).toBeNull();
+    });
+  });
+
+  // ─── What it reads ──────────────────────────────────────────────────────────
+  // EMU-009: a signed-out visitor may read only the public listing. The
+  // members-only houses/{id} read (useSelectedHouse) is refused for them, so
+  // the screen must not make it at all.
+  describe("what it reads", () => {
+    it("reads the selected house's listing, never the members-only house doc", () => {
+      renderScreen({ selectedHouse: makeHouse({ id: "house-1" }), anonymous: true });
+      expect(mockUseHouseListing).toHaveBeenCalledWith("house-1");
+      expect(mockUseSelectedHouse).not.toHaveBeenCalled();
+    });
+  });
+
+  // ─── Listing not shown yet ──────────────────────────────────────────────────
+  // The listing is fetched, so a selected house can be loading, gone (it was
+  // delisted after the search) or unreadable. The auth stack has no header,
+  // so each state needs its own way back instead of a blank screen.
+  describe("a selected house whose listing isn't there", () => {
+    it("shows a loading indicator while the listing loads", () => {
+      const { getByTestId } = renderScreen({
+        selectedHouseId: "house-1",
+        listingState: { data: undefined, isLoading: true, isError: false },
+        anonymous: true,
+      });
+      expect(getByTestId("house-summary-loading")).toBeTruthy();
+    });
+
+    it("says the house is no longer listed, with a way back", () => {
+      const { getByText, getByTestId } = renderScreen({
+        selectedHouseId: "house-1",
+        listingState: { data: null, isLoading: false, isError: false },
+        anonymous: true,
+      });
+      expect(getByText("This house is no longer listed.")).toBeTruthy();
+      fireEvent.press(getByTestId("house-summary-back"));
+      expect(mockNavigation.goBack).toHaveBeenCalled();
+    });
+
+    it("says the house couldn't be loaded when the read fails", () => {
+      const { getByText, getByTestId } = renderScreen({
+        selectedHouseId: "house-1",
+        listingState: { data: undefined, isLoading: false, isError: true },
+        anonymous: true,
+      });
+      expect(
+        getByText("Could not load this house. Please try again.")
+      ).toBeTruthy();
+      expect(getByTestId("house-summary-back")).toBeTruthy();
     });
   });
 
@@ -377,6 +441,29 @@ describe("IntroHouseSummary", () => {
         selectedHouse: makeHouse({ monthlyRent: 800 }),
       });
       expect(getByText("$800")).toBeTruthy();
+    });
+
+    // F-7a6227 (owner, 2026-11-27): applicants see the house's rent,
+    // deposits and fees. The setup wizard saves deposits as a number.
+    it("renders the weekly rent and a numeric deposits amount", () => {
+      const { getByText } = renderScreen({
+        selectedHouse: makeHouse({
+          monthlyRent: 800,
+          weeklyRent: 200,
+          depositsAndFees: 500,
+        }),
+        anonymous: true,
+      });
+      expect(getByText("$200")).toBeTruthy();
+      expect(getByText("$500")).toBeTruthy();
+    });
+
+    it("renders deposits and fees given as text", () => {
+      const { getByText } = renderScreen({
+        selectedHouse: makeHouse({ depositsAndFees: "650" }),
+        anonymous: true,
+      });
+      expect(getByText("$650")).toBeTruthy();
     });
   });
 

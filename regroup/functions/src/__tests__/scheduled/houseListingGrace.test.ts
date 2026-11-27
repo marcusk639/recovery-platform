@@ -18,10 +18,7 @@ jest.mock('../../api/firestore', () => require('../helpers/memFirestore').apiFir
 import { logger } from 'firebase-functions/v2';
 import { mem } from '../helpers/memFirestore';
 import { onHouseListingSync } from '../../triggers/firestore/houseListing';
-import {
-  houseListingGraceSweep,
-  resyncPastDueListings,
-} from '../../scheduled/houseListingGrace';
+import { houseListingGraceSweep, resyncPastDueListings } from '../../scheduled/houseListingGrace';
 
 const NOW = Date.parse('2026-12-01T12:00:00Z');
 const BEFORE = '2026-12-01T11:00:00Z';
@@ -138,19 +135,28 @@ it('the scheduled run fails after sweeping the rest when a house fails, logging 
   // The scheduled run uses the real clock, so these deadlines are long past.
   await seedListed('h1', pastDue('h1', '2020-01-01T00:00:00Z'));
   await seedListed('h2', pastDue('h2', '2020-01-01T00:00:00Z'));
-  const apiFirestore = jest.requireMock('../../api/firestore');
-  const realDoc = apiFirestore.houseListingCollection.doc;
+  // h1's listing delete fails: the sweep deletes inside the sync's transaction.
+  const { ratsFirestore } = jest.requireMock('../../api/firestore');
+  const realTxn = ratsFirestore.runTransaction;
+  type Tx = { delete: (ref: { path: string }) => unknown };
   const spy = jest
-    .spyOn(apiFirestore.houseListingCollection, 'doc')
+    .spyOn(ratsFirestore, 'runTransaction')
     .mockImplementation((...args: unknown[]) => {
-      const ref = realDoc(...args);
-      if (args[0] !== 'h1') return ref;
-      return { ...ref, delete: () => Promise.reject(new Error('unavailable')) };
+      const fn = args[0] as (tx: Tx) => Promise<unknown>;
+      return realTxn((tx: Tx) =>
+        fn({
+          ...tx,
+          delete: (ref) => {
+            if (ref.path === 'house-listings/h1') throw new Error('unavailable');
+            return tx.delete(ref);
+          },
+        }),
+      );
     });
   try {
-    await expect(
-      (houseListingGraceSweep as unknown as () => Promise<void>)(),
-    ).rejects.toThrow('house_listing_grace.failed');
+    await expect((houseListingGraceSweep as unknown as () => Promise<void>)()).rejects.toThrow(
+      'house_listing_grace.failed',
+    );
   } finally {
     spy.mockRestore();
   }
@@ -169,5 +175,12 @@ it('the scheduled run fails after sweeping the rest when a house fails, logging 
     ([name]) => name === 'house_listing_grace.swept',
   );
   expect(event).toBe('house_listing_grace.swept');
-  expect(summary).toEqual({ checked: 2, resynced: 2, written: 0, deleted: 1, unchanged: 0, failed: 1 });
+  expect(summary).toEqual({
+    checked: 2,
+    resynced: 2,
+    written: 0,
+    deleted: 1,
+    unchanged: 0,
+    failed: 1,
+  });
 });

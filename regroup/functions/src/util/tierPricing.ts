@@ -42,6 +42,10 @@ export const getTierAmountCents = (
   tier: TierKey,
 ): number => getTier(houseType, tier).amountCents;
 
+/** A stored billingInterval as a BillingInterval: anything but "year" is monthly. */
+export const storedBillingInterval = (value: unknown): BillingInterval =>
+  value === "year" ? "year" : "month";
+
 export const resolveTierPriceId = (
   houseType: HouseType,
   tier: TierKey,

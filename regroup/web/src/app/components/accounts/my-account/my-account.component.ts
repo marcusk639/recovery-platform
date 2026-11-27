@@ -100,6 +100,12 @@ export class MyAccountComponent implements OnInit {
     }
   };
 
+  /** A plan restarted from app-plan-reactivate: keep the page and the cached user current. */
+  onReactivated(updated: User): void {
+    this.user = { ...this.user, ...updated };
+    this.userService.user = this.user;
+  }
+
   get status() {
     return this.user?.subscriptionMetadata?.status;
   }

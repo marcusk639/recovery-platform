@@ -50,6 +50,23 @@ describe('sendEmail', () => {
     }));
   });
 
+  // A click-tracked link is a SendGrid redirect carrying the whole original
+  // URL, so an invitation's token would pass through (and be logged by)
+  // SendGrid, and the app link would no longer open the app directly.
+  it('turns off SendGrid click tracking when the email asks for it', async () => {
+    mockSendgridSend.mockResolvedValue([{}]);
+    await sendEmail({ to: 'u@t.com', from: regroupEmail, subject: 'Hi', text: 'Hi', clickTracking: false });
+    expect(mockSendgridSend.mock.calls[0][0].trackingSettings).toEqual({
+      clickTracking: { enable: false, enableText: false },
+    });
+  });
+
+  it('leaves the account tracking settings alone by default', async () => {
+    mockSendgridSend.mockResolvedValue([{}]);
+    await sendEmail({ to: 'u@t.com', from: regroupEmail, subject: 'Hi', text: 'Hi' });
+    expect(mockSendgridSend.mock.calls[0][0]).not.toHaveProperty('trackingSettings');
+  });
+
   it('includes html when provided', async () => {
     mockSendgridSend.mockResolvedValue([{}]);
     await sendEmail({ to: 'u@t.com', from: regroupEmail, subject: 'Hi', text: 'Hi', html: '<b>Hi</b>' });

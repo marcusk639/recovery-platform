@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 import { withFormik } from 'formik';
 import { useSelectedGuest } from '../../hooks/useSelectedGuest';
 import { useGuests, useUpdateGuest } from '../../state/queries/guestQueries';
-import { useMayEditRentMoney } from '../../state/queries/houseTierQueries';
+import { useMayEditGuestMoney } from '../../state/queries/houseTierQueries';
 import GuestUpdateFormView from './GuestUpdateFormView';
 import { Guest } from '../../entities/Guest';
 import {
@@ -14,6 +14,7 @@ import {
 import { Guests } from '../../types';
 import type { MoneyEdits } from '../../services/guest';
 import { logException } from '../../util/logging';
+import { asCents, formatCents } from '../../util/money';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -28,6 +29,66 @@ export interface GuestUpdateProps {
   navigation: NativeStackNavigationProp<RootStackParamList>;
   /** Manager or above: the rules refuse anyone else's rentOwed/choreFees change. */
   canEditMoney?: boolean;
+  /** Only the balance fields (the profile's Balance edit). */
+  moneyOnly?: boolean;
+  /** Called after a save went through. */
+  onSaved?: () => void;
+}
+
+type SaveArgs = {
+  payload: Partial<Guest>;
+  authoritativeFields: ReadonlyArray<keyof Guest>;
+  moneyEdits: MoneyEdits;
+};
+
+/**
+ * Saves, and when the balance moved since the form opened (a payment or a rent
+ * charge landed) says what it is now and asks before saving the typed figure
+ * against it (rent spec §4.6). Confirming re-runs the save from the new balance.
+ */
+async function saveGuest(
+  props: GuestUpdateProps,
+  args: SaveArgs,
+  setStatus: (status: object) => void,
+): Promise<void> {
+  try {
+    await props.updateGuest(args.payload, args.authoritativeFields, args.moneyEdits);
+    setStatus({ succeeded: true });
+    props.onSaved?.();
+  } catch (err) {
+    // status is rendered nowhere (see validate above), so say it here. A refusal by the
+    // rules is not worth retrying: below a manager, rent and balances can't be changed.
+    logException(err, 'GuestUpdateForm: save failed');
+    const changed = err as { kind?: string; field?: keyof MoneyEdits; currentCents?: number };
+    const code = String((err as { code?: unknown })?.code ?? '');
+    const field = changed?.field;
+    const edit = field ? args.moneyEdits[field] : undefined;
+    if (changed?.kind === 'balance-changed' && typeof changed.currentCents === 'number' && field && edit) {
+      const label = field === 'choreFees' ? 'Chore fees are' : 'Rent owed is';
+      const typed = formatCents(asCents(edit.to));
+      const now = changed.currentCents;
+      const retry: SaveArgs = {
+        ...args,
+        moneyEdits: { ...args.moneyEdits, [field]: { from: now, to: edit.to } },
+      };
+      Alert.alert(
+        'The balance changed',
+        `${label} now ${formatCents(asCents(now))}, probably from a payment or a rent charge. Save ${typed} anyway?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: `Save ${typed}`, onPress: () => saveGuest(props, retry, setStatus) },
+        ],
+      );
+    } else {
+      Alert.alert(
+        'Not saved',
+        code.endsWith('permission-denied')
+          ? "You don't have permission to make this change to this resident."
+          : "Couldn't save these changes. Check your connection and try again.",
+      );
+    }
+    setStatus({ failed: true });
+  }
 }
 
 const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
@@ -71,34 +132,16 @@ const GuestUpdateForm = withFormik<GuestUpdateProps, GuestFormValues>({
         setSubmitting(false);
         return;
       }
-      await props.updateGuest(
-        result.payload,
-        result.authoritativeFields,
-        result.moneyEdits,
+      await saveGuest(
+        props,
+        {
+          payload: result.payload,
+          authoritativeFields: result.authoritativeFields,
+          moneyEdits: result.moneyEdits,
+        },
+        setStatus,
       );
-      setStatus({ succeeded: true });
-      setSubmitting(false);
-    } catch (err) {
-      // status is rendered nowhere (see validate above), so say it here. A refusal by the
-      // rules is not worth retrying: below a manager, rent and balances can't be changed.
-      logException(err, 'GuestUpdateForm: save failed');
-      const changed = err as { kind?: string; field?: string; currentCents?: number };
-      const code = String((err as { code?: unknown })?.code ?? '');
-      if (changed?.kind === 'balance-changed' && typeof changed.currentCents === 'number') {
-        const label = changed.field === 'choreFees' ? 'Chore fees are' : 'Rent owed is';
-        Alert.alert(
-          'The balance changed',
-          `${label} now $${(changed.currentCents / 100).toFixed(2)}, probably from a payment. Check it and save again.`,
-        );
-      } else {
-        Alert.alert(
-          'Not saved',
-          code.endsWith('permission-denied')
-            ? "You don't have permission to make this change to this resident."
-            : "Couldn't save these changes. Check your connection and try again.",
-        );
-      }
-      setStatus({ failed: true });
+    } finally {
       setSubmitting(false);
     }
   },
@@ -122,7 +165,8 @@ const GuestUpdateFormWrapper: React.FC<any> = props => {
   // available in this wrapper.
   const { data: guests = {} } = useGuests(guest?.houseId ?? '');
   const { mutateAsync: updateGuestMutation } = useUpdateGuest();
-  const canEditMoney = useMayEditRentMoney(guest?.houseId ?? '');
+  // A manager or above, never on their own record (rules: ownMoneyUnchanged).
+  const canEditMoney = useMayEditGuestMoney(guest);
 
   const updateGuest = useCallback(
     async (
