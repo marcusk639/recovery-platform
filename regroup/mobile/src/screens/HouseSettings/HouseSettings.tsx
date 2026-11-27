@@ -240,7 +240,7 @@ const HouseSettings: React.FC<Props> = (props) => {
       ...(mayViewHouseMoney
         ? {
             // Owner decision 2026-11-27: bulk-adding residents is for owners
-            // and managers too.
+            // and managers too; the screen checks the same itself.
             guestImport: {
               action: () => navigation.navigate(Routes.GuestImport),
               label: 'Import residents from CSV',

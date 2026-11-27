@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import RatsText from '../rats-text';
 
 jest.mock('../../../context', () => ({
@@ -96,5 +96,21 @@ describe('RatsText', () => {
     );
     // t() mock ignores params and returns the key
     expect(getByText('greeting')).toBeTruthy();
+  });
+
+  // Callers pass onPress and testID (the Sign out links on the subscription
+  // screens, and 30 testIDs Maestro selects by); RatsText used to drop them.
+  it('forwards onPress, so a text link responds to a tap', () => {
+    const onPress = jest.fn();
+    const { getByText } = render(<RatsText text="Sign out" onPress={onPress} />);
+    fireEvent.press(getByText('Sign out'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards testID and accessibility props to the native Text', () => {
+    const { getByTestId } = render(
+      <RatsText text="Sign out" testID="btn-sign-out" accessibilityRole="link" />,
+    );
+    expect(getByTestId('btn-sign-out').props.accessibilityRole).toBe('link');
   });
 });

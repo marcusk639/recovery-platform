@@ -7,7 +7,15 @@
  * deciding whether the WebView is allowed to load a URL at all.
  */
 
-import { isAllowedSignupUrl } from "../SignUpWebView";
+import React from "react";
+import { fireEvent, render } from "@testing-library/react-native";
+import SignUpWebView, { isAllowedSignupUrl } from "../SignUpWebView";
+
+const mockOpenWebBilling = jest.fn((_page: string) => Promise.resolve(true));
+jest.mock("../../../services/webBilling", () => ({
+  openWebBilling: (page: string) => mockOpenWebBilling(page),
+}));
+jest.mock("../../../state/store", () => ({ useAppDispatch: () => jest.fn() }));
 
 describe("isAllowedSignupUrl", () => {
   it("allows the exact allowlisted signup URL", () => {
@@ -61,5 +69,23 @@ describe("isAllowedSignupUrl", () => {
     expect(() => isAllowedSignupUrl(undefined as any)).not.toThrow();
     expect(isAllowedSignupUrl(undefined as any)).toBe(false);
     expect(isAllowedSignupUrl(null as any)).toBe(false);
+  });
+});
+
+// Launch P5 Task 9: operator sign-up links out to web pricing; no WebView.
+describe("SignUpWebView (operator sign-up link-out)", () => {
+  it("renders no WebView", () => {
+    const { queryByTestId, getByTestId } = render(<SignUpWebView navigation={{ goBack: jest.fn() }} />);
+    expect(getByTestId("signup-link-out")).toBeTruthy();
+    expect(queryByTestId("signup-webview")).toBeNull();
+  });
+
+  it("opens web pricing in the browser, and Go Back goes back", () => {
+    const goBack = jest.fn();
+    const { getByTestId } = render(<SignUpWebView navigation={{ goBack }} />);
+    fireEvent.press(getByTestId("signup-link-out-open"));
+    expect(mockOpenWebBilling).toHaveBeenCalledWith("pricing");
+    fireEvent.press(getByTestId("signup-link-out-go-back"));
+    expect(goBack).toHaveBeenCalledTimes(1);
   });
 });

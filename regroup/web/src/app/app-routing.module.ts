@@ -16,7 +16,6 @@ import { PrivacyPolicyComponent } from './components/privacypolicy/privacy-polic
 import { TermsComponent } from './components/terms/privacy-policy/terms.component';
 import { MyAccountComponent } from './components/accounts/my-account/my-account.component';
 import { AuthGuard } from './guards/auth.guard';
-import { RedirectComponent } from './components/redirect/redirect.component';
 import { AppLinkLandingComponent } from './components/app-link-landing/app-link-landing.component';
 
 // The site template's demo pages (lorem ipsum, sample reviews, a placeholder
@@ -50,10 +49,6 @@ export const routes: Routes = [
   { path: 'contact', component: ContactPageComponent },
   { path: 'privacy-policy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
-  // Older invitation emails (already sent) link here with the app link in
-  // ?url=; the page opens the app, else the store. New emails link to /invite
-  // (functions/src/util/inviteEmails.ts). Retire this once those emails expire.
-  { path: 'redirect', component: RedirectComponent },
   // The paths regroup/app-links.json claims for the app. With the app installed
   // and its links verified, the OS opens the app and this page never loads;
   // otherwise it offers "Open in Regroup" and the store links.
@@ -61,11 +56,9 @@ export const routes: Routes = [
   { path: 'checkout-return', component: AppLinkLandingComponent },
   { path: 'app', children: [{ path: '**', component: AppLinkLandingComponent }] },
   { path: 'my-account', component: MyAccountComponent, canActivate: [AuthGuard] },
-  // The mobile app's "Manage Subscription" button deep-links to /billing — a
-  // literal path, origin-only from env (SubscriptionRequiredScreen.tsx:25). The
-  // route was specified in regroup/mobile/docs/superpowers/specs/
-  // 2026-05-19-subscription-paywall-design.md but never built. my-account hosts
-  // the Stripe billing portal (my-account.component.ts:76).
+  // Store builds before launch P5 open /billing from "Manage Subscription";
+  // current builds open /my-account?from=app (mobile services/webBilling.ts).
+  // my-account hosts the Stripe billing portal.
   { path: 'billing', redirectTo: 'my-account', pathMatch: 'full' },
   // Catch-all, and it MUST stay last. Without it the router throws "Cannot match
   // any routes" on any unknown URL. Client-side that is a blank page; under SSR

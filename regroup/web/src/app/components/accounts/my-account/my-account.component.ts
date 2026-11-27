@@ -17,7 +17,7 @@ import {
 import { User } from "src/app/entities/User";
 import { isPlatformBrowser } from "@angular/common";
 import { CloudFunctionService } from "src/app/services/functions/cloud-function.service";
-import { Router } from "@angular/router";
+import { ActivatedRoute, Router } from "@angular/router";
 import { jqueryPlugin } from "src/app/util/jquery";
 
 @Component({
@@ -45,7 +45,17 @@ export class MyAccountComponent implements OnInit {
     private formBuilder: FormBuilder,
     private functions: CloudFunctionService,
     protected router: Router,
+    private route: ActivatedRoute,
   ) {}
+
+  /** Opened from the mobile app (services/webBilling.ts adds ?from=app). */
+  get fromApp(): boolean {
+    return this.route.snapshot?.queryParamMap?.get("from") === "app";
+  }
+
+  redirectTo(url: string): void {
+    window.location.href = url;
+  }
 
   async checkUser() {
     this.initializing = true;
@@ -77,10 +87,11 @@ export class MyAccountComponent implements OnInit {
     this.portalLoading = true;
     this.error = false;
     try {
-      const returnUrl = window.location.href;
+      // The portal returns here; from=app keeps the "Return to Regroup" link.
+      const returnUrl = `${window.location.origin}/my-account${this.fromApp ? "?from=app" : ""}`;
       const { url } =
         await this.functions.createBillingPortalSession(returnUrl);
-      window.location.href = url;
+      this.redirectTo(url);
     } catch {
       this.error = true;
       this.success = false;

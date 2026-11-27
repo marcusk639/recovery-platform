@@ -492,6 +492,43 @@ describe('HouseSettings', () => {
       }
     });
 
+    // P5 Tasks 17 and 18: entry points for two screens nothing opened.
+    it('renders the CSV import entry next to Guests', () => {
+      const store = buildStore();
+      const { getByText } = renderScreen(store);
+      expect(getByText('Import residents from CSV')).toBeTruthy();
+    });
+
+    // Owner decision 2026-11-27: bulk-adding residents is for owners and
+    // managers, not peer leaders.
+    it('hides the CSV import entry from a peer leader', () => {
+      mockMayViewHouseMoney = false;
+      try {
+        const store = buildStore();
+        const { queryByText } = renderScreen(store);
+        expect(queryByText('Import residents from CSV')).toBeNull();
+      } finally {
+        mockMayViewHouseMoney = true;
+      }
+    });
+
+    it('renders the Balances entry for owners and managers', () => {
+      const store = buildStore();
+      const { getByText } = renderScreen(store);
+      expect(getByText('Balances')).toBeTruthy();
+    });
+
+    it('hides the Balances entry from a peer leader, who may not see house money', () => {
+      mockMayViewHouseMoney = false;
+      try {
+        const store = buildStore();
+        const { queryByText } = renderScreen(store);
+        expect(queryByText('Balances')).toBeNull();
+      } finally {
+        mockMayViewHouseMoney = true;
+      }
+    });
+
     it('renders the Done button', () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);

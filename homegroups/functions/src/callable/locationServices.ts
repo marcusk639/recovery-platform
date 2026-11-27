@@ -55,7 +55,15 @@ export const reverseGeocodeLocation = onCall(
       });
       return { results: response.data?.results ?? [] };
     } catch (error) {
-      logger.error("reverseGeocodeLocation failed", error);
+      // An axios error keeps the request params (the key and the coordinates)
+      // in config, request and toJSON(): log only what failed.
+      const failure = error as
+        | { response?: { status?: number }; code?: string }
+        | undefined;
+      logger.error("reverseGeocodeLocation failed", {
+        status: failure?.response?.status,
+        code: failure?.code,
+      });
       throw new HttpsError("internal", "Unable to look up that location.");
     }
   },

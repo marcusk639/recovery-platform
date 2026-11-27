@@ -15,6 +15,8 @@ import { RatsLogo } from "../../components/rats-logo";
 import { getInitialLink, onLink } from "../../services/native-deep-links";
 import { parseAppLink } from "../../services/appLinks/parseAppLink";
 import { reportBrokenInvitationLink } from "../../services/appLinks/brokenInvitation";
+import { refreshPlanState } from "../../services/planState";
+import { queryClient } from "../../state/queryClient";
 import {
   deliverAppLink,
   deliverPendingAppLink,
@@ -151,6 +153,7 @@ export const withSplash = <P extends object>(
         deliverAppLink(appLink, {
           signedIn: isSignedInUser(latest.current.userState.user),
           dispatch: latest.current.dispatch,
+          onCheckoutReturn: () => refreshPlanState(queryClient, latest.current.userState.user),
         });
       } else {
         reportBrokenInvitationLink(link.url);
@@ -316,7 +319,11 @@ export const withSplash = <P extends object>(
     useEffect(() => {
       deliverPendingAppLink(
         { pendingAppLink, pendingAppLinkReceivedAt },
-        { signedIn, dispatch },
+        {
+          signedIn,
+          dispatch,
+          onCheckoutReturn: () => refreshPlanState(queryClient, latest.current.userState.user),
+        },
       );
     }, [signedIn, pendingAppLink, pendingAppLinkReceivedAt, dispatch]);
 

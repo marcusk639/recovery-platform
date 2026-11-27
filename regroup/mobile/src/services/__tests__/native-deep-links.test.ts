@@ -4,8 +4,8 @@ import {
   createInvitationFromLink,
   getInitialLink,
   getLinkType,
+  isValidDeepLink,
   onLink,
-  resolveDeepLinkUrl,
 } from '../native-deep-links';
 
 describe('createInvitationFromLink — token deep links', () => {
@@ -28,39 +28,38 @@ describe('createInvitationFromLink — token deep links', () => {
     expect(inv.email).toBe('a@x.com');
   });
 
-  // The invitation email links to the web /redirect page; on iOS the
-  // associated domain opens the app with that https URL as it is.
-  it('reads the token from the email link the app receives as a universal link', () => {
-    const inv = createInvitationFromLink({
-      url: 'https://regroup-app.com/redirect?url=com.rats.dev%3A%2F%2F%3Ftype%3Dinvitation%26token%3Dabc.123',
-    });
-    expect(inv.token).toBe('abc.123');
+  // The web /redirect page is gone (owner decision 2026-11-27): emails link
+  // to /invite, and no invitation outside pre-launch testing used the old form.
+  it('refuses the old /redirect email link', () => {
+    expect(() =>
+      createInvitationFromLink({
+        url: 'https://regroup-app.com/redirect?url=com.rats.dev%3A%2F%2F%3Ftype%3Dinvitation%26token%3Dabc.123',
+      }),
+    ).toThrow('Failed to parse invitation link');
   });
 });
 
-describe('resolveDeepLinkUrl', () => {
+describe('the old /redirect wrapper is not unwrapped', () => {
   const wrapped =
     'https://regroup-app.com/redirect?url=com.rats.dev%3A%2F%2F%3Ftype%3Dinvitation%26token%3Dabc';
 
-  it('unwraps the /redirect link the invitation email sends', () => {
-    expect(resolveDeepLinkUrl(wrapped)).toBe('com.rats.dev://?type=invitation&token=abc');
+  it('is not a link the app handles', () => {
+    expect(isValidDeepLink(wrapped)).toBe(false);
   });
 
-  it('leaves app-scheme links unchanged', () => {
-    expect(resolveDeepLinkUrl('regroup-app://?type=invitation&token=t')).toBe(
-      'regroup-app://?type=invitation&token=t',
-    );
+  it('still handles the app-scheme link it used to carry', () => {
+    expect(isValidDeepLink('regroup-app://?type=invitation&token=t')).toBe(true);
   });
 
-  it('does not unwrap to a URL outside the app', () => {
+  it('does not handle one wrapping a URL outside the app', () => {
     const evil =
       'https://regroup-app.com/redirect?url=https%3A%2F%2Fevil.example%2F%3Ftype%3Dinvitation';
-    expect(resolveDeepLinkUrl(evil)).toBe(evil);
+    expect(isValidDeepLink(evil)).toBe(false);
   });
 
-  it('unwraps one level only', () => {
+  it('does not handle a nested wrapper', () => {
     const nested = `https://regroup-app.com/redirect?url=${encodeURIComponent(wrapped)}`;
-    expect(resolveDeepLinkUrl(nested)).toBe(nested);
+    expect(isValidDeepLink(nested)).toBe(false);
   });
 });
 
@@ -69,12 +68,16 @@ describe('getLinkType', () => {
     ['type first, more params after', 'regroup-app://?type=invitation&token=t'],
     ['type is the only param', 'com.rats.dev://?type=invitation'],
     ['type after another param', 'com.rats.dev://?token=t&type=invitation'],
-    [
-      'the email link received as a universal link',
-      'https://regroup-app.com/redirect?url=com.rats.dev%3A%2F%2F%3Ftype%3Dinvitation%26token%3Dt',
-    ],
   ])('reads an invitation link: %s', (_label, url) => {
     expect(getLinkType({ url })).toBe('invitation');
+  });
+
+  it('returns null for the old /redirect email link', () => {
+    expect(
+      getLinkType({
+        url: 'https://regroup-app.com/redirect?url=com.rats.dev%3A%2F%2F%3Ftype%3Dinvitation%26token%3Dt',
+      }),
+    ).toBeNull();
   });
 
   it('returns null for a link with no type', () => {
@@ -86,15 +89,13 @@ describe('getLinkType', () => {
   });
 });
 
-describe('getInitialLink and onLink hand screens the unwrapped link', () => {
+describe('getInitialLink and onLink drop the old /redirect link', () => {
   const wrapped =
     'https://regroup-app.com/redirect?url=com.rats.dev%3A%2F%2F%3Ftype%3Dinvitation%26token%3Dabc';
 
   it('getInitialLink', async () => {
     jest.spyOn(Linking, 'getInitialURL').mockResolvedValueOnce(wrapped);
-    await expect(getInitialLink()).resolves.toEqual({
-      url: 'com.rats.dev://?type=invitation&token=abc',
-    });
+    await expect(getInitialLink()).resolves.toBeNull();
   });
 
   it('onLink', () => {
@@ -106,6 +107,6 @@ describe('getInitialLink and onLink hand screens the unwrapped link', () => {
     const listener = jest.fn();
     onLink(listener);
     handler?.({ url: wrapped });
-    expect(listener).toHaveBeenCalledWith({ url: 'com.rats.dev://?type=invitation&token=abc' });
+    expect(listener).not.toHaveBeenCalled();
   });
 });

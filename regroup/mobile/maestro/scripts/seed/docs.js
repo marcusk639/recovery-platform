@@ -10,6 +10,7 @@ const accounts = require('../../../e2e/setup/testAccounts.json').accounts;
 const HOUSE = 'test-house-123';
 const OXFORD = 'test-house-oxford';
 const OXFORD_NEW = 'test-house-oxford-new';
+// A traditional house whose operator's subscription ended (billing flows, launch P5 Tasks 9-10).
 const account = (id) => accounts.find((a) => a.id === id);
 const uidOf = (id) => `e2e-${id}`;
 const iso = (now) => new Date(now).toISOString();

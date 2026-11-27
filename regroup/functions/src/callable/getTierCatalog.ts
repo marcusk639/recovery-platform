@@ -1,8 +1,9 @@
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { STRIPE_SECRET_KEY, SUBSCRIPTION_TIERS, HouseType, TierKey } from '../config';
 import { stripe, TRIAL_PERIOD_DAYS } from '../api/stripe';
 import { isSalesOpen } from '../util/salesSwitch';
+import { isEmulatorFaultOn } from '../util/emulatorFaults';
 import {
   getTier,
   resolveTierPriceId,
@@ -10,7 +11,9 @@ import {
   BillingInterval,
 } from '../util/tierPricing';
 
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+// Checkout charges the price Stripe holds at call time, so a changed price
+// shows stale on the pricing page for at most this long.
+const CACHE_TTL_MS = 5 * 60 * 1000;
 // The sales-open switch, apart from prices: the catalog is public and
 // unauthenticated, so it isn't read on every call. Checkout reads it uncached.
 const SALES_TTL_MS = 60 * 1000;
@@ -140,6 +143,11 @@ async function buildCatalog(): Promise<CatalogPrices> {
 export const getTierCatalog = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (): Promise<TierCatalogResponse> => {
+    // e2e only (BILL-008): a flow makes the catalog unreachable. A no-op that
+    // reads nothing outside the Functions emulator running demo-regroup-e2e.
+    if (await isEmulatorFaultOn('tierCatalogUnavailable')) {
+      throw new HttpsError('unavailable', 'The tier catalog is unavailable.');
+    }
     const now = Date.now();
     if (!cache || cache.expiresAt <= now) {
       cache = { data: await buildCatalog(), expiresAt: now + CACHE_TTL_MS };

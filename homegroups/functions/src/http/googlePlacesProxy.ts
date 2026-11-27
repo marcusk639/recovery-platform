@@ -85,7 +85,15 @@ export const googlePlacesProxy = onRequest(
       });
       res.status(200).json(response.data);
     } catch (error) {
-      logger.error("googlePlacesProxy upstream error", error);
+      // An axios error keeps the request params (the key and the search text)
+      // in config, request and toJSON(): log only what failed.
+      const failure = error as
+        | { response?: { status?: number }; code?: string }
+        | undefined;
+      logger.error("googlePlacesProxy upstream error", {
+        status: failure?.response?.status,
+        code: failure?.code,
+      });
       res.status(502).json({ error: "Upstream location service error" });
     }
   },

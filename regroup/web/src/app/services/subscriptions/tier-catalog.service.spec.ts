@@ -5,6 +5,8 @@ import { TierCatalog } from 'src/app/entities/TierCatalog';
 
 const catalog: TierCatalog = {
   currency: 'usd',
+  trialDays: 7,
+  salesOpen: true,
   tiers: [
     {
       houseType: 'traditional',
