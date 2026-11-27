@@ -52,7 +52,7 @@ describe('ApplicationStatusScreen', () => {
     expect(await findByText('Pending Review')).toBeTruthy();
     expect(getByTestId('application-status-badge')).toBeTruthy();
     expect(mockGetApplication).toHaveBeenCalledWith('house-1', 'app-9');
-    // The collection-group list has no rule, so it is not used when the id is known.
+    // The list isn't needed when the id is known.
     expect(mockGetMyApplications).not.toHaveBeenCalled();
   });
 

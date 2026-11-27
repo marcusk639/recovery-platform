@@ -1,0 +1,50 @@
+# RES-018 — An applicant gets back to their application from the landing
+# screen (owner decision 2026-11-27, Q2). The app applies on its anonymous
+# session, so this device is the only way back: "Check my application" shows
+# when that session has applied, and opens the status.
+# The application is written for the session by a host script, as ApplyScreen
+# writes it (id `${houseId}_${uid}`), so this flow doesn't depend on house
+# search (application-to-intake.yaml covers applying through the UI).
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/applicant-status-return.yaml
+appId: ${APP_ID}
+tags:
+  - signed-out
+  - applications
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    permissions:
+      notifications: allow
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+# No application yet: no button.
+- assertNotVisible:
+    id: "check-application-button"
+- runScript:
+    file: ../scripts/maestro-js/seed-anon-application.js
+    env:
+      HOUSE_ID: test-house-123
+      APPLICANT_NAME: Returning Applicant
+# The app comes back later on the same session (no clearState).
+- stopApp
+- launchApp:
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "check-application-button"
+    timeout: 30000
+- tapOn:
+    id: "check-application-button"
+- extendedWaitUntil:
+    visible:
+      id: "application-status-screen"
+    timeout: 30000
+- assertVisible:
+    id: "application-status-badge"
+- assertVisible: "Pending Review"
