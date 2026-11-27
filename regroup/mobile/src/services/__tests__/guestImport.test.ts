@@ -91,7 +91,7 @@ describe('importGuests: the records it writes', () => {
       },
     ];
     const result = await importGuests('house-1', rows);
-    expect(result.imported).toBe(1);
+    expect(result).toEqual({ imported: 1, alreadyResidents: 0, failed: 0 });
     expect(getOpLog().map((e) => e.op)).toContain('batch.commit');
   });
 
