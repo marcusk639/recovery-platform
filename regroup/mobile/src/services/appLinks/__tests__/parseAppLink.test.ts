@@ -12,12 +12,31 @@ describe('parseAppLink — token invitations', () => {
     'regroup-app://?type=invitation&token=abc',
     'com.rats.dev://?type=invitation&token=abc',
     'regroup-app://invite?token=abc',
-    'https://regroup-app.com/invite?token=abc',
-    'https://regroup-app.com/invite?token=abc&utm_source=email&utm_campaign=x',
-    'https://regroup-app.com/invite/?token=abc',
-    'https://REGROUP-APP.com/invite?token=abc',
+    'https://regroup-app.com/invite#token=abc',
+    'https://regroup-app.com/invite?utm_source=email&utm_campaign=x#token=abc',
+    'https://regroup-app.com/invite/#token=abc',
+    'https://REGROUP-APP.com/invite#token=abc',
   ])('parses %s as the same invitation', (url) => {
     expect(parseAppLink(url)).toEqual(invitation);
+  });
+
+  // The emailed https link carries the token in the fragment, which a browser
+  // never sends, so it stays out of the web request logs (createInvitation's
+  // buildInviteLink). A token in the https query is what those logs record.
+  it.each([
+    ['a token in the query', 'https://regroup-app.com/invite?token=abc'],
+    ['a token in the query beside an empty fragment', 'https://regroup-app.com/invite?token=abc#'],
+    ['an empty fragment token', 'https://regroup-app.com/invite#token='],
+    ['two different fragment tokens', 'https://regroup-app.com/invite#token=a&token=b'],
+    ['an invalid fragment token', 'https://regroup-app.com/invite#token=a%20b'],
+    ['malformed percent-encoding in the fragment', 'https://regroup-app.com/invite#token=%E0%A4%A'],
+  ])('returns null for an https /invite link with %s', (_label, url) => {
+    expect(parseAppLink(url)).toBeNull();
+  });
+
+  it('reads the custom-scheme invite token from the query, not the fragment', () => {
+    expect(parseAppLink('regroup-app://invite?token=abc#token=other')).toEqual(invitation);
+    expect(parseAppLink('regroup-app://invite#token=abc')).toBeNull();
   });
 
   it('reads ?type=invitation when it is the last parameter', () => {
@@ -114,11 +133,11 @@ describe('parseAppLink — checkout return', () => {
 
 describe('parseAppLink — links it does not claim', () => {
   it.each([
-    ['another https host', 'https://evil.example/invite?token=abc'],
-    ['a look-alike host', 'https://regroup-app.com.evil.example/invite?token=abc'],
-    ['userinfo before another host', 'https://regroup-app.com@evil.example/invite?token=abc'],
-    ['http on the web host', 'http://regroup-app.com/invite?token=abc'],
-    ['a port on the web host', 'https://regroup-app.com:8443/invite?token=abc'],
+    ['another https host', 'https://evil.example/invite#token=abc'],
+    ['a look-alike host', 'https://regroup-app.com.evil.example/invite#token=abc'],
+    ['userinfo before another host', 'https://regroup-app.com@evil.example/invite#token=abc'],
+    ['http on the web host', 'http://regroup-app.com/invite#token=abc'],
+    ['a port on the web host', 'https://regroup-app.com:8443/invite#token=abc'],
     ['an unregistered scheme', 'regroup://?type=invitation&token=abc'],
     ['a page the app does not claim', 'https://regroup-app.com/pricing'],
     ['a navigation route', 'regroup-app://app/house'],
@@ -164,7 +183,7 @@ describe('parseQuery', () => {
 describe('parseAppLink with a malformed tracking parameter', () => {
   it('still parses the invitation', () => {
     expect(
-      parseAppLink('https://regroup-app.com/invite?token=abc&utm_campaign=50%off'),
+      parseAppLink('https://regroup-app.com/invite?utm_campaign=50%off#token=abc'),
     ).toEqual({ kind: 'invitation', token: 'abc' });
   });
 
@@ -183,7 +202,7 @@ describe('parseAppLink — the old web /redirect wrapper', () => {
   });
 
   it('refuses a wrapped link that is not a custom-scheme app link', () => {
-    expect(parseAppLink(wrap('https://regroup-app.com/invite?token=abc'))).toBeNull();
+    expect(parseAppLink(wrap('https://regroup-app.com/invite#token=abc'))).toBeNull();
     expect(parseAppLink(wrap('https://evil.example/?type=invitation&token=abc'))).toBeNull();
   });
 

@@ -56,6 +56,12 @@ export class Guest extends BaseEntity {
   choreFees: Cents = asCents(0);
   dailyHabit: number = 0;
   autoPayEnabled?: boolean;
+  /**
+   * A manager-set rate for this resident, in CENTS, used only while the house
+   * charges on `frequency` (rent spec §4.2; functions src/rent/rate.ts). Null or
+   * absent: the house price. Only a manager or above writes it, never on their own record.
+   */
+  customRent?: { amountCents: Cents; frequency: 'weekly' | 'monthly' } | null;
 
   // Relationships
   supporters: string[] = [];

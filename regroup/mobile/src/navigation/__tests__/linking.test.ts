@@ -157,7 +157,7 @@ describe('isHandledElsewhere (parseAppLink decides, per prefix, on the full URL)
     'regroup-app://?type=other&type=invitation&token=t1',
     'com.rats.dev://?type=invitation&house=h1&email=a@rats-e2e.com',
     'regroup-app://invite?token=t1',
-    'https://regroup-app.com/invite?token=t1&utm_source=email',
+    'https://regroup-app.com/invite?utm_source=email#token=t1',
     'regroup-app://checkout-return?result=success',
     'https://regroup-app.com/checkout-return?result=portal',
     'regroup-app://app/checkout-return?result=canceled',

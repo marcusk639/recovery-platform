@@ -7,8 +7,12 @@
 import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { houseTierKeys, useMayEditRentMoney } from '../houseTierQueries';
+import { houseTierKeys, useMayEditGuestMoney, useMayEditRentMoney } from '../houseTierQueries';
 import { getMyHouseTiers } from '../../../services/houseTiers';
+
+jest.mock('../../../../firebase-setup', () => ({ auth: { currentUser: { uid: 'manager-uid' } } }));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const mockAuth: { currentUser: { uid: string } | null } = require('../../../../firebase-setup').auth;
 
 jest.mock('../../../services/houseTiers', () => ({
   getMyHouseTiers: jest.fn(),
@@ -76,5 +80,46 @@ describe('useMayEditRentMoney', () => {
     const { result } = renderFor('');
     expect(mockGetMyHouseTiers).not.toHaveBeenCalled();
     expect(result.current).toBe(false);
+  });
+});
+
+describe('useMayEditGuestMoney', () => {
+  beforeEach(() => {
+    mockGetMyHouseTiers.mockReset();
+    mockAuth.currentUser = { uid: 'manager-uid' };
+  });
+
+  const renderFor = (guest: { houseId: string; userId?: string }) => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: queryClient }, children);
+    return renderHook(() => useMayEditGuestMoney(guest), { wrapper });
+  };
+
+  it("lets a manager change another resident's rate and balance", async () => {
+    mockGetMyHouseTiers.mockResolvedValue({ h1: 'manager' });
+    const { result } = renderFor({ houseId: 'h1', userId: 'resident-uid' });
+    await waitFor(() => expect(result.current).toBe(true));
+  });
+
+  it('never on their own record, a manager included (rules: ownMoneyUnchanged)', async () => {
+    mockGetMyHouseTiers.mockResolvedValue({ h1: 'manager' });
+    mockAuth.currentUser = { uid: 'resident-uid' };
+    const { result } = renderFor({ houseId: 'h1', userId: 'resident-uid' });
+    await act(async () => {});
+    expect(result.current).toBe(false);
+  });
+
+  it('not for a peer leader', async () => {
+    mockGetMyHouseTiers.mockResolvedValue({ h1: 'peerLeader' });
+    const { result } = renderFor({ houseId: 'h1', userId: 'resident-uid' });
+    await act(async () => {});
+    expect(result.current).toBe(false);
+  });
+
+  it('a resident record with no account is anyone-but-self: a manager may', async () => {
+    mockGetMyHouseTiers.mockResolvedValue({ h1: 'owner' });
+    const { result } = renderFor({ houseId: 'h1', userId: '' });
+    await waitFor(() => expect(result.current).toBe(true));
   });
 });

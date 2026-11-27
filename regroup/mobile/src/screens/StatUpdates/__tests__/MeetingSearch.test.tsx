@@ -311,6 +311,7 @@ function makeHookReturn(overrides: any = {}) {
     filters: { day: 'monday', type: 'all' },
     meetings: [],
     searchingForMeetings: false,
+    searchErrorMessage: "Couldn't load meetings. Please try again.",
     checkingIn: false,
     checkInSuccessful: false,
     checkInError: '',
@@ -572,6 +573,16 @@ describe('MeetingSearch', () => {
       expect(getByTestId('empty-screen-message').props.children).toBe(
         "Couldn't load meetings. Please try again.",
       );
+    });
+
+    it("shows the hook's message, e.g. the hourly-limit refusal", () => {
+      const limit =
+        "You've searched for meetings many times in the last hour. Please try again in 12 minutes.";
+      const { getByTestId } = renderScreen(
+        { meetings: [] },
+        { searchFailed: true, searchErrorMessage: limit },
+      );
+      expect(getByTestId('empty-screen-message').props.children).toBe(limit);
     });
 
     it('shows a FontAwesome5 icon, not a Material icon name', () => {

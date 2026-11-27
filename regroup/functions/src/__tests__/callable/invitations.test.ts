@@ -188,7 +188,7 @@ describe('createInvitation — happy path', () => {
     expect(mockSendOneInviteEmail).toHaveBeenCalledTimes(1);
     // The emailed link is an https app link on the web origin (default prod).
     expect(mockSendOneInviteEmail.mock.calls[0][0].inviteLink).toBe(
-      'https://regroup-app.com/invite?token=TEST_TOKEN_FIXED',
+      'https://regroup-app.com/invite#token=TEST_TOKEN_FIXED',
     );
   });
 
@@ -206,7 +206,7 @@ describe('createInvitation — happy path', () => {
         { uid: 'owner-uid', token: {} },
       );
       expect(mockSendOneInviteEmail.mock.calls[0][0].inviteLink).toBe(
-        'https://regroup-e2e.web.app/invite?token=TEST_TOKEN_FIXED',
+        'https://regroup-e2e.web.app/invite#token=TEST_TOKEN_FIXED',
       );
     } finally {
       if (prev === undefined) delete process.env.WEB_BASE_URL;
@@ -269,8 +269,17 @@ describe('createInvitation — happy path', () => {
 
   it('buildInviteLink encodes the token on the given origin', () => {
     expect(buildInviteLink('t 1', 'https://regroup-e2e.web.app')).toBe(
-      'https://regroup-e2e.web.app/invite?token=t%201',
+      'https://regroup-e2e.web.app/invite#token=t%201',
     );
+  });
+
+  // A browser never sends the fragment, so the token stays out of the Hosting
+  // and Cloud Run request logs and out of any Referer header.
+  it('buildInviteLink keeps the token out of the part of the URL a server receives', () => {
+    const url = new URL(buildInviteLink('tok-1', 'https://regroup-app.com'));
+    expect(url.pathname).toBe('/invite');
+    expect(url.search).toBe('');
+    expect(url.hash).toBe('#token=tok-1');
   });
 
   it('omits initialPhase from the doc when not provided (Firestore rejects undefined values)', async () => {

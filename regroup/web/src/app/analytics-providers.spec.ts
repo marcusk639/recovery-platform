@@ -8,7 +8,7 @@ import {
 } from './analytics-providers';
 
 // Google Analytics' automatic page_view sends the full URL, and an invitation
-// link's query carries its token (/invite?token=…, and older emails'
+// link carries its token (/invite#token=…; older links /invite?token=… and
 // /redirect?url=…token…).
 const APP_LINK_PAGES = [
   '/invite',

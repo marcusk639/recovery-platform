@@ -17,6 +17,10 @@ const brokenInvitations = [
   'regroup-app://?type=invitation&house=h1',
   'https://regroup-app.com/invite?token=',
   'https://regroup-app.com/invite/?token=bad!',
+  'https://regroup-app.com/invite#token=',
+  'https://regroup-app.com/invite/#token=bad!',
+  // The https token belongs in the fragment; in the query it is refused.
+  'https://regroup-app.com/invite?token=abc',
 ];
 
 const notInvitations = [
@@ -40,7 +44,7 @@ describe('claimsInvitation', () => {
   });
 
   it('is true for a valid invitation too', () => {
-    expect(claimsInvitation('https://regroup-app.com/invite?token=abc')).toBe(true);
+    expect(claimsInvitation('https://regroup-app.com/invite#token=abc')).toBe(true);
   });
 });
 

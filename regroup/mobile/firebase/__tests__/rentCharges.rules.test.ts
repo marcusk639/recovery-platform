@@ -12,8 +12,27 @@
  */
 
 import { assertSucceeds, assertFails } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
-import { ADMIN, HOUSE, OWNER, PEER, RESIDENT, useRentRulesEnv } from './rentRulesHarness';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  Timestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
+import {
+  ADMIN,
+  HOUSE,
+  OTHER_RESIDENT,
+  OWNER,
+  PEER,
+  RESIDENT,
+  useRentRulesEnv,
+} from './rentRulesHarness';
 
 const rules = useRentRulesEnv('demo-rent-charges-rules-test');
 const as = rules.as;
@@ -267,6 +286,14 @@ describe('rentCharges', () => {
     assertFails(getDoc(doc(as(RESIDENT), 'rentCharges/gOther_2026-11-18'))));
   it('an admin reads any rentCharges doc in the house', () =>
     assertSucceeds(getDoc(doc(as(ADMIN), 'rentCharges/gOther_2026-11-18'))));
+  // Owner decision 2026-11-26: charges are read like payments, house rank >= 2. A peer
+  // leader holds the admin claim but also owes rent here, so they read only their own.
+  it("an owner reads any resident's charge", () =>
+    assertSucceeds(getDoc(doc(as(OWNER), 'rentCharges/gOther_2026-11-18'))));
+  it("a peer leader cannot read another resident's charge", () =>
+    assertFails(getDoc(doc(as(PEER), 'rentCharges/gOther_2026-11-18'))));
+  it('a peer leader reads their own charge', () =>
+    assertSucceeds(getDoc(doc(as(PEER), 'rentCharges/gPeer_2026-11-18'))));
   it('no client may write rentCharges', async () => {
     await assertFails(
       setDoc(doc(as(OWNER), 'rentCharges/gResident_2026-11-25'), {
@@ -280,6 +307,43 @@ describe('rentCharges', () => {
     );
     await assertFails(deleteDoc(doc(as(OWNER), 'rentCharges/gResident_2026-11-18')));
   });
+});
+
+// The resident's history lists their charges (services/rentCharges listGuestCharges).
+// Rules aren't filters: a list is allowed only when the query itself proves every
+// result readable, so a resident must ask by houseId and their own guestUserId.
+describe('rentCharges: listing a history', () => {
+  const charges = (uid: string) => collection(as(uid), 'rentCharges');
+  it('a resident lists their own charges by house and their own account', () =>
+    assertSucceeds(
+      getDocs(query(charges(RESIDENT), where('houseId', '==', HOUSE), where('guestUserId', '==', RESIDENT))),
+    ));
+  it("a resident cannot list another resident's charges", async () => {
+    await assertFails(
+      getDocs(
+        query(charges(RESIDENT), where('houseId', '==', HOUSE), where('guestUserId', '==', OTHER_RESIDENT)),
+      ),
+    );
+    await assertFails(
+      getDocs(query(charges(RESIDENT), where('houseId', '==', HOUSE), where('guestId', '==', 'gOther'))),
+    );
+  });
+  it("a resident cannot list the whole house's charges", () =>
+    assertFails(getDocs(query(charges(RESIDENT), where('houseId', '==', HOUSE)))));
+  it("a manager lists one resident's charges by house and guest record", () =>
+    assertSucceeds(
+      getDocs(query(charges(ADMIN), where('houseId', '==', HOUSE), where('guestId', '==', 'gOther'))),
+    ));
+  it("a peer leader cannot list another resident's charges, or the house's", async () => {
+    await assertFails(
+      getDocs(query(charges(PEER), where('houseId', '==', HOUSE), where('guestId', '==', 'gOther'))),
+    );
+    await assertFails(getDocs(query(charges(PEER), where('houseId', '==', HOUSE))));
+  });
+  it('a peer leader lists their own charges by account', () =>
+    assertSucceeds(
+      getDocs(query(charges(PEER), where('houseId', '==', HOUSE), where('guestUserId', '==', PEER))),
+    ));
 });
 
 describe('rentAccounts and config', () => {
