@@ -491,7 +491,7 @@ describe("GuestChoreSummary", () => {
 
     it("uploads photo and includes photoUrl when user adds a photo", async () => {
       (launchImageLibrary as jest.Mock).mockResolvedValue({
-        assets: [{ uri: "file:///tmp/chore.jpg" }],
+        assets: [{ uri: "file:///tmp/chore.jpg", type: "image/jpeg" }],
       });
 
       const localMutateAsync = jest.fn(() => Promise.resolve());
@@ -510,10 +510,13 @@ describe("GuestChoreSummary", () => {
       fireEvent.press(getByTestId("complete-chore-button"));
 
       await waitFor(() => {
+        // storage.rules: houses/{houseId}/chore-evidence/{uploader uid}/{file}.
         expect(uploadChoreEvidencePhoto).toHaveBeenCalledWith(
           "file:///tmp/chore.jpg",
           "house-1",
-          expect.any(String)
+          "user-1",
+          expect.any(String),
+          { contentType: "image/jpeg" }
         );
         expect(localMutateAsync).toHaveBeenCalledWith(
           expect.objectContaining({

@@ -3,10 +3,9 @@ import { logger } from 'firebase-functions';
 import { STRIPE_SECRET_KEY } from '../config';
 import { runAccountDeletion } from '../accountDeletion';
 import { BillingNotVerifiedError } from '../api/stripeDeletion';
+import { DEMO_ACCOUNT_EMAIL } from '../util/demoAccount';
 
 const MAX_AUTH_AGE_SECONDS = 300;
-// Shared App Review demo login; mirrors isDemoAccount() in mobile/firebase/firestore.rules.
-export const DEMO_ACCOUNT_EMAIL = 'demo_user@appdemo.net';
 
 const RETRY_MESSAGE = "We couldn't finish deleting your account. Try again.";
 export const BILLING_UNVERIFIED_MESSAGE =

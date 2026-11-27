@@ -182,14 +182,19 @@ const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
                   selectionLimit: 1,
                 });
 
-                if (result.assets && result.assets[0]?.uri) {
-                  const uri = result.assets[0].uri;
-                  const tempId = `${guest.id}_${Date.now()}`;
+                const asset = result.assets?.[0];
+                const uploaderUid = auth.currentUser?.uid;
+                if (asset?.uri && uploaderUid) {
+                  // storage.rules: houses/{houseId}/chore-evidence/{uid}/…,
+                  // written only by that resident.
+                  const fileName = `${guest.id}_${Date.now()}`;
                   try {
                     photoUrl = await uploadChoreEvidencePhoto(
-                      uri,
+                      asset.uri,
                       house.id,
-                      tempId
+                      uploaderUid,
+                      fileName,
+                      asset.type ? { contentType: asset.type } : undefined
                     );
                   } catch (uploadError) {
                     logException(uploadError);

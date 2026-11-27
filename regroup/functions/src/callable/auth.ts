@@ -4,6 +4,7 @@ import { auth } from "firebase-admin";
 import { z } from "zod";
 import { Guest } from "../entities/Guest";
 import { addHouseRoles, createClaims, deleteClaim } from "../util/claims";
+import { setUserClaims } from "../util/userClaims";
 import Admin from "../entities/Admin";
 import { _verifyUserEmail, getGuestsAsUsers } from "../util/user";
 import { Role } from "../entities/Roles";
@@ -16,6 +17,7 @@ import {
   recordRoleGrant,
   recordRoleRevoke,
 } from "../util/houseRoles";
+import { refuseDemoAccount } from "../util/demoAccount";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 const guestAuthSchema = z
@@ -55,6 +57,7 @@ const removePrivilegesSchema = z.object({
 const verifyEmailSchema = z.object({ userId: z.string().min(1) });
 
 export const addGuestAuthorization = onCall(async (request) => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const guest = parseInput(guestAuthSchema, request.data) as unknown as Guest;
   logger.info("Adding authorization for guest", {
@@ -117,6 +120,7 @@ export const addGuestAuthorization = onCall(async (request) => {
 });
 
 export const addAdminAuthorization = onCall(async (request) => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const adminInput = parseInput(
     adminAuthSchema,
@@ -213,6 +217,7 @@ export const addAdminAuthorization = onCall(async (request) => {
 });
 
 export const deleteAdminAuthorization = onCall(async (request) => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const data = parseInput(deleteAdminSchema, request.data) as unknown as {
     admin: Admin;
@@ -246,7 +251,7 @@ export const deleteAdminAuthorization = onCall(async (request) => {
   });
   if (adminHouseIds?.length) {
     const userClaims = await deleteClaim(admin.userId, adminHouseIds, "admin");
-    await auth().setCustomUserClaims(admin.userId, { ...userClaims });
+    await setUserClaims(admin.userId, { ...userClaims });
   }
   if (superAdminHouseIds?.length) {
     const superAdminClaims = await deleteClaim(
@@ -254,7 +259,7 @@ export const deleteAdminAuthorization = onCall(async (request) => {
       superAdminHouseIds,
       "superAdmin",
     );
-    await auth().setCustomUserClaims(admin.userId, { ...superAdminClaims });
+    await setUserClaims(admin.userId, { ...superAdminClaims });
   }
   for (const houseId of superAdminHouseIds ?? []) {
     await recordRoleRevoke(houseId, admin.userId, "superAdmin");
@@ -267,6 +272,7 @@ export const deleteAdminAuthorization = onCall(async (request) => {
 });
 
 export const promoteGuestsToAdmin = onCall(async (request) => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const data = parseInput(
     z.array(guestMinSchema),
@@ -323,7 +329,7 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
       // Record first, then claims, then the record again (util/houseRoles,
       // "Record before claims").
       await recordRoleGrant(guest.houseId, user.uid, "peerLeader", meta);
-      await auth().setCustomUserClaims(user.uid, claims);
+      await setUserClaims(user.uid, claims);
       await recordRoleGrant(guest.houseId, user.uid, "peerLeader", meta, {
         ifClaimed: true,
       });
@@ -346,6 +352,7 @@ export const promoteGuestsToAdmin = onCall(async (request) => {
 });
 
 export const removePrivilegesForGuests = onCall(async (request) => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const data = parseInput(removePrivilegesSchema, request.data) as unknown as {
     guests: Guest[];
@@ -392,7 +399,7 @@ export const removePrivilegesForGuests = onCall(async (request) => {
         data.role,
         false,
       );
-      await auth().setCustomUserClaims(user.uid, claims);
+      await setUserClaims(user.uid, claims);
       if (data.role !== "supporter") {
         await recordRoleRevoke(guest.houseId, user.uid, data.role);
       }
@@ -402,6 +409,7 @@ export const removePrivilegesForGuests = onCall(async (request) => {
 });
 
 export const verifyUserEmail = onCall(async (request) => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
   const data = parseInput<{
     userId: string;
@@ -418,6 +426,7 @@ export const verifyUserEmail = onCall(async (request) => {
 });
 
 export const givePotentialSuperAdminPrivilege = onCall(async (request) => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
   // Check 1: token-based (fast, catches most cases)
@@ -451,7 +460,7 @@ export const givePotentialSuperAdminPrivilege = onCall(async (request) => {
     );
   }
 
-  return auth().setCustomUserClaims(request.auth.uid, {
+  return setUserClaims(request.auth.uid, {
     ...liveClaims,
     potentialSuperAdmin: true,
   });

@@ -22,6 +22,25 @@ service firebase.storage {
         );
     }
 
+    function hasGuestClaim(houseId) {
+      return isAuthenticated()
+        && request.auth.token.guest != null
+        && houseId in request.auth.token.guest;
+    }
+
+    // The shared App Review demo login (its password is in the app). It may read
+    // what its claims allow, but never upload, overwrite or delete: every write
+    // rule below starts with notDemo(). Mirrors isDemoAccount() in
+    // firestore.rules and functions util/demoAccount.ts. 'email' in token is
+    // checked first: reading an absent key is an error, which would deny every
+    // write by an account without an email (phone sign-in).
+    function notDemo() {
+      return !(isAuthenticated()
+        && 'email' in request.auth.token
+        && request.auth.token.email is string
+        && request.auth.token.email.lower() == 'demo_user@appdemo.net');
+    }
+
     function isHouseMember(houseId) {
       return isAuthenticated()
         && (
@@ -52,12 +71,19 @@ service firebase.storage {
 
     // =========================================================================
     // 1. User Avatars: users/{userId}/avatar
-    //    Read:  any authenticated user (avatars shown in house/contact views)
+    //    Read:  only the owning user
     //    Write: only the owning user; images only; max 5 MB
+    //
+    // Read was isAuthenticated() until S5 (2026-11-27), so anyone who completed
+    // free signup could fetch a user's face photo by uid. Nothing else reads it
+    // through the SDK: the owner reads it once after upload to store its
+    // download URL in users/{uid}.avatar, and everyone else shows that URL
+    // (a download-token URL, which these rules do not govern).
     // =========================================================================
     match /users/{userId}/avatar {
-      allow read: if isAuthenticated();
-      allow write: if isOwner(userId)
+      allow read: if isOwner(userId);
+      allow write: if notDemo()
+                   && isOwner(userId)
                    && isValidImageWrite(5 * 1024 * 1024);
     }
 
@@ -68,7 +94,8 @@ service firebase.storage {
     // =========================================================================
     match /houses/{houseId}/photo {
       allow read: if isAuthenticated();
-      allow write: if isHouseAdmin(houseId)
+      allow write: if notDemo()
+                   && isHouseAdmin(houseId)
                    && isValidImageWrite(10 * 1024 * 1024);
     }
 
@@ -79,7 +106,8 @@ service firebase.storage {
     // =========================================================================
     match /houses/{houseId}/logo/{fileName} {
       allow read: if isAuthenticated();
-      allow write: if isHouseAdmin(houseId)
+      allow write: if notDemo()
+                   && isHouseAdmin(houseId)
                    && isValidImageWrite(5 * 1024 * 1024);
     }
 
@@ -98,18 +126,34 @@ service firebase.storage {
     // =========================================================================
     match /houses/{houseId}/guests/{guestId}/avatar/{fileName} {
       allow read: if isHouseMember(houseId);
-      allow write: if isHouseAdmin(houseId)
+      allow write: if notDemo()
+                   && isHouseAdmin(houseId)
                    && isValidImageWrite(5 * 1024 * 1024);
     }
 
     // =========================================================================
-    // 5. Chore Photos: houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName}
+    // 5. Chore Photos: houses/{houseId}/chore-evidence/{userId}/{fileName}
     //    Read:  house members (guests + admins of that house)
-    //    Write: house members; images only; max 10 MB
+    //    Write: the resident themself: their own folder, and only while they
+    //           hold the guest claim for that house; images only; max 10 MB
+    //
+    // The app uploads here before logging the chore (GuestChoreSummary,
+    // services/storage.tsx uploadChoreEvidencePhoto). {userId} is the
+    // resident's account, which the activity rules require as the chore
+    // entry's residentUid, so a resident can neither write nor overwrite a
+    // housemate's photo, and staff without the guest claim upload none.
+    //
+    // Until S5 the only chore rule was houses/{houseId}/{week}/{day}/chores/
+    // {guestId}/{fileName}, writable by any member into any guestId folder,
+    // and the app's path (houses/{houseId}/chore-evidence/{id}) matched no
+    // rule, so every chore photo upload was refused. No client used the old
+    // path; it now falls to the catch-all deny.
     // =========================================================================
-    match /houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName} {
+    match /houses/{houseId}/chore-evidence/{userId}/{fileName} {
       allow read: if isHouseMember(houseId);
-      allow write: if isHouseMember(houseId)
+      allow write: if notDemo()
+                   && isOwner(userId)
+                   && hasGuestClaim(houseId)
                    && isValidImageWrite(10 * 1024 * 1024);
     }
 
@@ -120,7 +164,8 @@ service firebase.storage {
     // =========================================================================
     match /reports/{houseId}/{reportPath=**} {
       allow read: if isHouseMember(houseId);
-      allow write: if isHouseAdmin(houseId)
+      allow write: if notDemo()
+                   && isHouseAdmin(houseId)
                    && isValidPdfWrite(20 * 1024 * 1024);
     }
 
@@ -131,7 +176,8 @@ service firebase.storage {
     // =========================================================================
     match /temp/{userId}/{tempPath=**} {
       allow read: if isOwner(userId);
-      allow write: if isOwner(userId)
+      allow write: if notDemo()
+                   && isOwner(userId)
                    && isValidSizedWrite(10 * 1024 * 1024);
     }
 
@@ -155,12 +201,12 @@ service firebase.storage {
 
     match /houses/{houseId}/documents/{docId} {
       allow read: if false;
-      allow write: if isHouseAdmin(houseId) && isValidDocumentWrite();
+      allow write: if notDemo() && isHouseAdmin(houseId) && isValidDocumentWrite();
     }
 
     match /houses/{houseId}/guests/{guestId}/documents/{docId} {
       allow read: if false;
-      allow write: if isHouseAdmin(houseId) && isValidDocumentWrite();
+      allow write: if notDemo() && isHouseAdmin(houseId) && isValidDocumentWrite();
     }
 
     // =========================================================================

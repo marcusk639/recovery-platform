@@ -204,6 +204,15 @@ describe('deletePersonalData', () => {
     expect(paths()).toEqual(['userDeviceTokens/other']);
   });
 
+  it("deletes the user's claims-refresh marker and nobody else's", async () => {
+    store = [
+      { path: `claims-updates/${UID}`, data: { updatedAt: 1 } },
+      { path: 'claims-updates/other', data: { updatedAt: 1 } },
+    ];
+    await deletePersonalData(UID, [], {});
+    expect(paths()).toEqual(['claims-updates/other']);
+  });
+
   it("deletes the resident's uploaded document records and files", async () => {
     store = [
       { path: 'documents/d1', data: { houseId: 'h1', guestId: 'g1', uploadedBy: 'admin' } },

@@ -227,6 +227,11 @@ const userSlice = createSlice({
       state.updatingFailed = false;
       state.accountVerifyFailed = false;
     },
+    // The token after a forced refresh (claims-updates listener,
+    // src/hooks/useClaimsUpdateRefresh.ts): role checks read its claims.
+    tokenRefreshed: (state, action: PayloadAction<UserState["token"]>) => {
+      state.token = action.payload;
+    },
     resetUserState: () => {
       return initialState;
     },
@@ -395,6 +400,7 @@ export const {
   setSubscriptionStatus,
   clearError,
   resetUserState,
+  tokenRefreshed,
 } = userSlice.actions;
 
 export default userSlice.reducer;

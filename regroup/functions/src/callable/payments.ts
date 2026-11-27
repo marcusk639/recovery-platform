@@ -37,6 +37,7 @@ import {
   houseAccountApi,
   type ConnectAccountStatus,
 } from "../util/connectAccountStatus";
+import { refuseDemoAccount } from "../util/demoAccount";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 /**
@@ -117,6 +118,7 @@ const db = admin.firestore();
 export const createPaymentIntent = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     // ── 1. Auth guard ─────────────────────────────────────────────────────────
     if (!request.auth) {
       throw new HttpsError("unauthenticated", "Login required");
@@ -508,6 +510,7 @@ export const getPaymentMethod = onCall(
 export const updatePaymentInfo = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
     const { paymentMethod, guestId } = parseInput(
@@ -595,6 +598,7 @@ export const updatePaymentInfo = onCall(
 export const connectStripeAccount = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     const stripe = createStripeClient();
     const { data, auth } = request;
     // ── 1. Auth guard ─────────────────────────────────────────────────────────
@@ -782,6 +786,7 @@ export const disconnectStripeAccount = onCall(
   // removing it is a deploy-config decision, not a code one.
   { secrets: [STRIPE_SECRET_KEY, STRIPE_CLIENT_ID] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     const stripe = createStripeClient();
     const { data, auth } = request;
     // ── 1. Auth guard ─────────────────────────────────────────────────────────

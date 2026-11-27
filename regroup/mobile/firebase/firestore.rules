@@ -1274,5 +1274,13 @@ service cloud.firestore {
       allow delete: if signedIn() && isAdmin([resource.data.houseId]);
       allow update: if false;
     }
+
+    // Stamped by the server after every custom-claims write (functions
+    // util/userClaims.ts). The account's app listens to its own doc and
+    // force-refreshes its ID token when it changes (src/services/claimsUpdates.ts).
+    match /claims-updates/{userId} {
+      allow read: if isSameUser(userId);
+      allow write: if false;
+    }
   }
 }

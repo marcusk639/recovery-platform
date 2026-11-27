@@ -77,9 +77,9 @@ describe('uploads', () => {
     );
   });
 
-  it('uploadChoreEvidencePhoto uploads and returns the evidence download URL', async () => {
-    expect(await uploadChoreEvidencePhoto('/tmp/a.jpg', 'h1', 'a1')).toBe(
-      `${URL}houses/h1/chore-evidence/a1`,
+  it("uploadChoreEvidencePhoto uploads to the resident's own folder and returns its URL", async () => {
+    expect(await uploadChoreEvidencePhoto('/tmp/a.jpg', 'h1', 'u1', 'g1_1')).toBe(
+      `${URL}houses/h1/chore-evidence/u1/g1_1`,
     );
   });
 

@@ -50,6 +50,8 @@ const USER_DATA: Entry[] = [
   { path: 'guest-weeks/w1', data: { userId: 'u1' }, fate: 'deleted', step: 'personal' },
   // deleted (personal): FCM device tokens.
   { path: 'userDeviceTokens/u1', data: { tokens: ['t'] }, fate: 'deleted', step: 'personal' },
+  // deleted (personal): the claims-refresh marker (util/userClaims.ts).
+  { path: 'claims-updates/u1', data: { updatedAt: 1 }, fate: 'deleted', step: 'personal' },
   // deleted (personal): records of documents uploaded to the resident's profile.
   { path: 'documents/d1', data: { guestId: 'g1' }, fate: 'deleted', step: 'personal' },
   // retained-by-policy: house group chat messages stay (the screen says so).

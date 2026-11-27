@@ -5,6 +5,7 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { parseInput } from '../validation';
 import { assertHouseMoneyStaff, HouseAdminFields } from '../util/houseAuth';
+import { refuseDemoAccount } from '../util/demoAccount';
 
 // Payment records are keyed by PaymentIntent id (webhook) or an auto-id (manual).
 const resolveFailedPaymentSchema = z.object({
@@ -27,6 +28,7 @@ const resolveFailedPaymentSchema = z.object({
  * its status, and a repeat for one already resolved is a no-op.
  */
 export const resolveFailedPaymentOffline = onCall(async (request) => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
   const uid = request.auth.uid;
   const { paymentId } = parseInput(resolveFailedPaymentSchema, request.data);

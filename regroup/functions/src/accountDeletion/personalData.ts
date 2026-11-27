@@ -96,6 +96,8 @@ export async function deletePersonalData(
   };
   // FCM tokens, written by mobile registerDeviceToken as userDeviceTokens/{uid}.
   await collection('userDeviceTokens').doc(uid).delete();
+  // The claims-refresh marker (util/userClaims.ts).
+  await collection('claims-updates').doc(uid).delete();
 
   const bucket = admin.storage().bucket();
   await bucket.file(`users/${uid}/avatar`).delete({ ignoreNotFound: true });
