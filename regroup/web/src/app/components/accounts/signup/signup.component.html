@@ -22,8 +22,17 @@
             </div>
           </div>
 
+          <!-- Step 0c: sales closed (catalog salesOpen false): no picker, no card form -->
+          <div *ngIf="!resolvingTier && salesClosed && !signUpStarted" class="col-12 col-md-8 col-lg-5">
+            <div class="contact-box bg-white text-center rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg sales-closed">
+              <h3 class="contact-title">Coming soon</h3>
+              <h5 class="text-secondary fw-3 py-3">New plans aren't open yet. <a [routerLink]="['/contact']">Contact
+                  us</a> and we'll let you know when they are.</h5>
+            </div>
+          </div>
+
           <!-- Step 0b: capacity-first plan picker (shown when the URL has no valid tier) -->
-          <div *ngIf="!resolvingTier && pickerVisible && !signUpStarted" class="col-12 col-md-8 col-lg-5">
+          <div *ngIf="!resolvingTier && pickerVisible && !salesClosed && !signUpStarted" class="col-12 col-md-8 col-lg-5">
             <div class="contact-box bg-white text-left rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
               <div *ngIf="catalogError" class="text-danger">
                 We couldn't load current pricing. Please refresh the page or
@@ -34,10 +43,10 @@
           </div>
 
           <!-- Step 1: account details -->
-          <div *ngIf="!resolvingTier && !pickerVisible && !signUpStarted" class="col-12 col-md-8 col-lg-5">
+          <div *ngIf="!resolvingTier && !pickerVisible && !salesClosed && !signUpStarted" class="col-12 col-md-8 col-lg-5">
             <!-- Contact Box -->
             <div class="contact-box bg-white text-center rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
-              <order-summary [tier]="selectedTier" [billingInterval]="billingInterval"></order-summary>
+              <order-summary [tier]="selectedTier" [billingInterval]="billingInterval" [trialDays]="trialDays"></order-summary>
               <!-- Contact Form -->
               <form *ngIf="!loading" [formGroup]="formGroup" id="contact-form">
                 <div class="contact-top">
@@ -94,7 +103,7 @@
                   <h3 class="contact-title">Processing...</h3>
                   <h5 class="text-secondary fw-3 py-3">Please wait while we set up your account...</h5>
                 </div>
-                <order-summary [tier]="selectedTier" [billingInterval]="billingInterval"></order-summary>
+                <order-summary [tier]="selectedTier" [billingInterval]="billingInterval" [trialDays]="trialDays"></order-summary>
                 <billing-info [initialSubscription]="true" [loading]="loading" [setLoading]="setLoading"
                   [setBillingCompleted]="setBillingCompleted" [user]="user"
                   [houseType]="selectedTier?.houseType" [tier]="selectedTier?.tier"

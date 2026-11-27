@@ -17,6 +17,10 @@ export class PricingOneComponent extends BaseComponent implements OnInit {
   loading = true;
   error = false;
   billingInterval: BillingInterval = 'month';
+  /** The catalog's sales switch. Closed until the catalog says open. */
+  salesOpen = false;
+  /** The catalog's trial length (the server's TRIAL_PERIOD_DAYS). */
+  trialDays = 0;
   traditionalTiers: TierCatalogEntry[] = [];
   oxfordTiers: TierCatalogEntry[] = [];
 
@@ -31,6 +35,8 @@ export class PricingOneComponent extends BaseComponent implements OnInit {
     this.logoFilePath = `assets/img/${this.logoFileName || 'logo'}.png`;
     this.tierCatalog.getCatalog().subscribe({
       next: (catalog) => {
+        this.salesOpen = catalog.salesOpen === true;
+        this.trialDays = catalog.trialDays > 0 ? catalog.trialDays : 0;
         this.traditionalTiers = this.sortByMonthlyAmount(
           catalog.tiers.filter((t) => t.houseType === 'traditional'),
         );
@@ -89,12 +95,23 @@ export class PricingOneComponent extends BaseComponent implements OnInit {
     return tier.houseType === 'traditional' && tier.tier === 'professional';
   }
 
+  /** A for-sale tier links to checkout only while the sales switch is open. */
+  canCheckout(tier: TierCatalogEntry): boolean {
+    return tier.availableForSale && this.salesOpen;
+  }
+
   ctaRoute(tier: TierCatalogEntry): string[] {
     return tier.availableForSale ? ['/signup'] : ['/contact'];
   }
 
   ctaLabel(tier: TierCatalogEntry): string {
-    return tier.availableForSale ? 'Start Free Trial' : 'Contact Sales';
+    if (!tier.availableForSale) {
+      return 'Contact Sales';
+    }
+    if (!this.salesOpen) {
+      return 'Coming soon';
+    }
+    return this.trialDays > 0 ? 'Start Free Trial' : 'Get Started';
   }
 
   signupQueryParams(tier: TierCatalogEntry) {

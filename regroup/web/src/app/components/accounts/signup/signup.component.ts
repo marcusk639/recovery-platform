@@ -35,6 +35,11 @@ export class SignupComponent implements OnInit {
   catalogError: boolean = false;
   selectedTier: TierCatalogEntry | null = null;
   billingInterval: BillingInterval = 'month';
+  // From the catalog: the sales switch (config/sales.open) and the trial
+  // length (TRIAL_PERIOD_DAYS). Sales closed shows "Coming soon" and never
+  // reaches the card form, so createOperatorSubscription is never called.
+  salesClosed = false;
+  trialDays: number | null = null;
 
   constructor(
     private auth: AuthService,
@@ -86,15 +91,25 @@ export class SignupComponent implements OnInit {
     const tier = params.get('tier');
     const period = params.get('period');
 
-    if (!houseType || !tier) {
-      this.pickerVisible = true;
-      this.selectedTier = null;
-      this.resolvingTier = false;
-      return;
-    }
-
     this.tierCatalog.getCatalog().subscribe({
       next: (catalog) => {
+        this.trialDays = catalog.trialDays > 0 ? catalog.trialDays : null;
+        if (catalog.salesOpen !== true) {
+          this.salesClosed = true;
+          this.pickerVisible = false;
+          this.selectedTier = null;
+          this.resolvingTier = false;
+          return;
+        }
+        this.salesClosed = false;
+
+        if (!houseType || !tier) {
+          this.pickerVisible = true;
+          this.selectedTier = null;
+          this.resolvingTier = false;
+          return;
+        }
+
         const match = catalog.tiers.find((t) => t.houseType === houseType && t.tier === tier);
         if (!match || !match.availableForSale) {
           // Unknown or not-for-sale tier — never fall back to a silent
@@ -110,7 +125,11 @@ export class SignupComponent implements OnInit {
         this.resolvingTier = false;
       },
       error: () => {
+        // The picker step shows the error in place of the picker: no plan,
+        // no price and no card form without a catalog.
         this.catalogError = true;
+        this.pickerVisible = true;
+        this.selectedTier = null;
         this.resolvingTier = false;
       },
     });
@@ -146,6 +165,9 @@ export class SignupComponent implements OnInit {
   }
 
   async onSubmit() {
+    if (this.salesClosed || !this.selectedTier) {
+      return;
+    }
     this.loading = true;
     const [firstName, lastName] = this.parseName(this.formGroup.value.fullName);
     const user = new User();
