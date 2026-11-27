@@ -222,16 +222,7 @@ const HouseSettings: React.FC<Props> = (props) => {
         iconName: 'user',
         color: color.medium_grey,
       },
-      guestImport: {
-        action: () => navigation.navigate(Routes.GuestImport),
-        label: 'Import residents from CSV',
-        description: 'Add current residents from a spreadsheet',
-        iconName: 'file-import',
-        color: color.medium_grey,
-      },
-      // Owners and managers only: peer leaders see no house money, and the
-      // rules refuse their reads of the house's payment records. Each of these
-      // screens also refuses a peer leader itself (guardedScreens.ts).
+      // The owner only: the Stripe Connect callables accept only owners.
       ...(isOwner
         ? {
             payments: {
@@ -243,8 +234,20 @@ const HouseSettings: React.FC<Props> = (props) => {
             },
           }
         : {}),
+      // Owners and managers only: peer leaders see no house money, and the
+      // rules refuse their reads of the house's payment records. Each of these
+      // screens also refuses a peer leader itself (guardedScreens.ts).
       ...(mayViewHouseMoney
         ? {
+            // Owner decision 2026-11-27: bulk-adding residents is for owners
+            // and managers too.
+            guestImport: {
+              action: () => navigation.navigate(Routes.GuestImport),
+              label: 'Import residents from CSV',
+              description: 'Add current residents from a spreadsheet',
+              iconName: 'file-import',
+              color: color.medium_grey,
+            },
             paymentDashboard: {
               action: () => navigation.navigate(Routes.PaymentDashboard),
               label: 'Payment Dashboard',

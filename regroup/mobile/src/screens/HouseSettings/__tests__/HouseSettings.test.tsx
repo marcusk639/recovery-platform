@@ -462,6 +462,19 @@ describe('HouseSettings', () => {
       expect(getByText('Import residents from CSV')).toBeTruthy();
     });
 
+    // Owner decision 2026-11-27: bulk-adding residents is for owners and
+    // managers, not peer leaders.
+    it('hides the CSV import entry from a peer leader', () => {
+      mockMayViewHouseMoney = false;
+      try {
+        const store = buildStore();
+        const { queryByText } = renderScreen(store);
+        expect(queryByText('Import residents from CSV')).toBeNull();
+      } finally {
+        mockMayViewHouseMoney = true;
+      }
+    });
+
     it('renders the Balances entry for owners and managers', () => {
       const store = buildStore();
       const { getByText } = renderScreen(store);

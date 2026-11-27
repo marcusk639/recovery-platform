@@ -75,16 +75,17 @@ tags:
             - tapOn: "Show roots"
             - tapOn: "Downloads"
       - tapOn: "e2e-guests.csv"
-# The preview has both rows, the quoted comma kept in one field.
+# The preview has both rows, the quoted comma kept in one field, and
+# nothing skipped.
 - extendedWaitUntil:
-    visible: "2 residents ready to import"
+    visible: "2 ready, 0 skipped"
     timeout: 15000
 - assertVisible: "Casey Import, Jr."
 - assertVisible: "Riley Imported"
 - tapOn:
     id: "import-button"
 - extendedWaitUntil:
-    visible: "Successfully imported 2 residents"
+    visible: "Successfully imported 2 residents\\..*"
     timeout: 30000
 # Firestore: one guest doc each, under this house.
 - runScript:
