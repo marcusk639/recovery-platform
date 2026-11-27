@@ -46,4 +46,10 @@ export function seedQuery(
 ): void;
 export function readDoc(path: string): Record<string, any> | undefined;
 export function seedCall(name: string, data: unknown): void;
-export function failNext(op: OpName, error: unknown, path?: string): void;
+/** `after`: let that many matching calls through before failing one. */
+export function failNext(
+  op: OpName,
+  error: unknown,
+  path?: string,
+  options?: { after?: number },
+): void;

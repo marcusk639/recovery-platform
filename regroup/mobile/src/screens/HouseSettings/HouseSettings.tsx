@@ -218,13 +218,6 @@ const HouseSettings: React.FC<Props> = (props) => {
         iconName: 'user',
         color: color.medium_grey,
       },
-      guestImport: {
-        action: () => navigation.navigate(Routes.GuestImport),
-        label: 'Import residents from CSV',
-        description: 'Add current residents from a spreadsheet',
-        iconName: 'file-import',
-        color: color.medium_grey,
-      },
       payments: {
         action: () => navigation.navigate(Routes.StripeSettings),
         label: 'Payments',
@@ -236,6 +229,15 @@ const HouseSettings: React.FC<Props> = (props) => {
       // rules refuse their reads of the house's payment records.
       ...(mayViewHouseMoney
         ? {
+            // Owner decision 2026-11-27: bulk-adding residents is for owners
+            // and managers too; the screen checks the same itself.
+            guestImport: {
+              action: () => navigation.navigate(Routes.GuestImport),
+              label: 'Import residents from CSV',
+              description: 'Add current residents from a spreadsheet',
+              iconName: 'file-import',
+              color: color.medium_grey,
+            },
             paymentDashboard: {
               action: () => navigation.navigate(Routes.PaymentDashboard),
               label: 'Payment Dashboard',

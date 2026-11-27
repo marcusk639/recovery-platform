@@ -9,7 +9,14 @@ import {
 } from '@react-native-documents/picker';
 import { readFile } from '@dr.pogodin/react-native-fs';
 import { useQueryClient } from '@tanstack/react-query';
-import { parseGuestCsv, importGuestsFromRows, GuestImportRow } from '../../services/guestImport';
+import {
+  parseGuestCsvReport,
+  importGuests,
+  GuestImportRow,
+  GuestImportResult,
+  SkippedGuestRow,
+} from '../../services/guestImport';
+import { useHouseMoneyAccess } from '../../state/queries/houseTierQueries';
 import { useData } from '../../context/DataContext';
 import { guestKeys } from '../../state/queries/guestQueries';
 import ScreenHeader from '../../components/screen-header';
@@ -24,9 +31,14 @@ const GuestImportScreen: React.FC = () => {
   // (which it doesn't have) made every import return early (P5 Task 17).
   const { currentHouse } = useData();
   const queryClient = useQueryClient();
+  // Owner decision 2026-11-27: owners and managers only. The same tiers as
+  // the house's money, so a peer leader who reaches this route is refused.
+  const access = useHouseMoneyAccess(currentHouse?.id ?? '');
   const [rows, setRows] = useState<GuestImportRow[]>([]);
+  const [skipped, setSkipped] = useState<SkippedGuestRow[]>([]);
+  const [picked, setPicked] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [importedCount, setImportedCount] = useState<number | null>(null);
+  const [result, setResult] = useState<GuestImportResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
 
   const handlePickFile = async () => {
@@ -45,15 +57,19 @@ const GuestImportScreen: React.FC = () => {
       }
       // Never log `content`: it holds residents' names and contact details.
       const content = await readFile(copy.localUri, 'utf8');
-      const parsed = parseGuestCsv(content);
-      setRows(parsed);
+      const report = parseGuestCsvReport(content);
+      setRows(report.rows);
+      setSkipped(report.skipped);
+      setPicked(true);
       setParseError(null);
-      setImportedCount(null);
+      setResult(null);
     } catch (error) {
       // The parser's own message names the problem (e.g. a missing column) and
       // holds no file content, so show it as it is.
       if (error instanceof Error && error.name === 'GuestCsvError') {
         setRows([]);
+        setSkipped([]);
+        setPicked(false);
         setParseError(error.message);
       } else if (!(isErrorWithCode(error) && error.code === errorCodes.OPERATION_CANCELED)) {
         setParseError('Could not read file. Make sure it is a valid CSV.');
@@ -68,9 +84,10 @@ const GuestImportScreen: React.FC = () => {
     }
     setLoading(true);
     try {
-      const count = await importGuestsFromRows(currentHouse.id, rows);
-      setImportedCount(count);
+      setResult(await importGuests(currentHouse.id, rows));
       setRows([]);
+      setSkipped([]);
+      setPicked(false);
       // The guest list, the guest tab and the balances read these.
       queryClient.invalidateQueries({ queryKey: guestKeys.all });
     } catch (error) {
@@ -81,8 +98,22 @@ const GuestImportScreen: React.FC = () => {
     }
   };
 
-  if (loading) {
+  if (loading || access === 'checking') {
     return <RatsLoadingIndicator />;
+  }
+  if (access === 'no') {
+    return (
+      <View style={styles.screen} testID="guest-import-no-access">
+        <ScreenHeader renderBackButton header="Import Residents" />
+        <View style={styles.container}>
+          <RatsText
+            translate={false}
+            text="Only the house's owner or a manager can import residents."
+            style={styles.hint}
+          />
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -100,23 +131,41 @@ const GuestImportScreen: React.FC = () => {
 
         {parseError && <RatsText translate={false} text={parseError} style={styles.error} />}
 
-        {importedCount !== null && (
+        {result && (
           <RatsText
             translate={false}
-            text={`Successfully imported ${importedCount} resident${
-              importedCount !== 1 ? 's' : ''
-            }`}
-            style={styles.success}
+            text={resultMessage(result)}
+            style={result.failed > 0 ? styles.error : styles.success}
           />
+        )}
+
+        {picked && (
+          <>
+            <RatsText
+              translate={false}
+              text={`${rows.length} ready, ${skipped.length} skipped`}
+              style={styles.preview}
+            />
+            {skipped.slice(0, 20).map(s => (
+              <RatsText
+                key={s.row}
+                translate={false}
+                text={`Row ${s.row}: ${s.reason}`}
+                style={styles.skipped}
+              />
+            ))}
+            {skipped.length > 20 && (
+              <RatsText
+                translate={false}
+                text={`and ${skipped.length - 20} more skipped rows`}
+                style={styles.skipped}
+              />
+            )}
+          </>
         )}
 
         {rows.length > 0 && (
           <>
-            <RatsText
-              translate={false}
-              text={`${rows.length} residents ready to import`}
-              style={styles.preview}
-            />
             <FlatList
               data={rows.slice(0, 10)}
               keyExtractor={(_, idx) => String(idx)}
@@ -139,6 +188,19 @@ const GuestImportScreen: React.FC = () => {
     </View>
   );
 };
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** What an import did, and whether to run it again. */
+export function resultMessage(r: GuestImportResult): string {
+  const already = r.alreadyResidents
+    ? ` ${r.alreadyResidents} ${r.alreadyResidents === 1 ? 'was' : 'were'} already residents.`
+    : '';
+  if (r.failed > 0) {
+    return `${r.imported} imported, ${r.failed} failed.${already} Importing the same file again is safe: it adds only the ones missing.`;
+  }
+  return `Successfully imported ${plural(r.imported, 'resident')}.${already}`;
+}
 
 const styles = StyleSheet.create({
   screen: {
@@ -177,6 +239,11 @@ const styles = StyleSheet.create({
     color: color.dark_grey,
     fontWeight: '600',
     marginBottom: normalize(8),
+  },
+  skipped: {
+    fontSize: fontSize.small,
+    color: color.red,
+    paddingVertical: normalize(2),
   },
   row: {
     fontSize: fontSize.small,
