@@ -31,6 +31,10 @@ export interface TierCatalogEntry {
 export interface TierCatalog {
   currency: string;
   tiers: TierCatalogEntry[];
+  /** Free-trial days a new subscription gets (the server's TRIAL_PERIOD_DAYS). */
+  trialDays: number;
+  /** Whether new subscriptions can start (the server's config/sales.open). */
+  salesOpen: boolean;
 }
 
 /** Query params `/signup` reads to pre-select a tier. */

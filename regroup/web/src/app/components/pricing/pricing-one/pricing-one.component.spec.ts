@@ -1,6 +1,7 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
-import { of } from 'rxjs';
+import { Observable, of, throwError } from 'rxjs';
+import { ActivatedRoute, convertToParamMap } from '@angular/router';
 
 import { PricingOneComponent } from './pricing-one.component';
 import { TierCatalogService } from 'src/app/services/subscriptions/tier-catalog.service';
@@ -8,6 +9,8 @@ import { TierCatalog } from 'src/app/entities/TierCatalog';
 
 const catalog: TierCatalog = {
   currency: 'usd',
+  trialDays: 7,
+  salesOpen: true,
   tiers: [
     {
       houseType: 'traditional',
@@ -47,6 +50,8 @@ const catalog: TierCatalog = {
 describe('PricingOneComponent', () => {
   let component: PricingOneComponent;
   let fixture: ComponentFixture<PricingOneComponent>;
+  const route: any = { snapshot: { queryParamMap: convertToParamMap({}) } };
+  let catalog$: Observable<TierCatalog> = of(catalog);
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
@@ -55,13 +60,15 @@ describe('PricingOneComponent', () => {
       providers: [
         {
           provide: TierCatalogService,
-          useValue: { getCatalog: () => of(catalog) },
+          useValue: { getCatalog: () => catalog$ },
         },
+        { provide: ActivatedRoute, useValue: route },
       ],
     }).compileComponents();
   }));
 
   beforeEach(() => {
+    catalog$ = of(catalog);
     fixture = TestBed.createComponent(PricingOneComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
@@ -123,6 +130,57 @@ describe('PricingOneComponent', () => {
       expect(network).toContain('Analytics & ROI reporting (coming soon)');
       expect(starter).not.toContain('Compliance export');
       expect(starter).not.toContain('Analytics');
+    });
+  });
+
+  // Launch P5 Task 11: opened from the app, the chosen plan's signup keeps from=app.
+  it('carries from=app into the signup link only when the page has it', () => {
+    route.snapshot = { queryParamMap: convertToParamMap({ from: 'app' }) };
+    expect(component.signupQueryParams(catalog.tiers[0])).toEqual(
+      jasmine.objectContaining({ from: 'app', houseType: catalog.tiers[0].houseType }),
+    );
+    route.snapshot = { queryParamMap: convertToParamMap({}) };
+    expect(component.signupQueryParams(catalog.tiers[0]).hasOwnProperty('from')).toBe(false);
+  });
+  // Launch P5 Task 12: the sales switch and the trial come from the catalog.
+  describe('sales switch and catalog availability', () => {
+    const render = (result: Observable<TierCatalog>): HTMLElement => {
+      catalog$ = result;
+      fixture = TestBed.createComponent(PricingOneComponent);
+      component = fixture.componentInstance;
+      fixture.detectChanges();
+      return fixture.nativeElement as HTMLElement;
+    };
+    const text = (el: HTMLElement) => (el.textContent || '').replace(/\s+/g, ' ');
+
+    it('with sales open, a for-sale tier links to checkout as "Start Free Trial"', () => {
+      const el = render(of({ ...catalog, salesOpen: true }));
+      const links = el.querySelectorAll('a.plan-checkout');
+      expect(links.length).toBe(1);
+      expect(text(links[0] as HTMLElement).trim()).toBe('Start Free Trial');
+      expect(el.querySelectorAll('.plan-coming-soon').length).toBe(0);
+    });
+
+    it('with sales closed, shows "Coming soon" and no checkout link', () => {
+      const el = render(of({ ...catalog, salesOpen: false }));
+      expect(el.querySelectorAll('a.plan-checkout').length).toBe(0);
+      const soon = el.querySelectorAll('.plan-coming-soon');
+      expect(soon.length).toBe(1);
+      expect(text(soon[0] as HTMLElement).trim()).toBe('Coming soon');
+      expect(component.canCheckout(catalog.tiers[0])).toBe(false);
+      expect(component.ctaLabel(catalog.tiers[0])).toBe('Coming soon');
+      // The not-for-sale tier still points at sales, not at checkout.
+      expect(component.ctaLabel(catalog.tiers[1])).toBe('Contact Sales');
+    });
+
+    it('with the catalog unavailable, shows no price, no trial and no checkout link', () => {
+      const el = render(throwError(new Error('unavailable')));
+      expect(component.error).toBe(true);
+      expect(text(el)).toContain("We couldn't load current pricing");
+      expect(text(el)).not.toMatch(/\$\s*\d/);
+      expect(text(el)).not.toMatch(/\d+-day/i);
+      expect(text(el)).not.toContain('Free Trial');
+      expect(el.querySelectorAll('a.plan-checkout').length).toBe(0);
     });
   });
 });

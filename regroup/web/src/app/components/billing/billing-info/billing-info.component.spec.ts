@@ -76,4 +76,31 @@ describe('BillingInfoComponent', () => {
       'year',
     );
   });
+
+  // Launch P5 Task 9/11: the app has no WebView, so the page posts nothing to one.
+  it('never calls ReactNativeWebView.postMessage after checkout', async () => {
+    const postMessage = jasmine.createSpy('postMessage');
+    (window as any).ReactNativeWebView = { postMessage };
+    try {
+      const authService = TestBed.inject(AuthService) as any;
+      authService.subscribeOperator = jasmine.createSpy('subscribeOperator').and.resolveTo({});
+      authService.cachedDetails = { email: 'a@rats-e2e.com' };
+      authService.clearCachedDetails = jasmine.createSpy('clearCachedDetails');
+      component.initialSubscription = true;
+      component.setLoading = () => {};
+      component.setBillingCompleted = () => {};
+      (component as any).stripeService = {
+        stripe: {
+          createPaymentMethod: () =>
+            ({ toPromise: () => Promise.resolve({ paymentMethod: { id: 'pm_123' } }) }) as any,
+        },
+      };
+      component.stripeTest.get('name').setValue('Test User');
+      await component.buy();
+      expect(postMessage).not.toHaveBeenCalled();
+      expect(authService.clearCachedDetails).toHaveBeenCalled();
+    } finally {
+      delete (window as any).ReactNativeWebView;
+    }
+  });
 });

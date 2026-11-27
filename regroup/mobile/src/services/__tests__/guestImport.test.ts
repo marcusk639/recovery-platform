@@ -22,11 +22,7 @@ jest.mock('../guest', () => ({
 }));
 
 import { firestore } from '../../firebase-setup';
-import {
-  parseGuestCsv,
-  importGuestsFromRows,
-  GuestImportRow,
-} from '../guestImport';
+import { parseGuestCsv, importGuestsFromRows, GuestImportRow, GuestCsvError } from '../guestImport';
 
 describe('parseGuestCsv', () => {
   it('parses a valid CSV string into import rows', () => {
@@ -84,9 +80,7 @@ describe('parseGuestCsv', () => {
 describe('importGuestsFromRows', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    ((firestore as any)._mockBatchCommit as jest.Mock).mockResolvedValue(
-      undefined,
-    );
+    ((firestore as any)._mockBatchCommit as jest.Mock).mockResolvedValue(undefined);
   });
 
   it('returns count of guests imported', async () => {
@@ -109,7 +103,13 @@ describe('importGuestsFromRows', () => {
     // lived there, and their balance was entered by hand, so no prorated first charge.
     const before = Date.now();
     await importGuestsFromRows('house-1', [
-      { firstName: 'Jane', lastName: 'Smith', email: 'jane@example.com', sobrietyDate: '2025-01-15', drugOfChoice: 'Alcohol' },
+      {
+        firstName: 'Jane',
+        lastName: 'Smith',
+        email: 'jane@example.com',
+        sobrietyDate: '2025-01-15',
+        drugOfChoice: 'Alcohol',
+      },
     ]);
     const written = ((firestore as any)._mockBatchSet as jest.Mock).mock.calls[0][1];
     expect(typeof written.importedAt).toBe('string');
@@ -134,5 +134,78 @@ describe('importGuestsFromRows', () => {
   it('returns 0 when given empty rows', async () => {
     const count = await importGuestsFromRows('house-1', []);
     expect(count).toBe(0);
+  });
+});
+
+// P5 Task 17: quoted fields (an RFC 4180 subset) and a missing column the
+// screen can name.
+describe('parseGuestCsv: quoted fields and missing columns', () => {
+  const HEADER = 'firstName,lastName,email,sobrietyDate,drugOfChoice';
+
+  it('keeps a quoted field with a comma as one field', () => {
+    const rows = parseGuestCsv(
+      [HEADER, 'Sam,"Smith, Jr.",sam@example.com,2025-01-15,Alcohol'].join('\n'),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].lastName).toBe('Smith, Jr.');
+    expect(rows[0].email).toBe('sam@example.com');
+  });
+
+  it('reads a doubled quote inside a quoted field as one quote', () => {
+    const rows = parseGuestCsv(
+      [HEADER, '"Al ""Ace""",Jones,al@example.com,2025-01-15,Alcohol'].join('\n'),
+    );
+    expect(rows[0].firstName).toBe('Al "Ace"');
+  });
+
+  it('reads Windows line endings', () => {
+    const rows = parseGuestCsv(
+      [HEADER, 'Jane,Smith,jane@example.com,2025-01-15,Alcohol', ''].join('\r\n'),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].drugOfChoice).toBe('Alcohol');
+  });
+
+  it('names one missing column', () => {
+    expect(() =>
+      parseGuestCsv(
+        'firstName,lastName,email,sobrietyDate\nJane,Smith,jane@example.com,2025-01-15',
+      ),
+    ).toThrow('Missing column: drugOfChoice');
+  });
+
+  it('names every missing column', () => {
+    expect(() => parseGuestCsv('firstName,lastName,email\nJane,Smith,jane@example.com')).toThrow(
+      'Missing columns: sobrietyDate, drugOfChoice',
+    );
+  });
+
+  // Review: Excel's "CSV UTF-8" export starts with a byte-order mark.
+  it('ignores a UTF-8 byte-order mark before the header', () => {
+    const rows = parseGuestCsv(
+      '\uFEFF' + [HEADER, 'Jane,Smith,jane@example.com,2025-01-15,Alcohol'].join('\n'),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].firstName).toBe('Jane');
+  });
+
+  // Review: an unclosed quote used to swallow the rest of the file silently.
+  it('refuses a field whose quote is never closed', () => {
+    expect(() =>
+      parseGuestCsv(
+        [HEADER, 'Sam,"Smith, Jr.,sam@example.com,2025-01-15,Alcohol', 'Bo,B,b@x.com,2025-01-01,X'].join('\n'),
+      ),
+    ).toThrow(new GuestCsvError('A quoted field is never closed. Check the quotes in the file.'));
+  });
+
+  it('marks the error as a CSV problem, not a read failure', () => {
+    let caught: unknown;
+    try {
+      parseGuestCsv('firstName\nJane');
+    } catch (e) {
+      caught = e;
+    }
+    expect(caught).toBeInstanceOf(GuestCsvError);
+    expect((caught as Error).name).toBe('GuestCsvError');
   });
 });

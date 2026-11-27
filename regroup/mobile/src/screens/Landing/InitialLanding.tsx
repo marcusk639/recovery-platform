@@ -5,6 +5,7 @@ import { normalize, fontSize } from '../../styles/theme';
 import { RatsLogoHorizontal } from '../../components/rats-logo/rats-logo';
 
 import InitialLandingForm from './InitialLandingForm';
+import CheckMyApplication from './CheckMyApplication';
 import { RatsText } from '../../components/rats-text';
 import { IOS, IS_X } from '../../util/platform';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -56,6 +57,7 @@ function InitialLanding() {
       </View>
       <View style={InitialLandingStyles.container}>
         {withNavigation(InitialLandingForm)({})}
+        <CheckMyApplication />
       </View>
     </SafeAreaView>
   );

@@ -9,6 +9,8 @@ import { TierCatalog } from 'src/app/entities/TierCatalog';
 
 const catalog: TierCatalog = {
   currency: 'usd',
+  trialDays: 7,
+  salesOpen: true,
   tiers: [
     {
       houseType: 'traditional',
@@ -124,5 +126,16 @@ describe('TierPickerComponent', () => {
     component.selected.subscribe((value) => emitted.push(value));
     component.confirm();
     expect(emitted).toEqual([{ houseType: 'traditional', tier: 'starter', period: 'month' }]);
+  });
+  // Launch P5 Task 12: no selection reaches checkout while sales are closed.
+  it('emits nothing on confirm while the catalog says sales are closed', () => {
+    configure(jasmine.createSpy().and.returnValue(of({ ...catalog, salesOpen: false })));
+    component.chooseHouseType('traditional');
+    component.residents = 5;
+    component.submitCapacity();
+    const emitted: any[] = [];
+    component.selected.subscribe((value) => emitted.push(value));
+    component.confirm();
+    expect(emitted).toEqual([]);
   });
 });

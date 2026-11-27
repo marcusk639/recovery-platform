@@ -8,6 +8,6 @@
     <app-pricing-one></app-pricing-one>
     <app-footer-one></app-footer-one>
     <div #floatingButton class="floating col-12">
-        <button class="btn btn-bordered w-100 mt-3" type="button" (click)="signUp()">Start Free Trial</button>
+        <button *ngIf="signUpLabel" class="btn btn-bordered w-100 mt-3" type="button" (click)="signUp()">{{ signUpLabel }}</button>
     </div>
 </div>

@@ -10,6 +10,7 @@ const accounts = require('../../../e2e/setup/testAccounts.json').accounts;
 const HOUSE = 'test-house-123';
 const OXFORD = 'test-house-oxford';
 const OXFORD_NEW = 'test-house-oxford-new';
+// A traditional house whose operator's subscription ended (billing flows, launch P5 Tasks 9-10).
 const account = (id) => accounts.find((a) => a.id === id);
 const uidOf = (id) => `e2e-${id}`;
 const iso = (now) => new Date(now).toISOString();
@@ -260,4 +261,33 @@ function application(now) {
   };
 }
 
-module.exports = { application, documents, HOUSE, OXFORD, OXFORD_NEW, uidOf, iso, operator, resident, house, activity, payments };
+/** An upcoming Oxford business meeting, for oxford-business-meeting.yaml. */
+function businessMeeting(createdBy, now) {
+  return {
+    id: 'e2e-meeting-1',
+    houseId: OXFORD,
+    scheduledDate: iso(now + 7 * 86400000),
+    agenda: [],
+    attendees: [],
+    quorumMet: false,
+    minutes: '',
+    createdBy,
+    createdAt: iso(now),
+  };
+}
+
+module.exports = {
+  application,
+  businessMeeting,
+  documents,
+  HOUSE,
+  OXFORD,
+  OXFORD_NEW,
+  uidOf,
+  iso,
+  operator,
+  resident,
+  house,
+  activity,
+  payments,
+};

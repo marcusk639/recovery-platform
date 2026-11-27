@@ -38,6 +38,22 @@ export const useMyApplications = (enabled = true) => {
 };
 
 /**
+ * One application by id: the applicant's own (ApplicationStatus) or, for an
+ * admin, one of the house's (the intake pre-fill).
+ */
+export const useApplication = (
+  houseId: string,
+  appId: string,
+  enabled = true,
+) =>
+  useQuery({
+    queryKey: applicationKeys.detail(houseId, appId),
+    queryFn: () => applicationService.getApplication(houseId, appId),
+    enabled: enabled && !!houseId && !!appId,
+    staleTime: 15000,
+  });
+
+/**
  * Fetch all applications for a specific house
  *
  * @param houseId - The house ID to fetch applications for

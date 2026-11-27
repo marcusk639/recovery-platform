@@ -7,6 +7,7 @@
 #     env:
 #       EMAIL: test-manager@rats-e2e.com
 #       PASSWORD: ${E2E_TEST_PASSWORD}
+#       LANDING_ID: subscription-required-screen   # optional; default house-tab
 #
 # Selector path ported from e2e/helpers/auth.js (Detox).
 appId: ${APP_ID}
@@ -38,19 +39,11 @@ appId: ${APP_ID}
 - tapOn:
     id: "email-input"
 - inputText: ${EMAIL}
-# Let the layout settle before tapping the password field. Without this, the tap
-# on password-input races the keyboard/scroll and fails to focus the field, so
-# inputText lands nowhere and login submits empty. Not hideKeyboard: on iOS it
-# fails intermittently with "Couldn't hide the keyboard" and ends the flow.
-- waitForAnimationToEnd
-# Tap by testID — RatsTextInput forwards testID to the inner native TextInput
-# (accessibilityIdentifier on iOS). Under E2E the field is non-secure
-# (secureTextEntry gated on IS_E2E_TEST) so Maestro can type into it.
-# The retry covers a first tap lost to the same race: the password then lands in
-# the email field and login fails on "Required".
-- tapOn:
-    id: "password-input"
-    retryTapIfNoChange: true
+# Move to the password field with the keyboard's Next key (the email field's
+# onSubmitEditing focuses it), not a tap. A tap raced the keyboard/scroll on
+# iOS 27 simulators: the password landed in the email field ("Must be shorter
+# than 50 characters"), or the retry tap hit "Forgot password?".
+- pressKey: Enter
 - waitForAnimationToEnd
 - inputText: ${PASSWORD}
 - tapOn:
@@ -61,7 +54,8 @@ appId: ${APP_ID}
     text: "Not Now"
     optional: true
 # Login round-trip (auth + initial house data) can take up to a minute.
+# LANDING_ID is for personas the gate stops before the tabs (billing flows).
 - extendedWaitUntil:
     visible:
-      id: "house-tab"
+      id: ${LANDING_ID || "house-tab"}
     timeout: 60000

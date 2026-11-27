@@ -24,8 +24,14 @@ export class AuthGuard implements CanActivate {
         // doAutoLogin resolves (never rejects) with undefined when there is no
         // session, so the resolved user is what decides; the catch only guards
         // against a future contract change and fails closed.
+        // Keep ?from=app (opened from the mobile app) through sign-in.
+        const fromApp = next?.queryParamMap?.get('from') === 'app';
         const deny = () => {
-          this.myRoute.navigate(['login']);
+          if (fromApp) {
+            this.myRoute.navigate(['login'], { queryParams: { from: 'app' } });
+          } else {
+            this.myRoute.navigate(['login']);
+          }
           return false;
         };
         return this.auth

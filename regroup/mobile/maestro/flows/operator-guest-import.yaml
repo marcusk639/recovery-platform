@@ -1,0 +1,150 @@
+# OPS-037 — Operator: import residents from a CSV, through the system picker.
+# House Settings → Import residents from CSV → pick maestro/fixtures/guests.csv
+# (2 fictional residents; one last name has a comma, in quotes) → preview shows
+# 2 → import → both are in Manage Guests and in Firestore under this house.
+# Persona: manager (owner of test-house-123).
+# Before P5 Task 17 nothing opened the screen, a quoted comma split the row,
+# and the import returned early (it read a `house` DataContext doesn't have).
+# Before running: maestro/scripts/stage-picker-files.sh --platform <ios|android> --device <id>
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/operator-guest-import.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - files
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- tapOn:
+    id: "house-settings-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "guest-import-section"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    id: "guest-import-section"
+- extendedWaitUntil:
+    visible:
+      id: "guest-import-screen"
+    timeout: 15000
+- tapOn:
+    id: "pick-csv-button"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: "Browse"
+          timeout: 15000
+      - tapOn: "Browse"
+      - tapOn:
+          text: "On My iPhone"
+          optional: true
+      - extendedWaitUntil:
+          visible: "e2e-guests"
+          timeout: 15000
+      # As in device-document-upload.yaml, the name label doesn't take the tap;
+      # the thumbnail does. e2e-guests.csv sorts first.
+      - tapOn:
+          point: "18%,29%"
+# Android's picker opens on Recent, which may not list a pushed CSV: go to Downloads.
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible: "Recent|Downloads|e2e-guests.csv"
+          timeout: 15000
+      - runFlow:
+          when:
+            notVisible: "e2e-guests.csv"
+          commands:
+            - tapOn: "Show roots"
+            - tapOn: "Downloads"
+      - tapOn: "e2e-guests.csv"
+# The preview has both rows, the quoted comma kept in one field, and
+# nothing skipped.
+- extendedWaitUntil:
+    visible: "2 ready, 0 skipped"
+    timeout: 15000
+- assertVisible: "Casey Import, Jr."
+- assertVisible: "Riley Imported"
+- tapOn:
+    id: "import-button"
+- extendedWaitUntil:
+    visible: "Successfully imported 2 residents\\..*"
+    timeout: 30000
+# Firestore: one guest doc each, under this house.
+- runScript:
+    file: ../scripts/maestro-js/count-where.js
+    env:
+      COLLECTION: guests
+      FIELD: email
+      VALUE: e2e-import-casey@rats-e2e.com
+- assertTrue:
+    condition: ${output.count === 1}
+    label: the quoted-comma resident is stored once
+- runScript:
+    file: ../scripts/maestro-js/count-where.js
+    env:
+      COLLECTION: guests
+      FIELD: email
+      VALUE: e2e-import-riley@rats-e2e.com
+- assertTrue:
+    condition: ${output.count === 1}
+    label: the second resident is stored once
+- runScript:
+    file: ../scripts/maestro-js/count-where.js
+    env:
+      COLLECTION: guests
+      FIELD: lastName
+      VALUE: Import, Jr.
+- assertTrue:
+    condition: ${output.count === 1}
+    label: the quoted last name is stored whole
+# The guest list shows both (a relaunch keeps the session and closes the modals).
+- stopApp
+- launchApp:
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "manage-guests-button"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    id: "manage-guests-button"
+- extendedWaitUntil:
+    visible:
+      id: "guest-list-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: ".*Casey.*"
+    direction: DOWN
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      text: ".*Riley.*"
+    direction: DOWN
+    timeout: 20000
+- runFlow:
+    file: ../subflows/logout.yaml

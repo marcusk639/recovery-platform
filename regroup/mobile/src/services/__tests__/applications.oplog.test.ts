@@ -61,16 +61,19 @@ describe('submitApplication', () => {
     expect(getOpLog()).toEqual([]);
   });
 
-  it('sets houses/{houseId}/applications/{auto id} as a pending application', async () => {
+  // One application per applicant per house (owner, 2026-11-27): the id is
+  // `${houseId}_${uid}`, checked first, so a second submit is refused.
+  it('sets houses/{houseId}/applications/{houseId}_{uid} as a pending application', async () => {
     const id = await submitApplication('h1', input);
 
-    expect(id).toBe('auto-1');
+    expect(id).toBe('h1_u1');
     expect(getOpLog()).toEqual([
+      { op: 'get', path: 'houses/h1/applications/h1_u1' },
       {
         op: 'set',
-        path: 'houses/h1/applications/auto-1',
+        path: 'houses/h1/applications/h1_u1',
         data: {
-          id: 'auto-1',
+          id: 'h1_u1',
           houseId: 'h1',
           applicantUid: 'u1',
           ...input,
@@ -80,11 +83,21 @@ describe('submitApplication', () => {
         },
       },
     ]);
-    expect(readDoc('houses/h1/applications/auto-1')?.status).toBe('pending');
+    expect(readDoc('houses/h1/applications/h1_u1')?.status).toBe('pending');
+  });
+
+  it('refuses a second application to the same house, writing nothing', async () => {
+    seedDoc('houses/h1/applications/h1_u1', { id: 'h1_u1', applicantUid: 'u1', status: 'pending' });
+
+    await expect(submitApplication('h1', input)).rejects.toMatchObject({
+      name: 'ApplicationExistsError',
+      applicationId: 'h1_u1',
+    });
+    expect(getOpLog()).toEqual([{ op: 'get', path: 'houses/h1/applications/h1_u1' }]);
   });
 
   it('replaces a write failure with a generic message', async () => {
-    failNext('set', new Error('denied'), 'houses/h1/applications/auto-1');
+    failNext('set', new Error('denied'), 'houses/h1/applications/h1_u1');
 
     await expect(submitApplication('h1', input)).rejects.toThrow(
       'Failed to submit application. Please try again.',

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import GracePeriodBanner from '@mobile/components/subscription/GracePeriodBanner';
 import { useSubscriptionGate } from '@mobile/hooks/useSubscriptionGate';
-import { WEB_PORTAL_URL } from '@mobile/screens/Subscription/SubscriptionRequiredScreen';
+import { ACCOUNT_URL } from './accountUrl';
 import { Notice, noticeStyle } from './Notice';
 
 // Uses the phone's gate logic rather than its SubscriptionGate component, because
@@ -15,7 +15,7 @@ export function SubscriptionCheck({ children }: { children: ReactNode }) {
       <Notice title="This house's subscription has ended" testId="subscription-required-screen">
         <p>To continue managing this house, renew your subscription on the Regroup website.</p>
         <p style={{ display: 'flex', gap: 8 }}>
-          <a href={WEB_PORTAL_URL} target="_blank" rel="noreferrer">
+          <a href={ACCOUNT_URL} target="_blank" rel="noreferrer">
             Manage subscription
           </a>
           <button type="button" onClick={() => location.reload()}>

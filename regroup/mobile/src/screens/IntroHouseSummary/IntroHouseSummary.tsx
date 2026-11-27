@@ -11,12 +11,8 @@ import {
   color,
   fontFamily,
 } from "../../styles/theme";
-import { Routes, AuthStackNavigationProp } from "../../navigation/types";
+import { Routes, AuthScreenNavigationProp } from "../../navigation/types";
 import Admin from "../../entities/Admin";
-import {
-  initializeInvitation,
-  setSignUpRole,
-} from "../../state/slices/userSlice";
 import { isNil, map, size } from "lodash";
 import { Admins } from "../../types";
 import RatsAvatar from "../../components/rats-avatar";
@@ -34,12 +30,12 @@ import {
   HEALTH_STATUS_MAP,
 } from "../../util/guest";
 import { calculateHouseHealth } from "../../util/house";
-import { useAppSelector, useAppDispatch } from "../../state/store";
+import { useAppSelector } from "../../state/store";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { STAT_BUTTON_TEXT } from "../../styles/theme";
 
 interface Props {
-  navigation: AuthStackNavigationProp;
+  navigation: AuthScreenNavigationProp;
 }
 
 const contentStyle: ViewStyle = {
@@ -65,31 +61,20 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     [id: string]: boolean;
   }>({});
 
-  const dispatch = useAppDispatch();
-
   // RTK Typed Selectors (no more 'as any')
   const { house } = useSelectedHouse();
   const admins = useAppSelector((state) => state.admin.houseAdmins);
 
-  const startSignUp = useCallback(() => {
+  // D1 = option (a) (P5 Task 16): a prospective resident applies on the
+  // anonymous session the app already holds. Self-signup stays on the landing
+  // screen's sign-up entry.
+  const startApplication = useCallback(() => {
     if (!house) return;
-    // Create a minimal Invitation object - actual values will be set during signup
-    const invitation = {
+    navigation.navigate(Routes.Apply, {
       houseId: house.id,
-      type: "guest" as const,
-      inviterId: "",
-      email: "",
-      initialPhase: "",
-      expirationDate: new Date(),
-      ownerId: "",
-      id: "",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    dispatch(initializeInvitation(invitation));
-    dispatch(setSignUpRole("guest"));
-    navigation.navigate(Routes.Signup, {});
-  }, [dispatch, house, navigation]);
+      houseName: house.name,
+    });
+  }, [house, navigation]);
 
   const toggleCollapsible = useCallback(
     (user: Admin) => () => {
@@ -256,7 +241,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
       <RatsButton
         testID="apply-button"
         title="APPLY"
-        onPress={startSignUp}
+        onPress={startApplication}
         light
         style={STAT_BUTTON_TEXT}
       />

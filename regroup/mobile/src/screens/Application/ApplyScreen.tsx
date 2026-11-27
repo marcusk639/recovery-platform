@@ -15,6 +15,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { color } from '../../styles/theme';
 import { useSubmitApplication } from '../../state/queries/applicationQueries';
 import { ProgramType } from '../../entities/Application';
+import { Routes } from '../../navigation/types';
+import type { ApplicationExistsError } from '../../services/applications';
 
 type Step = 'contact' | 'sobriety' | 'review';
 const STEPS: Step[] = ['contact', 'sobriety', 'review'];
@@ -69,10 +71,31 @@ export default function ApplyScreen() {
       return;
     }
     try {
-      await submitMutation.mutateAsync({ houseId, data: form });
-      // Routes.ApplicationStatus will be added in Task 9 navigation wiring
-      navigation.navigate('applicationStatus', { houseId, houseName });
-    } catch {
+      const applicationId = await submitMutation.mutateAsync({
+        houseId,
+        data: form,
+      });
+      // replace, not navigate: Back from the status screen must not reopen a
+      // submitted form.
+      navigation.replace(Routes.ApplicationStatus, {
+        houseId,
+        houseName,
+        applicationId,
+      });
+    } catch (error) {
+      // One application per house: show the one already made.
+      if (error instanceof Error && error.name === 'ApplicationExistsError') {
+        Alert.alert(
+          'Already applied',
+          "You've already applied to this house. Here is its status.",
+        );
+        navigation.replace(Routes.ApplicationStatus, {
+          houseId,
+          houseName,
+          applicationId: (error as ApplicationExistsError).applicationId,
+        });
+        return;
+      }
       Alert.alert('Error', 'Could not submit application. Please try again.');
     }
   };
@@ -92,6 +115,7 @@ export default function ApplyScreen() {
             value={form.applicantName}
             onChangeText={v => setField('applicantName', v)}
             placeholder="Your full name"
+            maxLength={200}
             testID="input-name"
           />
           <Text style={styles.label}>Email *</Text>
@@ -100,6 +124,7 @@ export default function ApplyScreen() {
             value={form.applicantEmail}
             onChangeText={v => setField('applicantEmail', v)}
             placeholder="your@email.com"
+            maxLength={320}
             keyboardType="email-address"
             autoCapitalize="none"
             testID="input-email"
@@ -110,6 +135,7 @@ export default function ApplyScreen() {
             value={form.applicantPhone}
             onChangeText={v => setField('applicantPhone', v)}
             placeholder="555-0100"
+            maxLength={40}
             keyboardType="phone-pad"
           />
         </View>
@@ -123,6 +149,7 @@ export default function ApplyScreen() {
             value={form.sobrietyDate}
             onChangeText={v => setField('sobrietyDate', v)}
             placeholder="YYYY-MM-DD"
+            maxLength={40}
           />
           <Text style={styles.label}>Program</Text>
           {PROGRAM_TYPES.map(pt => (
@@ -149,6 +176,7 @@ export default function ApplyScreen() {
             value={form.currentSituation}
             onChangeText={v => setField('currentSituation', v)}
             placeholder="Brief description of your housing situation"
+            maxLength={2000}
             multiline
             numberOfLines={3}
           />
@@ -158,6 +186,7 @@ export default function ApplyScreen() {
             value={form.references}
             onChangeText={v => setField('references', v)}
             placeholder="Name and contact info"
+            maxLength={1000}
             multiline
             numberOfLines={2}
           />

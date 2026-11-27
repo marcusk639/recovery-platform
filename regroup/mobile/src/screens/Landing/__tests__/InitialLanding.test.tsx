@@ -18,6 +18,8 @@
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock("@react-navigation/native-stack", () => ({}));
+// Tested on its own (CheckMyApplication.test.tsx); it needs React Query.
+jest.mock("../CheckMyApplication", () => () => null);
 
 jest.mock("@react-navigation/native", () => ({
   useNavigation: jest.fn(() => ({

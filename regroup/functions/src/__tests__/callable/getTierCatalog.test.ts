@@ -3,6 +3,7 @@
 jest.mock('firebase-functions/v2/https', () => ({
   onCall: (_optsOrHandler: any, handler?: Function) =>
     typeof _optsOrHandler === 'function' ? _optsOrHandler : handler,
+  HttpsError: jest.requireActual('firebase-functions/v2/https').HttpsError,
 }));
 
 jest.mock('firebase-functions', () => ({
@@ -26,6 +27,11 @@ jest.mock('../../api/stripe', () => ({
 const mockIsSalesOpen = jest.fn();
 jest.mock('../../util/salesSwitch', () => ({
   isSalesOpen: () => mockIsSalesOpen(),
+}));
+
+const mockIsEmulatorFaultOn = jest.fn();
+jest.mock('../../util/emulatorFaults', () => ({
+  isEmulatorFaultOn: (...args: unknown[]) => mockIsEmulatorFaultOn(...args),
 }));
 
 // All 12 price env vars the real SUBSCRIPTION_TIERS config reads from
@@ -75,7 +81,9 @@ beforeEach(() => {
   mockPricesRetrieve.mockImplementation(async (priceId: string) => ({
     id: priceId,
     unit_amount: 1234,
-  }));  mockIsSalesOpen.mockResolvedValue(true);
+  }));
+  mockIsSalesOpen.mockResolvedValue(true);
+  mockIsEmulatorFaultOn.mockResolvedValue(false);
 });
 
 afterAll(() => {
@@ -183,7 +191,7 @@ describe('getTierCatalog: trial length and the sales-open switch', () => {
     expect(result.trialDays).toBe(7);
   });
 
-  it('reports the switch, re-reading it after 60 seconds while prices stay cached for the hour', async () => {
+  it('reports the switch, re-reading it after 60 seconds while prices stay cached', async () => {
     setAllPriceEnvVars();
     const getTierCatalog = loadGetTierCatalog();
     const start = 1_767_225_600_000;
@@ -200,5 +208,82 @@ describe('getTierCatalog: trial length and the sales-open switch', () => {
     now.mockReturnValue(start + 61_000);
     expect((await call(getTierCatalog)).salesOpen).toBe(false);
     expect(mockPricesRetrieve.mock.calls.length).toBe(stripeCalls);
+  });
+
+  // Checkout charges the price Stripe holds at call time, so a changed price
+  // may show stale for at most this long.
+  it('re-reads prices from Stripe after five minutes, not later', async () => {
+    setAllPriceEnvVars();
+    const getTierCatalog = loadGetTierCatalog();
+    const start = 1_767_225_600_000;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    mockIsSalesOpen.mockResolvedValue(true);
+
+    await call(getTierCatalog);
+    const firstFetch = mockPricesRetrieve.mock.calls.length;
+
+    now.mockReturnValue(start + 4 * 60_000);
+    await call(getTierCatalog);
+    expect(mockPricesRetrieve.mock.calls.length).toBe(firstFetch);
+
+    now.mockReturnValue(start + 5 * 60_000 + 1);
+    await call(getTierCatalog);
+    expect(mockPricesRetrieve.mock.calls.length).toBe(firstFetch * 2);
+  });
+});
+
+// Launch P5 Task 12, BILL-008: an e2e flow makes the catalog unreachable.
+describe('getTierCatalog: the e2e catalog-unavailable fault', () => {
+  it('fails with unavailable, before any Stripe call, when the fault is on', async () => {
+    setAllPriceEnvVars();
+    mockIsEmulatorFaultOn.mockResolvedValue(true);
+    const fn = loadGetTierCatalog();
+
+    await expect(call(fn)).rejects.toMatchObject({ code: 'unavailable' });
+    expect(mockIsEmulatorFaultOn).toHaveBeenCalledWith('tierCatalogUnavailable');
+    expect(mockPricesRetrieve).not.toHaveBeenCalled();
+  });
+
+  it('fails even with a warm cache, and serves again once the fault clears', async () => {
+    setAllPriceEnvVars();
+    const fn = loadGetTierCatalog();
+    await expect(call(fn)).resolves.toEqual(expect.objectContaining({ currency: 'usd' }));
+
+    mockIsEmulatorFaultOn.mockResolvedValue(true);
+    await expect(call(fn)).rejects.toMatchObject({ code: 'unavailable' });
+
+    mockIsEmulatorFaultOn.mockResolvedValue(false);
+    await expect(call(fn)).resolves.toEqual(expect.objectContaining({ currency: 'usd' }));
+  });
+
+  it('is ignored outside the e2e emulator: the real switch with the flag set serves the catalog', async () => {
+    setAllPriceEnvVars();
+    const mockFaultGet = jest.fn(async () => ({
+      exists: true,
+      data: () => ({ tierCatalogUnavailable: true }),
+    }));
+    const saved = { emu: process.env.FUNCTIONS_EMULATOR, project: process.env.GCLOUD_PROJECT };
+    process.env.GCLOUD_PROJECT = 'phoenix-cleanhouse';
+    delete process.env.FUNCTIONS_EMULATOR;
+    let handler: any;
+    jest.isolateModules(() => {
+      jest.doMock('firebase-admin', () => ({
+        firestore: () => ({ collection: () => ({ doc: () => ({ get: mockFaultGet }) }) }),
+      }));
+      jest.doMock('../../util/emulatorFaults', () =>
+        jest.requireActual('../../util/emulatorFaults'),
+      );
+      handler = require('../../callable/getTierCatalog').getTierCatalog;
+    });
+    try {
+      const result = await call(handler);
+      expect(result.tiers).toHaveLength(6);
+      expect(mockFaultGet).not.toHaveBeenCalled();
+    } finally {
+      if (saved.emu === undefined) delete process.env.FUNCTIONS_EMULATOR;
+      else process.env.FUNCTIONS_EMULATOR = saved.emu;
+      if (saved.project === undefined) delete process.env.GCLOUD_PROJECT;
+      else process.env.GCLOUD_PROJECT = saved.project;
+    }
   });
 });
