@@ -7,6 +7,8 @@ import { updateUser } from "../../state/slices/userSlice";
 import { useUpdateGuest } from "../../state/queries/guestQueries";
 import { useUpdateAdmin } from "../../state/queries/adminQueries";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { setUserAsGuest } from "../../state/slices/guestsSlice";
+import { setUserAsAdmin } from "../../state/slices/adminSlice";
 import { Guest } from "../../entities/Guest";
 import Admin from "../../entities/Admin";
 import EditUserInfoFormView, {
@@ -14,7 +16,12 @@ import EditUserInfoFormView, {
 } from "./EditUserInfoFormView";
 import { auth } from "../../../firebase-setup";
 import { logException } from "../../util/logging";
-import { avatarForSave, deleteRemovedAvatar } from "./profileAvatar";
+import {
+  avatarForSave,
+  deleteRemovedAvatar,
+  isRemoteImageUri,
+} from "./profileAvatar";
+import { isDemo } from "../../util/user";
 
 // `avatarContentType` is the picked photo's type, for the upload only: it is
 // never saved.
@@ -23,6 +30,19 @@ type EditUserInfoValues = Partial<User> & { avatarContentType?: string | null };
 export const AVATAR_UPLOAD_FAILED_TITLE = "Photo Upload Failed";
 export const AVATAR_UPLOAD_FAILED_MESSAGE =
   "Couldn't upload your photo, so nothing was saved. Check your connection and try again, or remove the photo to save the rest.";
+// storage.rules refuse the demo account every upload: say so, not "check your
+// connection".
+export const AVATAR_DEMO_TITLE = "Profile Photo";
+export const AVATAR_DEMO_MESSAGE =
+  "This functionality is disabled in demo mode. Remove the photo to save the rest.";
+
+// The saved fields, as the store copies should now hold them: a field the
+// form left undefined is not written (Firestore drops it), so the copy keeps
+// its value.
+const definedOnly = <T extends object>(updates: T): Partial<T> =>
+  Object.fromEntries(
+    Object.entries(updates).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
 
 const stats: string[] = [
   "dateOfBirth",
@@ -60,6 +80,22 @@ const EditUserInfoForm = withFormik<EditUserInfoProps, EditUserInfoValues>({
     // (the picker's file path shows on no other phone). If the upload fails,
     // nothing is saved and the user is told.
     const { avatarContentType, ...values } = formValues;
+    const isDemoAccount = isDemo(user?.email || "");
+    if (
+      isDemoAccount &&
+      values.avatar &&
+      values.avatar !== user?.avatar &&
+      !isRemoteImageUri(values.avatar)
+    ) {
+      formikBag.setSubmitting(false);
+      Alert.alert(AVATAR_DEMO_TITLE, AVATAR_DEMO_MESSAGE);
+      return;
+    }
+    // The photo being replaced or removed: the user doc's, or, when an
+    // earlier save stopped after the user doc, the guest/admin copy's.
+    const storedPhoto = [user?.avatar, guest?.avatar, admin?.avatar].find(
+      isRemoteImageUri,
+    );
     try {
       values.avatar =
         (await avatarForSave(
@@ -104,7 +140,14 @@ const EditUserInfoForm = withFormik<EditUserInfoProps, EditUserInfoValues>({
       }
 
       // Saved: a removed photo's file goes too (best effort, never throws).
-      await deleteRemovedAvatar(values.avatar, user?.avatar, auth.currentUser?.uid ?? "");
+      // The rules refuse the demo account the delete as well.
+      if (!isDemoAccount) {
+        await deleteRemovedAvatar(
+          values.avatar,
+          storedPhoto,
+          auth.currentUser?.uid ?? "",
+        );
+      }
 
       formikBag.setSubmitting(false);
       navigation.goBack();
@@ -115,6 +158,7 @@ const EditUserInfoForm = withFormik<EditUserInfoProps, EditUserInfoValues>({
       // catch could never fire, and a failed profile update silently did
       // nothing: no error shown to the user, and the form still navigated
       // away as if the save had succeeded. See updateUser wiring below.
+      logException(error, "EditUserInfoForm: profile save failed");
       formikBag.setSubmitting(false);
       formikBag.setStatus({ failed: true });
       Alert.alert(
@@ -162,8 +206,8 @@ const EditUserInfoFormWrapper: React.FC<any> = (props) => {
       }
       updateGuest={
         guest
-          ? (guestArg: Guest, updates: Partial<Guest>) =>
-              updateGuestMutation({
+          ? async (guestArg: Guest, updates: Partial<Guest>) => {
+              await updateGuestMutation({
                 // Send only the fields being changed, plus the id updateGuest
                 // requires. Spreading the whole guest carried rentOwed/choreFees
                 // along at whatever value the screen loaded, and mergeGuestStats
@@ -173,13 +217,22 @@ const EditUserInfoFormWrapper: React.FC<any> = (props) => {
                 // fields from the stored document anyway.
                 guest: guestArg,
                 updatedGuest: { ...updates, id: guestArg.id },
-              })
+              });
+              // The mutation refreshes React Query, not this store copy, which
+              // the Profile tab reads: a removed photo kept showing from it.
+              dispatch(setUserAsGuest({ ...guestArg, ...definedOnly(updates) }));
+            }
           : undefined
       }
       updateAdmin={
         admin
-          ? (adminArg: Admin, updates: Partial<Admin>) =>
-              updateAdminMutation({ adminId: adminArg.id, updates })
+          ? async (adminArg: Admin, updates: Partial<Admin>) => {
+              await updateAdminMutation({ adminId: adminArg.id, updates });
+              // As for the guest copy above.
+              dispatch(
+                setUserAsAdmin({ ...adminArg, ...definedOnly(updates) } as Admin),
+              );
+            }
           : undefined
       }
     />

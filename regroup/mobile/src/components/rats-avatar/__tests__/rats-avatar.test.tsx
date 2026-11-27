@@ -130,7 +130,9 @@ describe('stringToColour', () => {
   it('returns consistent results for the same input', () => {
     expect(stringToColour('Alice')).toBe(stringToColour('Alice'));
   });
+});
 
+describe('RatsAvatar image that fails to load', () => {
   it('shows the initials when the image fails to load (e.g. a phone path saved by an older build)', () => {
     const { getByTestId, queryByTestId } = render(
       <RatsAvatar name="John Doe" testID="avatar" source={{ uri: 'file:///gone/IMG_1.jpg' }} />,
@@ -158,5 +160,7 @@ describe('stringToColour', () => {
     );
     fireEvent(getByTestId('avatar'), 'error', { nativeEvent: { error: 'x' } });
     expect(onError).toHaveBeenCalledTimes(1);
+    // And still falls back: a caller's onError doesn't replace the fallback.
+    expect(getByTestId('avatar-placeholder')).toBeTruthy();
   });
 });

@@ -495,8 +495,9 @@ describe("PersonalScreen", () => {
       expect(getByTestId("avatar-name").props.children).toBe("Alice Manager");
     });
 
-    // The profile form saves the user doc and the store has it at once; the
-    // admin/guest copy in the store can be the one loaded before the save.
+    // The user doc can be newer than the admin/guest copy: the profile form
+    // saves the user doc first, and a copy whose own save failed keeps the
+    // old photo.
     it("shows the account's own saved photo over an older admin copy", () => {
       const url = "https://storage.example/users%2Fu1%2Favatar?alt=media&v=2";
       const { getByTestId } = renderScreen({
@@ -509,6 +510,17 @@ describe("PersonalScreen", () => {
     it("falls back to the admin copy when the account's own value is a phone path", () => {
       const { getByTestId } = renderScreen({
         user: { ...BASE_USER_ADMIN, avatar: "file:///var/mobile/IMG_1.jpg" },
+        admin: { ...BASE_ADMIN, avatar: "https://storage.example/a.jpg" },
+      });
+      expect(getByTestId("avatar-url").props.children).toBe("https://storage.example/a.jpg");
+    });
+
+    // "" is every account's default, so on its own it doesn't mean "removed":
+    // the copy is the fallback. A removal saves "" to the copies too, and
+    // EditUserInfoForm refreshes them in the store.
+    it("shows the admin copy's photo when the account's own value is empty", () => {
+      const { getByTestId } = renderScreen({
+        user: { ...BASE_USER_ADMIN, avatar: "" },
         admin: { ...BASE_ADMIN, avatar: "https://storage.example/a.jpg" },
       });
       expect(getByTestId("avatar-url").props.children).toBe("https://storage.example/a.jpg");

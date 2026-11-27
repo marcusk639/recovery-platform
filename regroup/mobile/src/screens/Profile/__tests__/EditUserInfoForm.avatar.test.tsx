@@ -14,6 +14,7 @@ jest.mock('../EditUserInfoFormView', () => (props: any) => {
 });
 
 let mockStoredUser: any = { id: 'user-1', avatar: '' };
+let mockGuestCopy: any = { id: 'guest-1', houseId: 'house-1', ethnicity: 'Stored' };
 const mockUnwrap = jest.fn(() => Promise.resolve({ id: 'user-1' }));
 const mockDispatch = jest.fn(() => ({ unwrap: mockUnwrap }));
 jest.mock('../../../state/store', () => ({
@@ -21,7 +22,7 @@ jest.mock('../../../state/store', () => ({
   useAppSelector: (selector: any) =>
     selector({
       user: { user: mockStoredUser },
-      guests: { userAsGuest: { id: 'guest-1', houseId: 'house-1' } },
+      guests: { userAsGuest: mockGuestCopy },
       admin: { userAsAdmin: { id: 'admin-1' } },
     }),
 }));
@@ -48,6 +49,7 @@ const mockDeleteRemovedAvatar = jest.fn((..._args: unknown[]) => Promise.resolve
 jest.mock('../profileAvatar', () => ({
   avatarForSave: (...args: unknown[]) => mockAvatarForSave(...args),
   deleteRemovedAvatar: (...args: unknown[]) => mockDeleteRemovedAvatar(...args),
+  isRemoteImageUri: jest.requireActual('../profileAvatar').isRemoteImageUri,
 }));
 jest.mock('../../../util/logging', () => ({ logException: jest.fn() }));
 
@@ -58,8 +60,13 @@ import { render, act, waitFor } from '@testing-library/react-native';
 import EditUserInfoFormWrapper, {
   AVATAR_UPLOAD_FAILED_MESSAGE,
   AVATAR_UPLOAD_FAILED_TITLE,
+  AVATAR_DEMO_MESSAGE,
+  AVATAR_DEMO_TITLE,
 } from '../EditUserInfoForm';
+import { DEMO_ACCOUNT_EMAIL } from '../../../util/user';
 import { auth } from '../../../../firebase-setup';
+import { setUserAsGuest } from '../../../state/slices/guestsSlice';
+import { setUserAsAdmin } from '../../../state/slices/adminSlice';
 
 const PICKED = 'file:///var/mobile/tmp/IMG_0001.jpg';
 const URL = 'https://mock-storage/users/uid-1/avatar';
@@ -80,6 +87,7 @@ const renderAndPick = (avatar: string | null, contentType?: string | null) => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockStoredUser = { id: 'user-1', avatar: '' };
+  mockGuestCopy = { id: 'guest-1', houseId: 'house-1', ethnicity: 'Stored' };
   (auth as any).currentUser = { uid: 'uid-1' };
   // Like the real one: a picked photo needs an account to upload as.
   mockAvatarForSave.mockImplementation(async (avatar: string, _stored: string, uid: string) => {
@@ -176,8 +184,88 @@ describe('EditUserInfoForm avatar', () => {
     mockUnwrap.mockRejectedValueOnce(new Error('network down'));
     renderAndPick('', null);
 
-    await waitFor(() => expect(mockAlert).toHaveBeenCalledWith('Update Failed', expect.any(String)));
+    await waitFor(() =>
+      expect(mockAlert).toHaveBeenCalledWith('Update Failed', expect.any(String)),
+    );
     expect(mockDeleteRemovedAvatar).not.toHaveBeenCalled();
+    // Logged, not only shown: the alert alone left no trace of why.
+    expect(require('../../../util/logging').logException).toHaveBeenCalledWith(
+      expect.any(Error),
+      'EditUserInfoForm: profile save failed',
+    );
+  });
+
+  // The Profile tab falls back to these store copies (an admin-set guest photo
+  // shows there); left as loaded, a removed photo kept showing from them.
+  it("refreshes the store's guest and admin copies with what was saved", async () => {
+    mockStoredUser = { id: 'user-1', avatar: URL, sobrietyDate: '2026-01-01' };
+    const goBack = renderAndPick('', null);
+
+    await waitFor(() => expect(goBack).toHaveBeenCalled());
+    const guestCopy = mockDispatch.mock.calls
+      .map(([action]: any[]) => action)
+      .find((action: any) => action?.type === setUserAsGuest.type);
+    const adminCopy = mockDispatch.mock.calls
+      .map(([action]: any[]) => action)
+      .find((action: any) => action?.type === setUserAsAdmin.type);
+    expect(guestCopy?.payload).toMatchObject({
+      id: 'guest-1',
+      houseId: 'house-1',
+      avatar: '',
+      sobrietyDate: '2026-01-01',
+    });
+    expect(adminCopy?.payload).toMatchObject({ id: 'admin-1', avatar: '' });
+    // A field the form left unset keeps the copy's value (Firestore keeps it too).
+    expect(guestCopy.payload.ethnicity).toBe('Stored');
+  });
+
+  it('leaves the store copies alone when their save fails', async () => {
+    mockStoredUser = { id: 'user-1', avatar: URL };
+    mockGuestMutateAsync.mockRejectedValueOnce(new Error('network down'));
+    renderAndPick('', null);
+
+    await waitFor(() =>
+      expect(mockAlert).toHaveBeenCalledWith('Update Failed', expect.any(String)),
+    );
+    const types = mockDispatch.mock.calls.map(([action]: any[]) => action?.type);
+    expect(types).not.toContain(setUserAsGuest.type);
+    expect(types).not.toContain(setUserAsAdmin.type);
+    // The guest doc still holds the photo's URL, so its file stays.
+    expect(mockDeleteRemovedAvatar).not.toHaveBeenCalled();
+  });
+
+  // A removal whose guest save failed left the user doc at "" and the guest
+  // copy at the URL; the retry must still delete the file.
+  it("deletes the removed photo's file on a retry after a partial save", async () => {
+    mockStoredUser = { id: 'user-1', avatar: '' };
+    mockGuestCopy = { ...mockGuestCopy, avatar: URL };
+    const goBack = renderAndPick('', null);
+
+    await waitFor(() => expect(goBack).toHaveBeenCalled());
+    expect(mockDeleteRemovedAvatar).toHaveBeenCalledWith('', URL, 'uid-1');
+  });
+
+  it('tells the demo account a photo is disabled, and uploads and saves nothing', async () => {
+    mockStoredUser = { id: 'user-1', avatar: '', email: DEMO_ACCOUNT_EMAIL };
+    const goBack = renderAndPick(PICKED, 'image/jpeg');
+
+    await waitFor(() =>
+      expect(mockAlert).toHaveBeenCalledWith(AVATAR_DEMO_TITLE, AVATAR_DEMO_MESSAGE),
+    );
+    expect(mockAvatarForSave).not.toHaveBeenCalled();
+    expect(mockUpdateUserThunkCreator).not.toHaveBeenCalled();
+    expect(goBack).not.toHaveBeenCalled();
+  });
+
+  it("saves the demo account's profile when the photo did not change", async () => {
+    mockStoredUser = { id: 'user-1', avatar: '', email: DEMO_ACCOUNT_EMAIL };
+    render(<EditUserInfoFormWrapper navigation={{ goBack: jest.fn() } as any} />);
+    act(() => {
+      capturedProps.handleSubmit();
+    });
+
+    await waitFor(() => expect(mockUpdateUserThunkCreator).toHaveBeenCalled());
+    expect(mockAlert).not.toHaveBeenCalled();
   });
 
   it("uploads a new pick over an older build's stored phone path", async () => {

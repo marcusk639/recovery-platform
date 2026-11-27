@@ -382,9 +382,9 @@ const PersonalScreen: React.FC<PersonalProps> = ({ navigation }) => {
         subTextStyle={{ fontSize: fontSize.regular_medium }}
         name={fullName || " "}
         type={user && user.isAdmin ? "Admin" : "Guest"}
-        // The account's own photo: the profile form saves the user doc, and
-        // the store has it at once; the guest/admin copies here can be the
-        // ones loaded before the save.
+        // The account's own photo first. The profile form refreshes the
+        // guest/admin copies after it saves them, but if the user doc saved
+        // and a copy's save failed, the copy still holds the old photo.
         avatarUrl={
           isRemoteImageUri(user?.avatar) ? user.avatar : _user?.avatar || ""
         }
