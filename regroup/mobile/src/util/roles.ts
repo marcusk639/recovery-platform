@@ -51,3 +51,15 @@ export const displayRole = (
 
 export const isSameUser = (member: Guest | Admin, userId: string) =>
   member.userId === userId;
+
+/**
+ * Whether the user may add a house (Personal → Add Home): the owner of a
+ * house, or an operator who has not set one up yet (P5 Task 19). A manager or
+ * peer leader also has an admin record, with an empty superAdmin list, and
+ * may not. False while the user or admin record is not loaded.
+ */
+export const canAddHouse = (
+  user: { potentialSuperAdmin?: boolean } | null | undefined,
+  admin: { superAdmin?: string[] } | null | undefined,
+): boolean =>
+  (admin?.superAdmin?.length ?? 0) > 0 || user?.potentialSuperAdmin === true;

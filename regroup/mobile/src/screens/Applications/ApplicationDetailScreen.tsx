@@ -18,6 +18,8 @@ import {
   useUpdateApplicationStatus,
 } from '../../state/queries/applicationQueries';
 import { Routes } from '../../navigation/types';
+import { useApplicationsAccess } from '../../state/queries/houseTierQueries';
+import ApplicationsAccessState from './ApplicationsAccessState';
 
 export default function ApplicationDetailScreen() {
   const navigation = useNavigation<any>();
@@ -25,7 +27,9 @@ export default function ApplicationDetailScreen() {
   const { houseId, appId } = route.params ?? {};
 
   const [note, setNote] = useState('');
-  const { data: apps, isLoading } = useHouseApplications(houseId);
+  // Owners and managers only (owner decision 2026-11-27).
+  const { access, retry } = useApplicationsAccess(houseId);
+  const { data: apps, isLoading } = useHouseApplications(houseId, access === 'yes');
   const app = apps?.find(a => a.id === appId);
   const updateMutation = useUpdateApplicationStatus(houseId);
 
@@ -96,6 +100,10 @@ export default function ApplicationDetailScreen() {
       Alert.alert('Error', 'Could not update status. Please try again.');
     }
   };
+
+  if (access !== 'yes') {
+    return <ApplicationsAccessState access={access} retry={retry} />;
+  }
 
   if (isLoading) {
     return (

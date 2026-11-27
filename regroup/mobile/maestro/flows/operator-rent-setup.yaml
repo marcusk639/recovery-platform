@@ -122,11 +122,32 @@ tags:
 - tapOn:
     id: "intake-email-input"
 - inputText: "aaron-rentcheck@rats-e2e.com"
-- hideKeyboard:
-    optional: true
+# Close the keyboard: iOS through its toolbar Done (hideKeyboard is flaky
+# there and can move focus to the next field, the phone-pad, which has no
+# return key), Android with the back key. Again before each step's Continue,
+# so a focused phone-pad never covers or swallows the tap.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          text: "Done"
+          optional: true
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
 - repeat:
     times: 3
     commands:
+      - runFlow:
+          when:
+            platform: iOS
+          commands:
+            - tapOn:
+                text: "Done"
+                optional: true
       - scrollUntilVisible:
           element:
             id: "intake-continue-button"

@@ -1,7 +1,7 @@
 import React from 'react';
 import { render as rtlRender, fireEvent, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import GuestImportScreen from '../GuestImportScreen';
+import GuestImportScreen, { resultMessage } from '../GuestImportScreen';
 import * as DocumentPicker from '@react-native-documents/picker';
 import * as importService from '../../../services/guestImport';
 import { useData } from '../../../context/DataContext';
@@ -245,9 +245,15 @@ it('reports a partial import and that importing again is safe', async () => {
   await waitFor(() =>
     expect(
       screen.getByText(
-        '499 imported, 101 failed. 2 were already residents. Importing the same file again is safe: it adds only the ones missing.',
+        '499 imported, 101 failed. 2 were already on file. Importing the same file again is safe: it adds only the ones missing.',
       ),
     ).toBeTruthy(),
+  );
+});
+
+it('says "already on file", in the singular too (departed residents count)', () => {
+  expect(resultMessage({ imported: 3, alreadyResidents: 1, failed: 0 })).toBe(
+    'Successfully imported 3 residents. 1 was already on file.',
   );
 });
 

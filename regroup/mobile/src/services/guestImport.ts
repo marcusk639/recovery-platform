@@ -188,7 +188,11 @@ function importedGuest(row: GuestImportRow, id: string, houseId: string, created
 
 export interface GuestImportResult {
   imported: number;
-  /** Rows whose email is already on a resident record of the house. */
+  /**
+   * Rows whose email is already on one of the house's guest records, a
+   * departed resident's included (so "already on file", not "already
+   * residents"). The field name predates that wording.
+   */
   alreadyResidents: number;
   /** Rows not written because a batch failed; importing again adds them. */
   failed: number;
@@ -196,9 +200,12 @@ export interface GuestImportResult {
 
 /**
  * Imports the rows into the house, skipping anyone whose email is already on
- * one of its resident records, so running it again after a partial failure
- * adds only what is missing. Batches commit one after another: when one
- * fails, the ones before it stay, and the result says how many did.
+ * one of its guest records (current or departed), so running it again after
+ * a partial failure adds only what is missing. A departed resident counts on
+ * purpose: re-importing a roster must not bring back, and bill, someone who
+ * has left; a returning resident is added with the intake form. Batches
+ * commit one after another: when one fails, the ones before it stay, and the
+ * result says how many did.
  */
 export async function importGuests(
   houseId: string,
@@ -239,37 +246,4 @@ export async function importGuests(
     }
   }
   return result;
-}
-
-export async function importGuestsFromRows(
-  houseId: string,
-  rows: GuestImportRow[],
-): Promise<number> {
-  if (!houseId) throw new Error('houseId is required');
-  if (rows.length === 0) return 0;
-
-  let imported = 0;
-  // The rules require createdBy to be the caller. It is how the server
-  // tells a staff-made record from a self-made one when it links records
-  // for the same person.
-  const createdBy = auth.currentUser?.uid;
-
-  try {
-    for (let start = 0; start < rows.length; start += BATCH_LIMIT) {
-      const batch = writeBatch(firestore);
-      const slice = rows.slice(start, start + BATCH_LIMIT);
-      for (const row of slice) {
-        const docRef = doc(guestCollection, createGuestId());
-        batch.set(docRef, importedGuest(row, docRef.id, houseId, createdBy));
-      }
-      await batch.commit();
-      imported += slice.length;
-    }
-    return imported;
-  } catch (error) {
-    logException(error);
-    throw new Error(
-      'Guest import failed. Please check your CSV and try again.',
-    );
-  }
 }

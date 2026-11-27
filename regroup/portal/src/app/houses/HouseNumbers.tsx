@@ -36,9 +36,11 @@ export function HouseNumbers({ houseId }: { houseId: string }) {
           )}
         </Figure>
       )}
-      <Figure label="Applications waiting">
-        <CellText cell={summary.applicationsWaiting} render={String} />
-      </Figure>
+      {summary.applicationsWaiting.state !== 'hidden' && (
+        <Figure label="Applications waiting">
+          <CellText cell={summary.applicationsWaiting} render={String} />
+        </Figure>
+      )}
       <Figure label="Open disputes">
         <CellText cell={summary.openDisputes} render={String} />
       </Figure>

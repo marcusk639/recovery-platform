@@ -70,6 +70,13 @@ export const cancelSubscriptionNow = async (subscriptionId: string): Promise<voi
 };
 
 /**
+ * Whether the subscription has ended in Stripe, so nothing bills on it. Throws
+ * when Stripe can't be read: the caller must not take that as ended.
+ */
+export const subscriptionEnded = async (subscriptionId: string): Promise<boolean> =>
+  ENDED_SUBSCRIPTION_STATUSES.has((await stripe.subscriptions.retrieve(subscriptionId)).status);
+
+/**
  * Deletes a Stripe customer. A customer that no longer exists is treated as
  * already deleted.
  */

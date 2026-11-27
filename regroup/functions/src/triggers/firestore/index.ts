@@ -28,6 +28,7 @@ export { onGuestLinkedRestamp } from './guestRestamp';
 export { onUserAdminProfileSync } from './adminProfileSync';
 export { onGuestWrite } from './guestWrite';
 export { onHouseRentSettingsWrite } from './houseRentSettings';
+export { onHouseListingSync } from './houseListing';
 export { notifyOperatorOnApplication } from './applicationNotice';
 
 /**

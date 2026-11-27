@@ -194,7 +194,7 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 /** What an import did, and whether to run it again. */
 export function resultMessage(r: GuestImportResult): string {
   const already = r.alreadyResidents
-    ? ` ${r.alreadyResidents} ${r.alreadyResidents === 1 ? 'was' : 'were'} already residents.`
+    ? ` ${r.alreadyResidents} ${r.alreadyResidents === 1 ? 'was' : 'were'} already on file.`
     : '';
   if (r.failed > 0) {
     return `${r.imported} imported, ${r.failed} failed.${already} Importing the same file again is safe: it adds only the ones missing.`;

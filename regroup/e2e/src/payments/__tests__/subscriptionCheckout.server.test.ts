@@ -114,7 +114,7 @@ test('SUB-004: a tier held back from sale is refused, leaving no subscription', 
 
 test('SUB-004: a price that isn’t configured is refused, leaving no subscription', async () => {
   const op = await seedOperator({ status: '' });
-  await expect(runWithEnv({ TIER_BILLING_ENABLED: 'true', STRIPE_PRICE_TRAD_STARTER: '' }, op, checkout(op, 'traditional', 'starter'))).rejects.toThrow(/Price ID not configured/);
+  await expect(runWithEnv({ TIER_BILLING_ENABLED: 'true', STRIPE_PRICE_TRAD_STARTER: '' }, op, checkout(op, 'traditional', 'starter'))).rejects.toThrow(/isn't available right now/);
   expect(await subscriptionsOf(op.email)).toHaveLength(0);
 });
 
@@ -133,3 +133,47 @@ test('SUB-010: submitted concurrently, as in two tabs, it still makes one', asyn
   // Two tabs are where a second customer would appear, so count them here too.
   expect((await stripe.customers.list({ email: op.email })).data).toHaveLength(1);
 });
+
+// M9: a signed-in existing account can reach checkout, and the callable is public, so the
+// server refuses a second subscription from the stored record. A different plan has a different
+// idempotency key, so only this guard stops it.
+test('SUB-011: an operator with a live plan cannot buy a second one, even a different plan', async () => {
+  const op = await seedOperator({ status: '' });
+  expect((await callAs(op.uid, 'createOperatorSubscription', checkout(op, 'traditional', 'starter'))).errorMessage).toBeUndefined();
+  const second = await callAs(op.uid, 'createOperatorSubscription', checkout(op, 'traditional', 'professional'));
+  expect(second).toMatchObject({ errorCode: 'failed-precondition', errorMessage: expect.stringMatching(/already have a plan/) });
+  expect(await subscriptionsOf(op.email)).toHaveLength(1);
+});
+
+test('SUB-011: a canceled tier plan is sent to Reactivate, not given a second trial', async () => {
+  const op = await seedOperator({ status: 'canceled', subscriptionMetadata: { tier: 'starter', houseType: 'traditional', subscriptionId: 'sub_ended' } });
+  const res = await callAs(op.uid, 'createOperatorSubscription', checkout(op, 'traditional', 'starter'));
+  expect(res).toMatchObject({ errorCode: 'failed-precondition', errorMessage: expect.stringMatching(/Reactivate/) });
+  expect(await subscriptionsOf(op.email)).toHaveLength(0);
+});
+
+test('SUB-012: two plans submitted concurrently make one subscription', async () => {
+  const op = await seedOperator({ status: '' });
+  await Promise.all(
+    ['starter', 'professional'].map((tier) => callAs(op.uid, 'createOperatorSubscription', checkout(op, 'traditional', tier))),
+  );
+  expect(await subscriptionsOf(op.email)).toHaveLength(1);
+});
+
+// Review fix: a subscription Stripe holds for the operator that the record doesn't show (its
+// record write and its cancel both failed) is found by its userId metadata and refused.
+test('SUB-013: a live subscription the record does not show refuses checkout', async () => {
+  const op = await seedOperator({ status: '' });
+  const customer = await stripe.customers.create({ email: op.email });
+  await stripe.subscriptions.create({
+    customer: customer.id,
+    items: [{ price: prices.STRIPE_PRICE_TRAD_STARTER }],
+    trial_period_days: 7,
+    metadata: { userId: op.uid, houseType: 'traditional', tier: 'starter', billingInterval: 'month' },
+  });
+  // Found at once through the operator's email (a list call), not the lagging search.
+  const res = await callAs(op.uid, 'createOperatorSubscription', checkout(op, 'traditional', 'professional'));
+  expect(res).toMatchObject({ errorCode: 'failed-precondition', errorMessage: expect.stringMatching(/contact support/) });
+  expect(await subscriptionsOf(op.email)).toHaveLength(1);
+});
+

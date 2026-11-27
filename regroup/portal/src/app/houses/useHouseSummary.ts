@@ -74,7 +74,8 @@ export function useHouseSummary(houseId: string): HouseSummary {
   const open = subscription.state === 'active' || subscription.state === 'grace';
 
   const guestsQuery = useGuests(houseId, open);
-  const applicationsQuery = useHouseApplications(houseId, open);
+  // Owners and managers only: the rules refuse a peer leader's read (owner, 2026-11-27).
+  const applicationsQuery = useHouseApplications(houseId, open && view === 'full');
   const disputesQuery = useOpenDisputes(houseId, open);
   const guests = useMemo(() => Object.values((guestsQuery.data ?? {}) as Record<string, any>), [guestsQuery.data]);
   const current = useMemo(() => guests.filter((guest) => guest.status !== 'discharged'), [guests]);
@@ -96,6 +97,10 @@ export function useHouseSummary(houseId: string): HouseSummary {
   else if (view === 'full' && guestsQuery.status === 'error') rentOverdueCents = { state: 'error' };
   else if (view === 'full' && guestsQuery.status === 'success') rentOverdueCents = known(rentOverdue(guests));
 
+  let applicationsWaitingCell: Cell<number> = { state: 'loading' };
+  if (view === 'limited') applicationsWaitingCell = { state: 'hidden' };
+  else if (view === 'full') applicationsWaitingCell = cellFrom(applicationsQuery, (list: any[]) => applicationsWaiting(list ?? []));
+
   return {
     houseId,
     name: house?.name ?? null,
@@ -106,7 +111,7 @@ export function useHouseSummary(houseId: string): HouseSummary {
     healthPercent,
     rentOverdueCents,
     overdueFromDischargedCents: view === 'full' ? overdueFromDischarged(guests) : 0,
-    applicationsWaiting: cellFrom(applicationsQuery, (list: any[]) => applicationsWaiting(list ?? [])),
+    applicationsWaiting: applicationsWaitingCell,
     openDisputes: cellFrom(disputesQuery, (disputes) => countOpenDisputes({ disputes } as any)),
   };
 }

@@ -55,10 +55,10 @@ ALL_FUNCTIONS=(
   sendContactEmail sendSubscriptionUpdateEmail
   reportBug submitFeedback
   onGuestWrite onHouseDeleted setHouseSubscriptionStatusOnCreate
-  onActivityWritten onGuestLinkedRestamp onHouseRentSettingsWrite
+  onActivityWritten onGuestLinkedRestamp onHouseRentSettingsWrite onHouseListingSync
   onUserAdminProfileSync
   updateDisputes warmWebsite officerTermReminder weeklyTransfers restoreDemoAccount
-  overdueRentNotification scheduledRentCollection rentCharges
+  overdueRentNotification scheduledRentCollection rentCharges houseListingGraceSweep
 )
 
 BATCH_SIZE=5

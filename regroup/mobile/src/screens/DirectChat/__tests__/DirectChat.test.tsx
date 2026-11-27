@@ -595,6 +595,57 @@ describe("DirectChat", () => {
     });
   });
 
+  // P5 Task 19: an admin's messages carry their admin record's id as the
+  // sender. Before that record loads, a send wrote an empty participant id.
+  describe("before the admin record loads", () => {
+    it("keeps the message and does not send it", async () => {
+      const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+      const { getByPlaceholderText, getByText } = renderScreen({ admin: null });
+      await waitFor(() => {
+        expect(getByPlaceholderText("Type a message")).toBeTruthy();
+      });
+      await act(async () => {
+        fireEvent.changeText(getByPlaceholderText("Type a message"), "Too early");
+      });
+      await act(async () => {
+        fireEvent.press(getByText("SEND"));
+      });
+
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Still loading your account. Try again in a moment.",
+      );
+      expect(getByPlaceholderText("Type a message").props.value).toBe("Too early");
+      alertSpy.mockRestore();
+    });
+  });
+
+  // The same for a resident, whose messages carry their guest record's id.
+  describe("before the guest record loads", () => {
+    it("keeps the message and does not send it", async () => {
+      const alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+      const { getByPlaceholderText, getByText } = renderScreen({
+        user: { ...BASE_USER, isAdmin: false, adminId: undefined, guestId: "guest-1" },
+      });
+      await waitFor(() => {
+        expect(getByPlaceholderText("Type a message")).toBeTruthy();
+      });
+      await act(async () => {
+        fireEvent.changeText(getByPlaceholderText("Type a message"), "Too early");
+      });
+      await act(async () => {
+        fireEvent.press(getByText("SEND"));
+      });
+
+      expect(mockUpdateConversation).not.toHaveBeenCalled();
+      expect(alertSpy).toHaveBeenCalledWith(
+        "Still loading your account. Try again in a moment.",
+      );
+      expect(getByPlaceholderText("Type a message").props.value).toBe("Too early");
+      alertSpy.mockRestore();
+    });
+  });
+
   // ─── Header navigation ─────────────────────────────────────────────────────
   describe("header navigation", () => {
     it("calls navigation.goBack when the back arrow is pressed", async () => {

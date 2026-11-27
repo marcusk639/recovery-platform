@@ -148,3 +148,14 @@ test('a total with nothing left to load says Not counted, not Loading', () => {
   expect(within(card).queryByLabelText('Loading')).toBeNull();
   expect(within(card).getByLabelText('Not counted')).toBeTruthy();
 });
+
+// A peer leader's houses (owner, 2026-11-27): their applications are hidden, not
+// unreadable, so the totals neither warn nor show a dash for them.
+test("a house whose applications the role can't see is left out, never counted as unreadable", () => {
+  render(<HouseTable summaries={[summary(), summary({ houseId: 'h2', name: 'Two', applicationsWaiting: { state: 'hidden' } })]} />);
+  expect(screen.queryByRole('status')).toBeNull();
+  const card = screen.getByTestId('total-applications');
+  expect(card.textContent).toContain('1');
+  expect(card.textContent).toContain("Leaves out 1 house your role can't see.");
+  expect(screen.getByRole('row', { name: /Two/ }).textContent).not.toContain("Couldn't load");
+});

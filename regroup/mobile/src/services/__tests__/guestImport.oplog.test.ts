@@ -7,6 +7,11 @@
  * edited expectation. Assertions are on outcomes and log entries only, never
  * on mock call chains or snapshot shapes. parseGuestCsv makes no Firebase call
  * and is covered by guestImport.test.ts.
+ *
+ * importGuestsFromRows, which these cases first pinned, had no callers left
+ * after #306 and was removed (2026-11-27); they now pin importGuests, the
+ * import GuestImportScreen runs, which writes the same records in the same
+ * batches after reading the house's guest records once.
  */
 jest.mock('../../../firebase-setup', () => require('../../../__mocks__/firebase-modular/setup'));
 jest.mock('@react-native-firebase/firestore', () =>
@@ -18,7 +23,7 @@ jest.mock('@react-native-firebase/functions', () =>
 jest.mock('../../util/logging', () => ({ logException: jest.fn() }));
 
 import { failNext, getOpLog, readDoc, resetOpLog } from '../../../__mocks__/firebase-modular/log';
-import { GuestImportRow, importGuestsFromRows } from '../guestImport';
+import { GuestImportRow, importGuests } from '../guestImport';
 
 const ISO = expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
 
@@ -58,22 +63,26 @@ beforeEach(() => {
   resetOpLog();
 });
 
-describe('importGuestsFromRows', () => {
-  it('refuses a missing houseId before writing', async () => {
-    await expect(importGuestsFromRows('', [row(1)])).rejects.toThrow('houseId is required');
+// importGuests reads the house's guest records first, to skip anyone on file.
+const houseRead = { op: 'getDocs', path: 'guests', constraints: [['where', 'houseId', '==', 'h1']] };
+
+describe('importGuests', () => {
+  it('refuses a missing houseId before reading or writing', async () => {
+    await expect(importGuests('', [row(1)])).rejects.toThrow('houseId is required');
     expect(getOpLog()).toEqual([]);
   });
 
-  it('returns 0 for no rows without writing', async () => {
-    expect(await importGuestsFromRows('h1', [])).toBe(0);
-    expect(getOpLog()).toEqual([]);
+  it('imports nothing for no rows, and writes nothing', async () => {
+    expect(await importGuests('h1', [])).toEqual({ imported: 0, alreadyResidents: 0, failed: 0 });
+    expect(getOpLog()).toEqual([houseRead]);
   });
 
   it('batch-sets one guests/{auto id} doc per row, then commits once', async () => {
-    const imported = await importGuestsFromRows('h1', [row(1), row(2)]);
+    const result = await importGuests('h1', [row(1), row(2)]);
 
-    expect(imported).toBe(2);
+    expect(result).toEqual({ imported: 2, alreadyResidents: 0, failed: 0 });
     expect(getOpLog()).toEqual([
+      houseRead,
       { op: 'batch.set', path: 'guests/auto-1', data: guestDoc('auto-1', 1) },
       { op: 'batch.set', path: 'guests/auto-2', data: guestDoc('auto-2', 2) },
       { op: 'batch.commit', path: '' },
@@ -86,22 +95,24 @@ describe('importGuestsFromRows', () => {
   it('splits more than 499 rows into batches of 499', async () => {
     const rows = Array.from({ length: 500 }, (_, i) => row(i));
 
-    expect(await importGuestsFromRows('h1', rows)).toBe(500);
+    expect((await importGuests('h1', rows)).imported).toBe(500);
 
     const ops = getOpLog().map((e) => e.op);
-    expect(ops.length).toBe(502);
-    expect(ops[499]).toBe('batch.commit');
-    expect(ops[500]).toBe('batch.set');
-    expect(ops[501]).toBe('batch.commit');
-    expect(getOpLog()[500].path).toBe('guests/auto-500');
+    expect(ops.length).toBe(503);
+    expect(ops[500]).toBe('batch.commit');
+    expect(ops[501]).toBe('batch.set');
+    expect(ops[502]).toBe('batch.commit');
+    expect(getOpLog()[501].path).toBe('guests/auto-500');
   });
 
-  it('replaces a commit failure with a generic message and stores nothing', async () => {
+  it('reports a commit failure as failed rows and stores nothing', async () => {
     failNext('batch.commit', new Error('denied'));
 
-    await expect(importGuestsFromRows('h1', [row(1)])).rejects.toThrow(
-      'Guest import failed. Please check your CSV and try again.',
-    );
+    expect(await importGuests('h1', [row(1)])).toEqual({
+      imported: 0,
+      alreadyResidents: 0,
+      failed: 1,
+    });
     expect(readDoc('guests/auto-1')).toBeUndefined();
   });
 });

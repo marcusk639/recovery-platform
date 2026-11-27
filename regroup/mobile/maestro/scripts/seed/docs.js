@@ -70,6 +70,53 @@ function operator(id, houseId, oxford, now) {
   };
 }
 
+/**
+ * House staff below the owner: the admin claim for HOUSE, an admins record
+ * that owns nothing (superAdmin: []), and a house-roles tier ('manager' or
+ * 'peerLeader'), as an accepted staff invitation leaves them. The app tells a
+ * manager from a peer leader by that tier (myHouseTiers).
+ */
+function staff(id, tier) {
+  const a = account(id);
+  const uid = uidOf(id);
+  return {
+    uid,
+    email: a.email,
+    tier,
+    claims: { admin: { [HOUSE]: true }, potentialSuperAdmin: false },
+    user: {
+      id: uid,
+      uid,
+      email: a.email,
+      firstName: a.firstName,
+      lastName: a.lastName,
+      phoneNumber: a.phone,
+      isAdmin: true,
+      isSuperAdmin: false,
+      isGuest: false,
+      isAnonymous: false,
+      adminId: uid,
+      houseId: HOUSE,
+      orgSetupCompleted: true,
+      infoEntered: true,
+      potentialSuperAdmin: false,
+      housesOwned: [],
+      subscriptionMetadata: { status: '', houses: {}, oxfordEnabled: false },
+    },
+    admin: {
+      id: uid,
+      userId: uid,
+      email: a.email,
+      firstName: a.firstName,
+      lastName: a.lastName,
+      phoneNumber: a.phone,
+      houseIds: [HOUSE],
+      superAdmin: [],
+      uniqueAdminAttribute: 'admin',
+    },
+  };
+}
+
 function resident(id, rentOwed, houseId = HOUSE) {
   const a = account(id);
   const uid = uidOf(id);
@@ -304,6 +351,7 @@ function businessMeeting(createdBy, now) {
 }
 
 module.exports = {
+  staff,
   application,
   businessMeeting,
   documents,

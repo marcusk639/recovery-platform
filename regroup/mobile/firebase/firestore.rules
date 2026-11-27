@@ -509,10 +509,21 @@ service cloud.firestore {
     
     // An applicant's own applications, across houses: the landing screen's
     // "Check my application" (owner, 2026-11-27). Only a query filtered on the
-    // caller's own applicantUid passes; staff list a house's applications
-    // through the houses/{houseId}/applications rule below.
+    // caller's own applicantUid passes; a house's owners and managers list its
+    // applications through the houses/{houseId}/applications rule below.
     match /{path=**}/applications/{appId} {
       allow read: if signedIn() && resource.data.applicantUid == request.auth.uid;
+    }
+
+    // A house's public listing (EMU-009, owner 2026-11-27): the only house data
+    // a signed-out visitor (the app's anonymous session) may read, for house
+    // search and the summary they apply from. Written only by the server
+    // (onHouseListingSync), with the public fields alone: no address,
+    // residents, staff, codes or billing (functions/src/houses/houseListing.ts).
+    // houses/{houseId} below stays members-only.
+    match /house-listings/{houseId} {
+      allow read: if signedIn();
+      allow write: if false;
     }
 
     match /houses/{houseId} {
@@ -663,7 +674,11 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // Resident applications: applicant creates own; admin reads + updates status.
+      // Resident applications: applicant creates own; the house's owners and
+      // managers read and decide them (callerRank >= 2, as for the house's
+      // money). Peer leaders hold the same admin claim but may not (owner
+      // decision 2026-11-27: an application holds the applicant's recovery
+      // history and contact details).
       // Any session may apply, the app's anonymous one included (P5 D1 = option
       // (a)), so a create carries exactly the fields submitApplication writes
       // (services/applications.ts), for this house, as pending: no operator
@@ -695,11 +710,12 @@ service cloud.firestore {
           && applicationText(request.resource.data, 'programType', 40)
           && applicationText(request.resource.data, 'currentSituation', 2000)
           && applicationText(request.resource.data, 'references', 1000);
-        allow read: if signedIn() && (resource.data.applicantUid == request.auth.uid || isAdmin([houseId]));
+        allow read: if signedIn() && (resource.data.applicantUid == request.auth.uid ||
+          (isAdmin([houseId]) && callerRank(houseId) >= 2));
         // The applicant's own slot, while it is still empty too: the app reads
         // it before applying (resource is null then, so the rule above fails).
         allow get: if signedIn() && appId == houseId + '_' + request.auth.uid;
-        allow update: if isAdmin([houseId]);
+        allow update: if isAdmin([houseId]) && callerRank(houseId) >= 2;
         allow delete: if false;
       }
     }
