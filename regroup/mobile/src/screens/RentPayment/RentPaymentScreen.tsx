@@ -158,11 +158,17 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
   });
   // Rent charges sit between the payments by date (rent spec §4.5), so the resident
   // sees why the balance went up. A failed read leaves the payments and says so.
-  const { data: charges, isError: chargesError } = useResidentCharges({
+  const {
+    data: charges,
+    isLoading: chargesLoading,
+    isError: chargesError,
+  } = useResidentCharges({
     houseId: house.id,
     guestUserId: guest.userId,
   });
   const historyItems = buildHistoryItems(paymentHistory ?? [], charges ?? []);
+  // The empty message only once both reads have settled (owner decision 2026-11-27).
+  const historyPending = historyLoading || chargesLoading;
 
   const queryClient = useQueryClient();
   const {
@@ -484,7 +490,7 @@ const RentPaymentScreen: React.FC<Props> = ({ navigation, guest, house }) => {
             style={styles.cardTitle}
           />
 
-          {historyLoading ? (
+          {historyPending ? (
             <View
               style={styles.historyLoading}
               testID="payment-history-loading"

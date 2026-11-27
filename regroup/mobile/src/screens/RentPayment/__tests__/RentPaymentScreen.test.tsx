@@ -544,6 +544,42 @@ describe("RentPaymentScreen", () => {
     expect(within(row).getByText("$125.00")).toBeTruthy();
   });
 
+  // Owner decision 2026-11-27: the empty message only once both reads have settled.
+  it("shows the loading indicator, not the empty message, while the charges load", () => {
+    mockUseResidentCharges.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    const view = renderScreen();
+    expect(view.getByTestId("payment-history-loading")).toBeTruthy();
+    expect(view.queryByTestId("payment-history-empty")).toBeNull();
+  });
+
+  it("goes from loading to the empty message once both reads settle with nothing", () => {
+    mockUsePaymentHistory.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: jest.fn() });
+    mockUseResidentCharges.mockReturnValue({ data: undefined, isLoading: true, isError: false });
+    const view = renderScreen();
+    expect(view.getByTestId("payment-history-loading")).toBeTruthy();
+    mockUsePaymentHistory.mockReturnValue({ data: [], isLoading: false, isError: false, refetch: jest.fn() });
+    mockUseResidentCharges.mockReturnValue({ data: [], isLoading: false, isError: false });
+    view.rerender(<RentPaymentScreen navigation={mockNavigation} guest={baseGuest} house={baseHouse} />);
+    expect(view.queryByTestId("payment-history-loading")).toBeNull();
+    expect(view.getByTestId("payment-history-empty")).toBeTruthy();
+  });
+
+  it("goes from loading to rows once both reads settle", () => {
+    mockUsePaymentHistory.mockReturnValue({ data: undefined, isLoading: true, isError: false, refetch: jest.fn() });
+    const view = renderScreen();
+    expect(view.queryByTestId("payment-history-row")).toBeNull();
+    mockUsePaymentHistory.mockReturnValue({
+      data: [paid("p1", "2026-11-20T15:00:00.000Z")],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+    mockUseResidentCharges.mockReturnValue({ data: [rentCharge()], isLoading: false, isError: false });
+    view.rerender(<RentPaymentScreen navigation={mockNavigation} guest={baseGuest} house={baseHouse} />);
+    expect(view.getAllByTestId("payment-history-row")).toHaveLength(1);
+    expect(view.getByTestId("charge-row-guest-1_2026-11-16")).toBeTruthy();
+  });
+
   it("lists charges when there are no payments yet", () => {
     mockUseResidentCharges.mockReturnValue({ data: [rentCharge()], isError: false });
     const view = renderScreen();

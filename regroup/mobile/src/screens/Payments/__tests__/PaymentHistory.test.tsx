@@ -85,7 +85,7 @@ jest.mock('../../../state/store', () => ({
 import * as paymentsService from '../../../services/payments';
 import * as rentChargesService from '../../../services/rentCharges';
 import * as reportExport from '../../../services/reportExport';
-import { fireEvent, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { PaymentRecord } from '../../../services/payments';
 import PaymentHistory from '../PaymentHistory';
 
@@ -219,6 +219,43 @@ describe('PaymentHistory', () => {
     await waitFor(() => expect(reportExport.exportPaymentHistoryCSV).toHaveBeenCalled());
     const [, , charges] = (reportExport.exportPaymentHistoryCSV as jest.Mock).mock.calls[0];
     expect(charges).toEqual([expect.objectContaining({ id: 'guest-1_2026-11-16', amountCents: 17500 })]);
+  });
+
+  // Owner decision 2026-11-27: "No payments found." only once the fetch has settled.
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+
+  it('shows a spinner, not "No payments found.", until the fetch settles; then the empty message', async () => {
+    const payments = deferred<unknown[]>();
+    const charges = deferred<unknown[]>();
+    (paymentsService.getPaymentHistory as jest.Mock).mockReturnValue(payments.promise);
+    (rentChargesService.listGuestCharges as jest.Mock).mockReturnValue(charges.promise);
+    const view = render(<PaymentHistory navigation={_fakeNavigation} />);
+    expect(view.getByTestId('payment-history-loading')).toBeTruthy();
+    expect(view.queryByText('No payments found.')).toBeNull();
+    await act(async () => payments.resolve([]));
+    // Payments are in, charges are not: still loading, never empty.
+    expect(view.getByTestId('payment-history-loading')).toBeTruthy();
+    expect(view.queryByText('No payments found.')).toBeNull();
+    await act(async () => charges.resolve([]));
+    expect(view.getByText('No payments found.')).toBeTruthy();
+    expect(view.queryByTestId('payment-history-loading')).toBeNull();
+  });
+
+  it('shows a spinner until the fetch settles, then the rows', async () => {
+    const payments = deferred<unknown[]>();
+    (paymentsService.getPaymentHistory as jest.Mock).mockReturnValue(payments.promise);
+    const view = render(<PaymentHistory navigation={_fakeNavigation} />);
+    expect(view.getByTestId('payment-history-loading')).toBeTruthy();
+    expect(view.queryByTestId('payment-row-pay-1')).toBeNull();
+    await act(async () =>
+      payments.resolve([paidOn('pay-1', '2026-11-20T15:00:00.000Z', 20000)]),
+    );
+    expect(view.getByTestId('payment-row-pay-1')).toBeTruthy();
+    expect(view.queryByText('No payments found.')).toBeNull();
   });
 
   it('lists charges even when there are no payments yet', async () => {

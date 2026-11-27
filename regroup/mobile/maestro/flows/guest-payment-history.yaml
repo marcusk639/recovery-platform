@@ -31,13 +31,9 @@ tags:
     visible:
       id: "payment-history-screen"
     timeout: 30000
-# This resident's two seeded payments, and not another resident's. Wait for the
-# first: on Android the list can show "No payments found." for a moment before
-# the records arrive (seen 2026-11-25), so an immediate assert raced it.
-- extendedWaitUntil:
-    visible:
-      id: "payment-row-e2e-pay-a-latest"
-    timeout: 20000
+# This resident's two seeded payments, and not another resident's.
+- assertVisible:
+    id: "payment-row-e2e-pay-a-latest"
 - assertVisible:
     text: ".*22[.]22.*"
 - assertVisible:
