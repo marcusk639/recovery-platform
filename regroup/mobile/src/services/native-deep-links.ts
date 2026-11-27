@@ -1,7 +1,7 @@
 import { Linking } from 'react-native';
 import { Invitation, InvitationType } from '../entities/Invite';
 import { logException } from '../util/logging';
-import { parseAppLink } from './appLinks/parseAppLink';
+import { claimsInvitation, parseAppLink } from './appLinks/parseAppLink';
 import { invitationFromAppLink } from './appLinks/invitationFromAppLink';
 
 const customScheme = 'regroup-app://';
@@ -90,9 +90,7 @@ export const getInitialLink = async (): Promise<NativeDeepLink | null> => {
     const initialUrl = await Linking.getInitialURL();
 
     if (initialUrl) {
-      const isValid = isValidDeepLink(initialUrl);
-
-      if (isValid) {
+      if (reachesApp(initialUrl)) {
         return { url: resolveDeepLinkUrl(initialUrl) };
       }
     }
@@ -109,7 +107,7 @@ export const getInitialLink = async (): Promise<NativeDeepLink | null> => {
  */
 export const onLink = (listener: (link: NativeDeepLink) => void): (() => void) => {
   const handleUrl = (event: { url: string }) => {
-    if (isValidDeepLink(event.url)) {
+    if (reachesApp(event.url)) {
       listener({ url: resolveDeepLinkUrl(event.url) });
     }
   };
@@ -146,6 +144,13 @@ export const getLinkType = (link: NativeDeepLink): LinkType | null => {
   // the caller reports it as a broken invite rather than ignoring it.
   return parseLinkQuery(url).type === 'invitation' ? 'invitation' : null;
 };
+
+/**
+ * A link Splash receives: one it handles, or an invitation that doesn't parse,
+ * which Splash reports as broken instead of opening the app silently.
+ */
+const reachesApp = (urlString: string): boolean =>
+  isValidDeepLink(urlString) || claimsInvitation(resolveDeepLinkUrl(urlString));
 
 /**
  * Checks if a URL is a link this app handles outside navigation (an

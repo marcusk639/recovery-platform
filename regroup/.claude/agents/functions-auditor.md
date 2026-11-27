@@ -15,7 +15,7 @@ Scan every file in `functions/src/callable/`, `functions/src/http/` and `functio
 
 ### 1. Auth Guard (Callable functions only)
 
-Every `onCall` handler (firebase-functions v2, `firebase-functions/v2/https`) must reject a missing `request.auth` as its **first statement** inside the handler body (before any data access or Firestore calls): `if (!request.auth) throw new HttpsError("unauthenticated", …)`. There is no `requireAuth` helper. Deliberately public callables: `getTierCatalog` (public pricing) and `peekInvitation` (the token is the credential).
+Every `onCall` handler (firebase-functions v2, `firebase-functions/v2/https`) must reject a missing `request.auth` as its **first statement** inside the handler body (before any data access or Firestore calls): `if (!request.auth) throw new HttpsError("unauthenticated", …)`. There is no `requireAuth` helper. Deliberately public callables: `getTierCatalog` (public pricing), `getAppConfig` (the minimum app version, read before sign-in) and `peekInvitation` (the token is the credential).
 
 - ✅ PASS: the `request.auth` check is the first statement
 - ❌ FAIL [CRITICAL]: missing entirely

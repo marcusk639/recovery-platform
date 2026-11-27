@@ -32,7 +32,7 @@ export function createConfirmationEmail(
   dynamicLink: string,
   name?: string
 ): Email {
-  const greeting = name ? `Hello ${name},` : "Hello,";
+  const greeting = name ? `Hello ${escapeHtml(name)},` : "Hello,";
   const header = name ? `Hello ${name},\n\n` : "Hello,\n\n";
   const body = `Follow this link to verify your email address.\n\n
    ${dynamicLink}\n\n

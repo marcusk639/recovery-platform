@@ -1,0 +1,92 @@
+# BILL-004/005 — a resident of a blocked house (launch spec §4.1 item 2, P5
+# Task 14). test-house-lapsed is canceled with no grace period, so its resident
+# gets the limited view instead of the app: their own payment history (with the
+# CSV export) and their own documents, read-only, and nothing else.
+# Persona: guest-lapsed (seed/lapsedHouse.js), who has one payment and one
+# document; the house also has a house-level document they must not see.
+# The login steps are login.yaml's, which ends on house-tab: a blocked resident
+# never sees it.
+# Run: maestro/scripts/run-flows.sh resident-limited-view
+appId: ${APP_ID}
+tags:
+  - guest
+  - billing
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "sign-in-button"
+- extendedWaitUntil:
+    visible:
+      id: "email-input"
+    timeout: 15000
+- tapOn:
+    id: "email-input"
+- inputText: test-guest-lapsed@rats-e2e.com
+- waitForAnimationToEnd
+- tapOn:
+    id: "password-input"
+    retryTapIfNoChange: true
+- waitForAnimationToEnd
+- inputText: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "login-button"
+- tapOn:
+    text: "Not Now"
+    optional: true
+# The limited view, and none of the app's tabs.
+- extendedWaitUntil:
+    visible:
+      id: "resident-limited-view"
+    timeout: 60000
+- assertNotVisible:
+    id: "house-tab"
+- assertNotVisible:
+    id: "guest-tab"
+# Their payment history, with the CSV export.
+- tapOn:
+    id: "limited-payment-history"
+- extendedWaitUntil:
+    visible:
+      id: "payment-history-screen"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "payment-row-e2e-pay-lapsed"
+    timeout: 30000
+- assertVisible:
+    text: ".*33[.]33.*"
+- assertVisible:
+    id: "export-csv-button"
+- tapOn:
+    id: "back-button"
+- extendedWaitUntil:
+    visible:
+      id: "resident-limited-view"
+    timeout: 15000
+# Their own document, read-only; not the house's.
+- tapOn:
+    id: "limited-documents"
+- extendedWaitUntil:
+    visible:
+      id: "document-list-screen"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "document-row-e2e-doc-lapsed"
+    timeout: 30000
+- assertNotVisible:
+    id: "document-row-e2e-doc-lapsed-house"
+- assertNotVisible:
+    id: "upload-document-button"
+- assertNotVisible:
+    id: "document-delete-e2e-doc-lapsed"
+- assertNotVisible:
+    id: "house-tab"

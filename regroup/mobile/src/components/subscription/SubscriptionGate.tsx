@@ -6,7 +6,7 @@ import { useSubscriptionGate } from '../../hooks/useSubscriptionGate';
 import RatsLoadingIndicator from '../rats-loading-indicator/rats-loading-indicator';
 import GracePeriodBanner from './GracePeriodBanner';
 import SubscriptionRequiredScreen from '../../screens/Subscription/SubscriptionRequiredScreen';
-import GraceExpiredScreen from '../../screens/Subscription/GraceExpiredScreen';
+import ResidentLimitedView from './ResidentLimitedView';
 import { refreshPlanState } from '../../services/planState';
 
 interface Props {
@@ -23,7 +23,8 @@ interface Props {
  *   allowed              → children (normal app)
  *   grace_period         → children + dismissible top banner
  *   subscription_required → SubscriptionRequiredScreen (operator)
- *   grace_expired        → GraceExpiredScreen (guest)
+ *   grace_expired        → ResidentLimitedView (guest: own payment history
+ *                          and documents only; plan required counts too)
  *
  * On AppState change from background → active the gate invalidates the
  * user and house React Query caches so stale subscription data is
@@ -70,7 +71,7 @@ const SubscriptionGate: React.FC<Props> = ({ children }) => {
   }
 
   if (result.status === 'grace_expired') {
-    return <GraceExpiredScreen />;
+    return <ResidentLimitedView />;
   }
 
   if (result.status === 'grace_period') {
