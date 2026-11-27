@@ -284,10 +284,10 @@ is verified with a real card, no operator can subscribe on a tier. See
 
 Apple's IAP rules affect whether the iOS app can surface the upgrade CTA natively
 or must route operators to web checkout. The three options are: **(A) web-only**
-— upgrade CTA opens the `SubscriptionHandler` WebView to
-`https://regroup-app.com/my-account` (`ACCOUNT_URL` in
-`mobile/src/screens/SubscriptionHandler/SubscriptionHandler.tsx`; web checkout
-itself is `/signup`, and `/subscribe` is a newsletter page) (0% Apple cut,
+— upgrade CTAs open web pricing or `/my-account` in the system browser
+(`openWebBilling` in `mobile/src/services/webBilling.ts`, launch P5 Task 9; the
+in-app WebView was removed; web checkout itself is `/signup`, and `/subscribe`
+is a newsletter page) (0% Apple cut,
 already built, no engineering); **(B) native IAP** — Apple payment
 sheet via StoreKit 2 (15–30% Apple cut, 2–3 weeks engineering); **(C) hybrid** —
 free tier in-app, paid upgrade only via web link (same as A). The recommendation

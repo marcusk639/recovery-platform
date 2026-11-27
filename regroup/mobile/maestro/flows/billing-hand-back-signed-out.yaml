@@ -1,0 +1,102 @@
+# Checkout hand-back while signed out (launch P5 Task 10, LINK-012, guard money):
+# regroup-app://app/checkout-return?result=success opened before sign-in is
+# held, not acted on (the app stays on the landing screen and opens nothing),
+# and after sign-in the gate decides: the operator whose house is now trialing
+# reaches the tabs.
+# The hold-and-deliver itself (the held link reaches onCheckoutReturn once,
+# after sign-in, and a stale one is dropped) has no screen of its own; the
+# deliverAppLink unit tests pin it. This flow pins what the operator sees.
+# Persona: lapsed-operator (house test-house-lapsed, subscriptionStatus canceled).
+# The webhook's write is simulated in the emulator (set-house-subscription-status.js).
+# Ends signed out, with the house back to canceled.
+#
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/billing-hand-back-signed-out.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - billing
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: initial-landing-screen
+    timeout: 30000
+# The web checkout finished: the webhook marks the house trialing.
+- runScript:
+    file: ../scripts/maestro-js/set-house-subscription-status.js
+    env:
+      HOUSE_ID: test-house-lapsed
+      STATUS: trialing
+- assertTrue: ${output.statusSet == 'trialing'}
+# Signed out (anonymous): the hand-back is held. Nothing opens.
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: regroup-app://app/checkout-return?result=success
+- waitForAnimationToEnd:
+    timeout: 5000
+- assertVisible:
+    id: initial-landing-screen
+- assertNotVisible:
+    id: house-tab
+- assertNotVisible:
+    id: subscription-required-screen
+# Sign in on the running app. Not login.yaml: its launchApp clears state, and
+# the held link with it. Steps copied from login.yaml (see its comments).
+- tapOn:
+    id: sign-in-button
+- extendedWaitUntil:
+    visible:
+      id: login-screen
+    timeout: 15000
+- extendedWaitUntil:
+    visible:
+      id: email-input
+    timeout: 10000
+- tapOn:
+    id: email-input
+- inputText: test-lapsed-operator@rats-e2e.com
+# The keyboard's Next key moves to the password field (a tap raced the
+# keyboard on iOS 27; see login.yaml).
+- pressKey: Enter
+- waitForAnimationToEnd
+- inputText: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: login-button
+- tapOn:
+    text: "Not Now"
+    optional: true
+# The gate decides: the house is trialing, so the operator reaches the tabs.
+- extendedWaitUntil:
+    visible:
+      id: house-tab
+    timeout: 60000
+- assertNotVisible:
+    id: subscription-required-screen
+# Leave the seed as it was, and sign out: a canceled hand-back (signed in now,
+# so delivered at once) brings the plan screen back, which has "Sign out".
+- runScript:
+    file: ../scripts/maestro-js/set-house-subscription-status.js
+    env:
+      HOUSE_ID: test-house-lapsed
+      STATUS: canceled
+- assertTrue: ${output.statusSet == 'canceled'}
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: regroup-app://app/checkout-return?result=canceled
+- extendedWaitUntil:
+    visible:
+      id: subscription-required-screen
+    timeout: 20000
+- tapOn:
+    text: "Sign out"
+- extendedWaitUntil:
+    visible:
+      id: initial-landing-screen
+    timeout: 30000

@@ -6,7 +6,7 @@
   <div *ngIf="billingInterval === 'year' && effectiveInterval === 'month'" class="text-muted small mt-1">
     Annual billing isn't available for this plan yet — you'll be billed monthly.
   </div>
-  <div class="text-muted small mt-2">
+  <div *ngIf="hasTrial" class="text-muted small mt-2 trial-terms">
     {{ trialDays }}-day free trial. You won't be charged until {{ firstChargeDate | date: "mediumDate" }}.
   </div>
 </div>

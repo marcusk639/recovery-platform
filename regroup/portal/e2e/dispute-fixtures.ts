@@ -89,6 +89,9 @@ export async function moneySnapshot(houseId = HOUSE) {
     guests[g.id] = { rentOwed: g.get('rentOwed'), choreFees: g.get('choreFees') };
   }
   const payments: Record<string, DocumentData> = {};
-  for (const p of (await admin().collection('payments').get()).docs) payments[p.id] = p.data();
+  // This house's payments only: the seed also has other houses' payments (the
+  // lapsed house, #303), which a dispute here can't touch either.
+  const housePayments = await admin().collection('payments').where('houseId', '==', houseId).get();
+  for (const p of housePayments.docs) payments[p.id] = p.data();
   return { guests, payments };
 }
