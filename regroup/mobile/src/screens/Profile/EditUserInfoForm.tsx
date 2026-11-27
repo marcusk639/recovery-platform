@@ -14,7 +14,7 @@ import EditUserInfoFormView, {
 } from "./EditUserInfoFormView";
 import { auth } from "../../../firebase-setup";
 import { logException } from "../../util/logging";
-import { avatarForSave } from "./profileAvatar";
+import { avatarForSave, deleteRemovedAvatar } from "./profileAvatar";
 
 // `avatarContentType` is the picked photo's type, for the upload only: it is
 // never saved.
@@ -61,15 +61,13 @@ const EditUserInfoForm = withFormik<EditUserInfoProps, EditUserInfoValues>({
     // nothing is saved and the user is told.
     const { avatarContentType, ...values } = formValues;
     try {
-      const uid = auth.currentUser?.uid;
-      const picked = values.avatar && values.avatar !== user?.avatar;
-      if (picked && !uid) throw new Error("EditUserInfoForm: no signed-in user");
-      values.avatar = (await avatarForSave(
-        values.avatar,
-        user?.avatar,
-        uid ?? "",
-        avatarContentType
-      )) as string | undefined;
+      values.avatar =
+        (await avatarForSave(
+          values.avatar,
+          user?.avatar,
+          auth.currentUser?.uid ?? "",
+          avatarContentType
+        )) ?? undefined;
     } catch (uploadError) {
       logException(uploadError, "EditUserInfoForm: avatar upload failed");
       formikBag.setSubmitting(false);
@@ -104,6 +102,9 @@ const EditUserInfoForm = withFormik<EditUserInfoProps, EditUserInfoValues>({
         );
         await updateAdmin(admin, adminUpdates);
       }
+
+      // Saved: a removed photo's file goes too (best effort, never throws).
+      await deleteRemovedAvatar(values.avatar, user?.avatar, auth.currentUser?.uid ?? "");
 
       formikBag.setSubmitting(false);
       navigation.goBack();

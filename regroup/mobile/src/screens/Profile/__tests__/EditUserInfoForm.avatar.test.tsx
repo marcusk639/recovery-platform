@@ -44,8 +44,10 @@ jest.mock('../../../hooks/useSelectedHouse', () => ({
 }));
 
 const mockAvatarForSave = jest.fn();
+const mockDeleteRemovedAvatar = jest.fn((..._args: unknown[]) => Promise.resolve());
 jest.mock('../profileAvatar', () => ({
   avatarForSave: (...args: unknown[]) => mockAvatarForSave(...args),
+  deleteRemovedAvatar: (...args: unknown[]) => mockDeleteRemovedAvatar(...args),
 }));
 jest.mock('../../../util/logging', () => ({ logException: jest.fn() }));
 
@@ -79,9 +81,12 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockStoredUser = { id: 'user-1', avatar: '' };
   (auth as any).currentUser = { uid: 'uid-1' };
-  mockAvatarForSave.mockImplementation(async (avatar: string) =>
-    avatar === PICKED ? URL : avatar,
-  );
+  // Like the real one: a picked photo needs an account to upload as.
+  mockAvatarForSave.mockImplementation(async (avatar: string, _stored: string, uid: string) => {
+    if (avatar !== PICKED) return avatar;
+    if (!uid) throw new Error('profileAvatar: no signed-in account to upload as');
+    return URL;
+  });
 });
 
 describe('EditUserInfoForm avatar', () => {
@@ -130,7 +135,7 @@ describe('EditUserInfoForm avatar', () => {
         AVATAR_UPLOAD_FAILED_MESSAGE,
       ),
     );
-    expect(mockAvatarForSave).not.toHaveBeenCalled();
+    expect(mockAvatarForSave).toHaveBeenCalledWith(PICKED, '', '', undefined);
     expect(mockUpdateUserThunkCreator).not.toHaveBeenCalled();
     expect(goBack).not.toHaveBeenCalled();
   });
@@ -153,5 +158,35 @@ describe('EditUserInfoForm avatar', () => {
 
     await waitFor(() => expect(goBack).toHaveBeenCalled());
     expect(mockUpdateUserThunkCreator.mock.calls[0][0].updates.avatar).toBe('');
+  });
+
+  it("deletes a removed photo's file, only after the profile saved", async () => {
+    mockStoredUser = { id: 'user-1', avatar: URL };
+    const goBack = renderAndPick('', null);
+
+    await waitFor(() => expect(goBack).toHaveBeenCalled());
+    expect(mockDeleteRemovedAvatar).toHaveBeenCalledWith('', URL, 'uid-1');
+    expect(mockUpdateUserThunkCreator.mock.invocationCallOrder[0]).toBeLessThan(
+      mockDeleteRemovedAvatar.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('deletes nothing when the save fails', async () => {
+    mockStoredUser = { id: 'user-1', avatar: URL };
+    mockUnwrap.mockRejectedValueOnce(new Error('network down'));
+    renderAndPick('', null);
+
+    await waitFor(() => expect(mockAlert).toHaveBeenCalledWith('Update Failed', expect.any(String)));
+    expect(mockDeleteRemovedAvatar).not.toHaveBeenCalled();
+  });
+
+  it("uploads a new pick over an older build's stored phone path", async () => {
+    const legacy = 'file:///var/mobile/old/IMG_0000.jpg';
+    mockStoredUser = { id: 'user-1', avatar: legacy };
+    const goBack = renderAndPick(PICKED, 'image/jpeg');
+
+    await waitFor(() => expect(goBack).toHaveBeenCalled());
+    expect(mockAvatarForSave).toHaveBeenCalledWith(PICKED, legacy, 'uid-1', 'image/jpeg');
+    expect(mockUpdateUserThunkCreator.mock.calls[0][0].updates.avatar).toBe(URL);
   });
 });

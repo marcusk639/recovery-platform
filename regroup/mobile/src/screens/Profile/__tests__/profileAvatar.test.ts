@@ -13,13 +13,24 @@ jest.mock('@react-native-firebase/storage', () =>
 jest.mock('../../../util/logging', () => ({ logException: jest.fn() }));
 
 import * as rnfbStorage from '@react-native-firebase/storage';
-import { avatarContentType, avatarForSave, isRemoteImageUri } from '../profileAvatar';
+import {
+  avatarContentType,
+  avatarForSave,
+  deleteRemovedAvatar,
+  isRemoteImageUri,
+  versionedAvatarUrl,
+} from '../profileAvatar';
 import { uploadUserAvatarAndGetUrl } from '../../../services/storage';
+import { logException } from '../../../util/logging';
 
 const PICKED = 'file:///var/mobile/tmp/IMG_0001.jpg';
+const VERSIONED = /^https:\/\/mock-storage\/users\/u1\/avatar\?v=\d+$/;
 const STORED_URL = 'https://firebasestorage.googleapis.com/v0/b/x/o/users%2Fu1%2Favatar?alt=media';
 
-afterEach(() => jest.restoreAllMocks());
+afterEach(() => {
+  jest.restoreAllMocks();
+  (logException as jest.Mock).mockClear();
+});
 
 describe('uploadUserAvatarAndGetUrl', () => {
   it("uploads to users/{uid}/avatar and returns that file's download URL", async () => {
@@ -38,16 +49,12 @@ describe('uploadUserAvatarAndGetUrl', () => {
 describe('avatarForSave', () => {
   it('uploads a newly picked photo and returns its URL, with an image content type', async () => {
     const putFile = jest.spyOn(rnfbStorage, 'putFile');
-    await expect(avatarForSave(PICKED, '', 'u1', 'image/png')).resolves.toBe(
-      'https://mock-storage/users/u1/avatar',
-    );
+    await expect(avatarForSave(PICKED, '', 'u1', 'image/png')).resolves.toMatch(VERSIONED);
     expect(putFile.mock.calls[0][2]).toMatchObject({ contentType: 'image/png' });
   });
 
   it('replaces an older photo', async () => {
-    await expect(avatarForSave(PICKED, STORED_URL, 'u1')).resolves.toBe(
-      'https://mock-storage/users/u1/avatar',
-    );
+    await expect(avatarForSave(PICKED, STORED_URL, 'u1')).resolves.toMatch(VERSIONED);
   });
 
   it('keeps a removed avatar removed, without uploading', async () => {
@@ -66,6 +73,21 @@ describe('avatarForSave', () => {
   it("leaves an older build's stored phone path alone (the file may be gone)", async () => {
     const putFile = jest.spyOn(rnfbStorage, 'putFile');
     await expect(avatarForSave(PICKED, PICKED, 'u1')).resolves.toBe(PICKED);
+    expect(putFile).not.toHaveBeenCalled();
+  });
+
+  it('saves each new photo as a new URL, so no phone keeps showing a cached old one', async () => {
+    const now = jest.spyOn(Date, 'now');
+    now.mockReturnValueOnce(1000).mockReturnValueOnce(2000);
+    const first = await avatarForSave(PICKED, '', 'u1');
+    const second = await avatarForSave('file:///var/mobile/tmp/IMG_0002.jpg', first, 'u1');
+    expect(first).toBe('https://mock-storage/users/u1/avatar?v=1000');
+    expect(second).toBe('https://mock-storage/users/u1/avatar?v=2000');
+  });
+
+  it('refuses to upload with no signed-in account', async () => {
+    const putFile = jest.spyOn(rnfbStorage, 'putFile');
+    await expect(avatarForSave(PICKED, '', '')).rejects.toThrow('no signed-in account');
     expect(putFile).not.toHaveBeenCalled();
   });
 
@@ -98,5 +120,47 @@ describe('isRemoteImageUri', () => {
     expect(isRemoteImageUri('/data/user/0/app/cache/a.jpg')).toBe(false);
     expect(isRemoteImageUri('')).toBe(false);
     expect(isRemoteImageUri(undefined)).toBe(false);
+  });
+});
+
+describe('versionedAvatarUrl', () => {
+  it('adds the version to a URL with or without a query', () => {
+    expect(versionedAvatarUrl('https://x/o/a?alt=media&token=t', 5)).toBe(
+      'https://x/o/a?alt=media&token=t&v=5',
+    );
+    expect(versionedAvatarUrl('https://x/o/a', 5)).toBe('https://x/o/a?v=5');
+  });
+});
+
+describe('deleteRemovedAvatar', () => {
+  it('deletes users/{uid}/avatar after a save that removed the photo', async () => {
+    const del = jest.spyOn(rnfbStorage, 'deleteObject');
+    await deleteRemovedAvatar('', STORED_URL, 'u1');
+    expect(del).toHaveBeenCalledTimes(1);
+    expect((del.mock.calls[0][0] as { fullPath?: string }).fullPath).toBe('users/u1/avatar');
+  });
+
+  it('deletes nothing when a photo is kept, there was none, or the old value was a phone path', async () => {
+    const del = jest.spyOn(rnfbStorage, 'deleteObject');
+    await deleteRemovedAvatar(STORED_URL, STORED_URL, 'u1');
+    await deleteRemovedAvatar('', '', 'u1');
+    await deleteRemovedAvatar('', PICKED, 'u1');
+    await deleteRemovedAvatar('', STORED_URL, '');
+    expect(del).not.toHaveBeenCalled();
+  });
+
+  it('ignores a file that is already gone', async () => {
+    jest.spyOn(rnfbStorage, 'deleteObject').mockRejectedValueOnce(
+      Object.assign(new Error('gone'), { code: 'storage/object-not-found' }),
+    );
+    await expect(deleteRemovedAvatar('', STORED_URL, 'u1')).resolves.toBeUndefined();
+    expect(logException).not.toHaveBeenCalled();
+  });
+
+  it('logs any other failure and never throws (the profile is already saved)', async () => {
+    const error = Object.assign(new Error('nope'), { code: 'storage/unauthorized' });
+    jest.spyOn(rnfbStorage, 'deleteObject').mockRejectedValueOnce(error);
+    await expect(deleteRemovedAvatar('', STORED_URL, 'u1')).resolves.toBeUndefined();
+    expect(logException).toHaveBeenCalledWith(error, expect.any(String));
   });
 });

@@ -1,6 +1,7 @@
 import { handleError } from './errors/storage';
 import { House } from '../entities/House';
 import {
+  deleteObject,
   getDownloadURL,
   getStorage,
   putFile,
@@ -76,6 +77,10 @@ export const uploadUserAvatarAndGetUrl = async (
   await uploadUserAvatar(pathOnDevice, userId, metadata);
   return getDownloadURL(ref(getStorage(), getUserAvatarUrl(userId)));
 };
+
+/** Deletes users/{uid}/avatar (its owner may: storage.rules). */
+export const deleteUserAvatar = async (userId: string): Promise<void> =>
+  deleteObject(ref(getStorage(), getUserAvatarUrl(userId)));
 
 export const uploadGuestAvatar = async (
   pathOnDevice: string,
