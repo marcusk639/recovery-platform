@@ -15,11 +15,14 @@
  * subscription and Stripe fields.
  *
  * Listed: a house that isn't a demo house, has a name and a location, and
- * whose subscription is active or trialing (a lapsed operator can't act on an
- * application). Anything else has no listing.
+ * whose subscription is active, trialing or past_due (its grace period; owner,
+ * 2026-11-27). Canceled, unpaid or any other status has no listing: a lapsed
+ * operator can't act on an application. The house phone is public on purpose
+ * (owner, 2026-11-27), for applicants to call.
  */
 export const LISTING_GEOHASH_PRECISION = 6;
-const LISTED_STATUSES = new Set(['active', 'trialing']);
+// past_due stays listed: the house is in its grace period (owner, 2026-11-27).
+const LISTED_STATUSES = new Set(['active', 'trialing', 'past_due']);
 /** Free text an operator typed is public here, so each string is capped. */
 const STRING_CAP: Record<string, number> = {
   name: 200,

@@ -103,7 +103,8 @@ describe('toHouseListing', () => {
   it.each([
     ['a demo house', { isDemoHouse: true }],
     ['a lapsed subscription', { subscriptionStatus: 'canceled' }],
-    ['a past-due subscription', { subscriptionStatus: 'past_due' }],
+    // A past-due house is listed (owner, 2026-11-27); an unpaid one is not.
+    ['an unpaid subscription', { subscriptionStatus: 'unpaid' }],
     ['no subscription status', { subscriptionStatus: '' }],
     ['no name', { name: '  ' }],
     ['no location', { geohash: 'unknown' }],

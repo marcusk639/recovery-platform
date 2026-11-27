@@ -105,6 +105,33 @@ it('converges on a retry: a second run of the same event changes nothing', async
   expect(mem.writes.length).toBe(writes);
 });
 
+// Owner decision 2026-11-27: a live house is listed, a past-due one too
+// (its grace period), and a house that isn't live is not.
+for (const status of ['active', 'trialing', 'past_due']) {
+  it(`lists a house whose subscription is ${status}`, async () => {
+    mem.seed(`houses/${H}`, house({ subscriptionStatus: status }));
+    await run(event);
+    expect(listing()).toMatchObject({ id: H });
+  });
+}
+
+for (const status of ['canceled', 'unpaid', 'incomplete', 'incomplete_expired', 'paused', '']) {
+  it(`lists no house whose subscription is ${status || 'missing'}`, async () => {
+    mem.seed(`houses/${H}`, house());
+    await run(event);
+    mem.seed(`houses/${H}`, house({ subscriptionStatus: status }));
+    await run(event);
+    expect(listing()).toBeUndefined();
+  });
+}
+
+// Owner decision 2026-11-27: the house phone is public, for applicants to call.
+it('includes the house phone in the listing', async () => {
+  mem.seed(`houses/${H}`, house({ phoneNumber: '512-555-0100' }));
+  await run(event);
+  expect(listing()).toMatchObject({ phoneNumber: '512-555-0100' });
+});
+
 it('lists nothing for a demo house', async () => {
   mem.seed(`houses/${H}`, house({ isDemoHouse: true }));
   expect(await syncHouseListing(H)).toBe('unchanged');
