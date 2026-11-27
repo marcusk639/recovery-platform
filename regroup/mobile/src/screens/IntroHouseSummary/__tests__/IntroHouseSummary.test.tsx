@@ -26,6 +26,12 @@ jest.mock("../../../hooks/useSelectedHouse", () => ({
   useSelectedHouse: () => mockUseSelectedHouse(),
 }));
 
+// The screen reads the selected house's public listing (EMU-009); the
+// fixtures below stand in for it.
+jest.mock("../../../state/queries/houseListingQueries", () => ({
+  useHouseListing: () => ({ data: mockUseSelectedHouse().house ?? undefined }),
+}));
+
 // ─── Navigation mock ──────────────────────────────────────────────────────────
 jest.mock("@react-navigation/native-stack", () => ({}));
 
@@ -380,11 +386,13 @@ describe("IntroHouseSummary", () => {
       expect(getByText("LOCATION")).toBeTruthy();
     });
 
-    it("shows the house street address", () => {
-      const { getByText } = renderScreen({
+    // EMU-009: the public listing has no street address, and the screen
+    // never shows one, even if a field named street were present.
+    it("does not show a street address", () => {
+      const { queryByText } = renderScreen({
         selectedHouse: makeHouse({ street: "123 Main St" }),
       });
-      expect(getByText("123 Main St")).toBeTruthy();
+      expect(queryByText("123 Main St")).toBeNull();
     });
 
     it("shows the phone number when present", () => {
@@ -404,14 +412,24 @@ describe("IntroHouseSummary", () => {
 
   // ─── House health summary ─────────────────────────────────────────────────────
   describe("house health summary", () => {
-    it("renders the HOUSE HEALTH stat summary", () => {
+    it("renders the stat summary", () => {
       const { getByTestId } = renderScreen({ selectedHouse: makeHouse() });
       expect(getByTestId("week-stat-summary")).toBeTruthy();
     });
 
-    it('shows "HOUSE HEALTH" as the stat header', () => {
-      const { getByText } = renderScreen({ selectedHouse: makeHouse() });
-      expect(getByText("HOUSE HEALTH")).toBeTruthy();
+    // EMU-009: house health comes from residents' activity, which the public
+    // listing doesn't carry; the summary shows the beds open instead.
+    it("shows the listing's open beds of its capacity", () => {
+      const { getByText } = renderScreen({
+        selectedHouse: makeHouse({ openBeds: 3, maximumCapacity: 10 }),
+      });
+      expect(getByText("3 of 10")).toBeTruthy();
+    });
+
+    it('shows "OPENINGS" as the stat header, not house health', () => {
+      const { getByText, queryByText } = renderScreen({ selectedHouse: makeHouse() });
+      expect(getByText("OPENINGS")).toBeTruthy();
+      expect(queryByText("HOUSE HEALTH")).toBeNull();
     });
   });
 

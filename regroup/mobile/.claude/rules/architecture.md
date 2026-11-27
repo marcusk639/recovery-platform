@@ -80,6 +80,7 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 | `guest.tsx`                     | CRUD with optimistic locking, transactions, stat merging  |
 | `guestImport.ts`                | Bulk guest import from CSV/data                           |
 | `house.tsx`                     | CRUD, nearby search, admin management, batch create       |
+| `houseListings.ts`              | Public listings (house-listings): signed-out house search and summary |
 | `invitations.ts`                | Invitation callables: create, peek, redeem                 |
 | `issues.ts`                     | House maintenance issue CRUD                              |
 | `meeting.ts`                    | Search, check-in (calls Cloud Functions)                  |

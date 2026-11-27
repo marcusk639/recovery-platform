@@ -27,6 +27,7 @@ export { onActivityWritten } from './activityWeekSummary';
 export { onGuestLinkedRestamp } from './guestRestamp';
 export { onGuestWrite } from './guestWrite';
 export { onHouseRentSettingsWrite } from './houseRentSettings';
+export { onHouseListingSync } from './houseListing';
 export { notifyOperatorOnApplication } from './applicationNotice';
 
 /**

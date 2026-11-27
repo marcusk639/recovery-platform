@@ -6,7 +6,7 @@ import {
   TextStyle,
   ListRenderItemInfo,
 } from 'react-native';
-import { filter, isEmpty, size } from 'lodash';
+import { filter, isEmpty } from 'lodash';
 import { Houses } from '../../types';
 import { HEALTH_ICON_MAP, HEALTH_COLOR_MAP } from '../../util/guest';
 import { User } from '../../entities/User';
@@ -15,7 +15,8 @@ import RatsButton from '../../components/rats-button/rats-button';
 import { Routes, AuthStackNavigationProp } from '../../navigation/types';
 import RatsLoadingIndicator from '../../components/rats-loading-indicator/rats-loading-indicator';
 import { selectHouseById } from '../../state/slices/housesSlice';
-import { searchForHouses as searchForHousesService } from '../../services/house';
+// Signed-out search reads the public listings; houses/{id} is members-only (EMU-009).
+import { searchHouseListings } from '../../services/houseListings';
 import { logException } from '../../util/logging';
 import {
   fontSize,
@@ -38,7 +39,7 @@ import ScreenHeader from '../../components/screen-header';
 import { useModal, useNotification } from '../../context';
 import { HouseSearchFilter } from '../../entities/HouseSearch';
 import { HouseSearchFilterForm } from './HouseSearchFilterForm';
-import { House } from '../../entities/House';
+import { HouseListing } from '../../entities/HouseListing';
 import RatsAvatar from '../../components/rats-avatar';
 import { RatsFlatList } from '../../components/rats-flat-list';
 import { RatsIcon } from '../../components/rats-icon';
@@ -88,7 +89,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
   // searchingHouses slice fields it wrote to. Search state now lives in
   // local useState and the service call is direct.
   const user = useAppSelector(state => state.user.user);
-  const [searchedHouses, setSearchedHouses] = useState<House[]>([]);
+  const [searchedHouses, setSearchedHouses] = useState<HouseListing[]>([]);
   const [searching, setSearching] = useState(false);
 
   const [gettingPermissions, setGettingPermissions] = useState(true);
@@ -135,10 +136,10 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
       }
       setSearching(true);
       try {
-        const results = await searchForHousesService({
+        const results = await searchHouseListings({
           filters: searchFilters,
         });
-        setSearchedHouses(Object.values(results ?? {}) as House[]);
+        setSearchedHouses(Object.values(results ?? {}));
       } catch (err) {
         logException(err);
         setSearchedHouses([]);
@@ -192,7 +193,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
       });
     });
     return (
-      <RatsFlatList<House>
+      <RatsFlatList<HouseListing>
         scrollEnabled
         renderItem={renderHouse}
         data={houseResults}
@@ -278,7 +279,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
     openFilters,
   ]);
 
-  const renderHouseImage = useCallback((house: House) => {
+  const renderHouseImage = useCallback((house: HouseListing) => {
     return (
       <RatsAvatar
         name={house.name}
@@ -295,8 +296,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
     );
   }, []);
 
-  const renderStars = useCallback((house: House) => {
-    const phaseNumber = size(house.phases);
+  const renderStars = useCallback((house: HouseListing) => {
     const number = house.rating || 3;
     const stars: React.JSX.Element[] = [];
     for (let i = 1; i <= number; i++) {
@@ -313,14 +313,13 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
   }, []);
 
   const renderHouseDescription = useCallback(
-    (house: House) => {
+    (house: HouseListing) => {
       const HOUSE_DESCRIPTION_TEXT: TextStyle = {
         fontSize: fontSize.regular_medium,
         marginBottom: normalize(2),
       };
       return (
         <Fragment>
-          <RatsText style={HOUSE_DESCRIPTION_TEXT} text={house.street || ''} />
           <RatsText
             style={HOUSE_DESCRIPTION_TEXT}
             text={getAddressDisplay('', house.city, house.state, house.zip)}
@@ -347,7 +346,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
     [renderStars],
   );
 
-  const renderHouseHeading = useCallback((house: House) => {
+  const renderHouseHeading = useCallback((house: HouseListing) => {
     return (
       <View
         style={{
@@ -371,7 +370,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
   }, []);
 
   const renderDetailsButton = useCallback(
-    (house: House) => {
+    (house: HouseListing) => {
       return (
         <RatsButton
           testID={`house-details-button-${house.id}`}
@@ -391,7 +390,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
     [selectHouse],
   );
 
-  const renderHouseHealth = useCallback((house: House) => {
+  const renderHouseHealth = useCallback((house: HouseListing) => {
     const icon = HEALTH_ICON_MAP[HealthConstants.SAD];
     return (
       <RatsIcon
@@ -403,7 +402,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
   }, []);
 
   const renderHouse = useCallback(
-    (listItem: ListRenderItemInfo<House>) => {
+    (listItem: ListRenderItemInfo<HouseListing>) => {
       const house = listItem.item;
       const width = Dimensions.get('screen').width;
       return (

@@ -35,6 +35,7 @@ npm run migrate:balance-cents:dry-run   # / :apply
 npm run backfill:week-summaries:dry-run -- --from YYYY-MM-DD --to YYYY-MM-DD [--house <id>]   # / :apply
 npm run backfill:dispute-identity:dry-run [-- --house <id>]   # then :apply — stamp/re-stamp residentUid, log older decisions (reopen needs them), seed house-disputes. Combined #141/#145 deploy order (regroup/CLAUDE.md): #145 step 0 and backfills → functions (build first) → the MERGED ruleset immediately after → this, at least 10 minutes later, with `-- --verify-stamps` (cutoff = run start; re-derives pre-rules stamps; flags differing ones on disputed activities, exit 3) → #145's remaining steps → app
 npm run report:ghost-guests     # Read-only: guest docs with no house claim (ids only); needs both emulator hosts to rehearse
+npm run backfill:house-listings:dry-run   # then :apply — write house-listings for existing houses (after the functions deploy)
 ```
 
 Jest config is the `jest` key in `package.json` (no `jest.config.js`). Firestore rules tests live in `../mobile/firebase/__tests__/`, not here.
@@ -80,6 +81,7 @@ src/
                     guestRestamp.ts         onGuestLinkedRestamp
                     guestWrite.ts           onGuestWrite
                     houseRentSettings.ts    onHouseRentSettingsWrite
+                    houseListing.ts         onHouseListingSync (house-listings, the public listing)
                     houseTombstone.ts       onHouseDeleted
   activities/       Week-summary recompute (syncWeekSummary) + pure week/time-zone math
   rent/             Rent charging: chargeResident (the only rentOwed writer), rates,
@@ -248,6 +250,8 @@ The legacy `STRIPE_HOUSE_PRICE_ID` / `STRIPE_GUEST_PRICE_ID` / `STRIPE_OXFORD_PR
 ### Firestore gotchas
 
 **House owner fields.** `createHouses` stores the operator's uid in `ownerId` and `superAdminId`; `adminIds`/`superAdminIds` hold admin-record ids from `createAdminId()`, not uids. Find an operator's houses by `ownerId`: `adminIds array-contains uid` matches only legacy houses (#222). For the same reason, never address a notification to an `adminIds` entry: `notifyOperatorOnApplication` resolves staff uids from the role records (`staffUids` in `util/houseRoleStore.ts`) plus `superAdminId`.
+
+**House listings are the public face of a house.** `house-listings/{houseId}` (EMU-009, owner 2026-11-27) is the only house data a signed-out visitor may read: the app's house search and the summary a prospective resident applies from. `onHouseListingSync` (`triggers/firestore/houseListing.ts`, retried) writes it from the current house doc on every house write, through `toHouseListing` (`houses/houseListing.ts`): a fixed allowlist of public fields, typed, with counts for rooms, beds and phases, and the geohash cut to six characters. Never the street, coordinates, rooms or beds (they name residents), health, the house code, staff or owner ids, or subscription and Stripe fields. Listed only when the house isn't a demo house, has a name and location, and its `subscriptionStatus` is `active` or `trialing`; otherwise the listing is deleted. An unchanged listing isn't rewritten. After the first deploy, run `backfill:house-listings` for houses that exist already. Adding a field to the listing is a privacy decision: check it against that list.
 
 **Deleted houses leave a tombstone.** `onHouseDeleted` (`triggers/firestore/houseTombstone.ts`, retried) writes server-only `houseTombstones/{houseId}` (`deletedAt`), which `createHouses` (`houses/createHousesTx.ts`) reads to refuse a tombstoned id, and frees the house's slot in the owner's `subscriptionMetadata.houses` in a transaction (the property-cap count). Both happen some time after the delete, not with it.
 

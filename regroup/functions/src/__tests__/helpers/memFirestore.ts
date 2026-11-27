@@ -287,6 +287,7 @@ export const apiFirestore = {
   ratsFirestore: memDb,
   guestCollection: collectionRef('guests'),
   houseCollection: collectionRef('houses'),
+  houseListingCollection: collectionRef('house-listings'),
   userCollection: collectionRef('users'),
   invitationCollection: collectionRef('invitations'),
   adminCollection: collectionRef('admins'),

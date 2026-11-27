@@ -190,8 +190,9 @@ jest.mock('../HouseSearchFilterForm', () => ({
 
 const mockSearchForHouses = jest.fn();
 
-jest.mock('../../../services/house', () => ({
-  searchForHouses: (...args: any[]) => mockSearchForHouses(...args),
+// House search reads the public listings (EMU-009).
+jest.mock('../../../services/houseListings', () => ({
+  searchHouseListings: (...args: any[]) => mockSearchForHouses(...args),
 }));
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
@@ -534,6 +535,16 @@ describe('HouseSearchScreen', () => {
       mockSearchForHouses.mockResolvedValue({ [BASE_HOUSE.id]: BASE_HOUSE });
       const { getByText } = renderScreen();
       await waitFor(() => expect(getByText(/San Francisco/)).toBeTruthy());
+    });
+
+    // EMU-009: search shows the public listing, which has no street address.
+    it('never shows a street address, even if one came back', async () => {
+      const permModule = require('../../../util/permissions');
+      permModule.checkAndRequestLocationPermissions.mockResolvedValueOnce(true);
+      mockSearchForHouses.mockResolvedValue({ [BASE_HOUSE.id]: BASE_HOUSE });
+      const { getByText, queryByText } = renderScreen();
+      await waitFor(() => expect(getByText(/San Francisco/)).toBeTruthy());
+      expect(queryByText('100 Main St')).toBeNull();
     });
   });
 
