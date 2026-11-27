@@ -88,6 +88,40 @@ it('lists the house again when it becomes active (the house write triggers it)',
   expect(listing('h1')).toMatchObject({ id: 'h1' });
 });
 
+// The sweep reads a house as past due with its grace over, then the payment
+// recovers and the webhook writes the house before the sweep deletes. The
+// trigger for that write sees an unchanged listing, and no later house write
+// would restore it, so the sweep must re-plan from the house it deletes for.
+it('keeps the listing of a house whose payment recovers mid-sweep', async () => {
+  await seedListed('h1', pastDue('h1', BEFORE));
+  const api = jest.requireMock('../../api/firestore');
+  const realDoc = api.houseCollection.doc;
+  let raced = false;
+  const spy = jest.spyOn(api.houseCollection, 'doc').mockImplementation((...args: unknown[]) => {
+    const ref = realDoc(...args);
+    return {
+      ...ref,
+      get: async () => {
+        const snap = await ref.get();
+        if (!raced) {
+          raced = true;
+          // The webhook makes the house active after the sweep read it.
+          mem.seed('houses/h1', house('h1'));
+          await trigger({ params: { houseId: 'h1' } });
+        }
+        return snap;
+      },
+    };
+  });
+  try {
+    expect(await resyncPastDueListings(NOW)).toMatchObject({ resynced: 1, deleted: 0, failed: 0 });
+  } finally {
+    spy.mockRestore();
+  }
+  expect(raced).toBe(true);
+  expect(listing('h1')).toMatchObject({ id: 'h1' });
+});
+
 it('writes nothing when nothing changed, and skips houses already delisted', async () => {
   await seedListed('h1', pastDue('h1', AFTER));
   mem.seed('houses/h2', pastDue('h2', BEFORE)); // already delisted: no listing

@@ -5,8 +5,11 @@
  * onHouseListingSync re-plans a listing on every house write, but nothing
  * writes the house when its grace runs out. This sweep re-plans each past_due
  * house through the same syncHouseListing, so the listing rule stays in one
- * place (houses/houseListing.ts). A house that becomes active again is written
- * by the webhook, and the trigger lists it again.
+ * place (houses/houseListing.ts). syncHouseListing reads the house and deletes
+ * the listing in one transaction, so a house whose payment recovers mid-sweep
+ * is re-read as active and keeps its listing; no later house write would
+ * restore it. A house that becomes active again is written by the webhook, and
+ * the trigger lists it again.
  *
  * A past_due house with no guestGraceEndsAt (one set past_due by
  * setOperatorHousesStatus or the status migration, which write no deadline) is
@@ -68,7 +71,9 @@ export async function resyncPastDueListings(now: number = Date.now()): Promise<G
     .select('guestGraceEndsAt')
     .get();
   const expired: string[] = snap.docs
-    .filter((d: { data: () => Record<string, unknown> }) => graceOver(d.data().guestGraceEndsAt, now))
+    .filter((d: { data: () => Record<string, unknown> }) =>
+      graceOver(d.data().guestGraceEndsAt, now),
+    )
     .map((d: { id: string }) => d.id);
   const ids = await stillListed(expired);
   const result: GraceSweepResult = {

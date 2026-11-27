@@ -120,7 +120,10 @@ for (const status of ['active', 'trialing', 'past_due']) {
 }
 
 it('lists a past-due house again when it becomes active (the trigger re-lists it)', async () => {
-  mem.seed(`houses/${H}`, house({ subscriptionStatus: 'past_due', guestGraceEndsAt: '2020-01-01T00:00:00Z' }));
+  mem.seed(
+    `houses/${H}`,
+    house({ subscriptionStatus: 'past_due', guestGraceEndsAt: '2020-01-01T00:00:00Z' }),
+  );
   await run(event);
   expect(listing()).toBeUndefined();
   mem.seed(`houses/${H}`, house({ subscriptionStatus: 'active' }));
