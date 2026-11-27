@@ -72,6 +72,7 @@ const asDemo = (houseId: string) =>
   testEnv
     .authenticatedContext('demoUser', {
       email: 'demo_user@appdemo.net',
+      demo: true, // S5: the server-set claim identifies the demo account
       admin: { [houseId]: true },
     })
     .firestore();

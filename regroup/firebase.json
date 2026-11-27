@@ -1,6 +1,9 @@
 {
   "functions": {
-    "predeploy": ["node \"$PROJECT_DIR/scripts/preflight-billing.js\""],
+    "predeploy": [
+      "node \"$PROJECT_DIR/scripts/preflight-billing.js\"",
+      "node \"$PROJECT_DIR/scripts/preflight-demo-account.js\""
+    ],
     "ignore": [
       "node_modules",
       ".git",

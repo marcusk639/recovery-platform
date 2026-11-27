@@ -40,6 +40,7 @@ import {
   type HouseRoleClaims,
 } from './operator-setup';
 import { SimpleValidationService } from './SimpleValidationService';
+import { isDemo } from '../util/user';
 // import { EmailConfirmationPayload } from '../entities/Email'; // Email verification removed
 
 export const userCollection = collection(firestore, 'users');
@@ -148,13 +149,21 @@ export async function sendForgotPasswordEmail(email: string): Promise<void> {
   if (!SimpleValidationService.checkRateLimit(`reset_${email}`, 3, 300000)) {
     throw rateLimitError('Too many password reset attempts. Please try again later.');
   }
+  const sanitizedEmail = SimpleValidationService.sanitizeString(email);
+  // The demo account's sign-in details are shared with App Review (S5); the
+  // server also puts them back if changed (functions scheduled/demoAccountRestore).
+  // Checked on the address the reset would go to, after sanitizing.
+  if (isDemo(sanitizedEmail)) {
+    throw Object.assign(new Error('The demo account password cannot be changed.'), {
+      code: 'auth/demo-account',
+    });
+  }
 
   const emailValidation = SimpleValidationService.validateEmail(email);
   if (!emailValidation.isValid) {
     throw invalidEmailError(emailValidation.error || 'Invalid email address.');
   }
 
-  const sanitizedEmail = SimpleValidationService.sanitizeString(email);
   return sendPasswordResetEmail(getAuth(), sanitizedEmail);
 }
 

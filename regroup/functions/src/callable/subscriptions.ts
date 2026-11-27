@@ -72,6 +72,7 @@ import {
 } from "../api/firestore";
 import { closeOperatorBilling, subscriptionEnded } from "../api/stripeDeletion";
 import { parseInput, safeReturnUrlSchema } from "../validation";
+import { refuseDemoAccount } from "../util/demoAccount";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 const safeUrlSchema = z
@@ -285,6 +286,7 @@ async function refuseUnrecordedSubscription(
 export const createOperatorSubscription = onCall(
   { secrets: [STRIPE_SECRET_KEY, SENDGRID_API_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(createOperatorSubscriptionSchema, request.data);
@@ -506,6 +508,7 @@ export const createOperatorSubscription = onCall(
 export const reactivateOperatorSubscription = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(
@@ -626,6 +629,7 @@ export const reactivateOperatorSubscription = onCall(
 export const cancelUserSubscription = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(
@@ -666,6 +670,7 @@ interface SubParams {
 export const updateSubscriptionGuests = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput(
@@ -740,6 +745,7 @@ export const updateSubscriptionGuests = onCall(
 export const updateSubscriptionHouses = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput<SubParams>(
@@ -823,6 +829,7 @@ export const updateSubscriptionHouses = onCall(
 export const applyBundleDiscount = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput<{
@@ -867,6 +874,7 @@ export const applyBundleDiscount = onCall(
 export const createBillingPortalSession = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
 
@@ -900,6 +908,7 @@ export const createBillingPortalSession = onCall(
 export const sendConfirmationEmail = onCall(
   { secrets: [SENDGRID_API_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
     const data = parseInput<EmailConfirmationPayload>(

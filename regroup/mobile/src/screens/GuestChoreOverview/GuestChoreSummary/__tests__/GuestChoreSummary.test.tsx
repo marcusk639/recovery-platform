@@ -491,7 +491,7 @@ describe("GuestChoreSummary", () => {
 
     it("uploads photo and includes photoUrl when user adds a photo", async () => {
       (launchImageLibrary as jest.Mock).mockResolvedValue({
-        assets: [{ uri: "file:///tmp/chore.jpg" }],
+        assets: [{ uri: "file:///tmp/chore.jpg", type: "image/jpeg" }],
       });
 
       const localMutateAsync = jest.fn(() => Promise.resolve());
@@ -510,10 +510,13 @@ describe("GuestChoreSummary", () => {
       fireEvent.press(getByTestId("complete-chore-button"));
 
       await waitFor(() => {
+        // storage.rules: houses/{houseId}/chore-evidence/{uploader uid}/{file}.
         expect(uploadChoreEvidencePhoto).toHaveBeenCalledWith(
           "file:///tmp/chore.jpg",
           "house-1",
-          expect.any(String)
+          "user-1",
+          expect.any(String),
+          { contentType: "image/jpeg" }
         );
         expect(localMutateAsync).toHaveBeenCalledWith(
           expect.objectContaining({
@@ -522,7 +525,49 @@ describe("GuestChoreSummary", () => {
             }),
           })
         );
+        expect(alertSpy).toHaveBeenCalledWith("Done", "Chore marked as complete!");
       });
+
+      alertSpy.mockRestore();
+    });
+
+    it("tells the resident when the photo could not be uploaded, and still logs the chore", async () => {
+      // The Storage rules refuse e.g. a non-image, a file over 10 MB or a
+      // token without the house's guest claim yet.
+      (launchImageLibrary as jest.Mock).mockResolvedValue({
+        assets: [{ uri: "file:///tmp/chore.jpg", type: "image/jpeg" }],
+      });
+      (uploadChoreEvidencePhoto as jest.Mock).mockRejectedValueOnce(
+        Object.assign(new Error("denied"), { code: "storage/unauthorized" })
+      );
+
+      const localMutateAsync = jest.fn(() => Promise.resolve());
+      (useLogNewActivity as jest.Mock).mockReturnValue({
+        mutateAsync: localMutateAsync,
+      });
+
+      const alertSpy = jest
+        .spyOn(Alert, "alert")
+        .mockImplementation((_title, _msg, buttons) => {
+          // Simulate pressing "Add Photo"
+          buttons?.[1]?.onPress?.();
+        });
+
+      const { getByTestId } = renderScreen();
+      fireEvent.press(getByTestId("complete-chore-button"));
+
+      await waitFor(() => {
+        expect(localMutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.not.objectContaining({ photoUrl: expect.anything() }),
+          })
+        );
+        expect(alertSpy).toHaveBeenCalledWith(
+          "Done",
+          "Chore marked as complete, but the photo couldn't be uploaded."
+        );
+      });
+      expect(alertSpy).not.toHaveBeenCalledWith("Done", "Chore marked as complete!");
 
       alertSpy.mockRestore();
     });

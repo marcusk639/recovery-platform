@@ -67,7 +67,7 @@ JavaScript, so neither could be committed). Run them through `emulators:exec` so
 the emulators are guaranteed rather than assumed:
 
 ```bash
-# Security rules — 610 tests. Needs firestore, storage AND auth; with firestore
+# Security rules — 874 tests in 47 suites (2026-11-27). Needs firestore, storage AND auth; with firestore
 # alone the storage suite fails on grpc connection errors.
 cd firebase && firebase emulators:exec --only firestore,storage,auth \
   --project demo-test \

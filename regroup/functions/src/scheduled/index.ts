@@ -81,4 +81,5 @@ export * from "./officerTermReminder";
 export * from "./overdueRentNotification";
 export * from "./scheduledRentCollection";
 export * from "./rentChargeJob";
+export * from "./demoAccountRestore";
 export * from "./houseListingGrace";

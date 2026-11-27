@@ -57,7 +57,7 @@ ALL_FUNCTIONS=(
   onGuestWrite onHouseDeleted setHouseSubscriptionStatusOnCreate
   onActivityWritten onGuestLinkedRestamp onHouseRentSettingsWrite onHouseListingSync
   onUserAdminProfileSync
-  updateDisputes warmWebsite officerTermReminder weeklyTransfers
+  updateDisputes warmWebsite officerTermReminder weeklyTransfers restoreDemoAccount
   overdueRentNotification scheduledRentCollection rentCharges houseListingGraceSweep
 )
 

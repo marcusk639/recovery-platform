@@ -155,6 +155,25 @@ describe('grantHouseRoles', () => {
 // deleteClaim results ({...guestRemoved, ...adminRemoved}) put the untouched
 // guest map from the second read back on top, so a departed resident kept
 // their guest claim, and potentialSuperAdmin was forced to false.
+// S5: the demo account's marker claim must survive every claims rewrite, or
+// a role change made by someone else would lift the demo guards.
+describe('the demo claim', () => {
+  it('survives createClaims, deleteClaim, grants and revokes', async () => {
+    mockGetUser.mockResolvedValue(mockUser({ demo: true, guest: { h1: true } }));
+    expect((await createClaims('demo', ['h2'], 'guest')).demo).toBe(true);
+    expect((await deleteClaim('demo', ['h1'], 'guest')).demo).toBe(true);
+    await grantHouseRoles('demo', ['h3']);
+    expect(mockSetCustomUserClaims.mock.calls[0][1]).toMatchObject({ demo: true });
+    await revokeHouseRoles('demo', ['h1'], ['guest']);
+    expect(mockSetCustomUserClaims.mock.calls[1][1]).toMatchObject({ demo: true });
+  });
+
+  it('is never added to an account that lacks it', async () => {
+    mockGetUser.mockResolvedValue(mockUser({ demo: 'yes', guest: { h1: true } }));
+    expect(await createClaims('u1', ['h2'], 'guest')).not.toHaveProperty('demo');
+  });
+});
+
 describe('revokeHouseRoles', () => {
   it('removes the house from every named role in a single write', async () => {
     mockGetUser.mockResolvedValue(

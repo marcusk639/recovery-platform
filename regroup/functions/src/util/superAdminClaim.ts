@@ -1,5 +1,6 @@
 import { auth } from 'firebase-admin';
 import { logger } from 'firebase-functions';
+import { setUserClaims } from './userClaims';
 
 /**
  * Grants the unscoped `potentialSuperAdmin` custom claim to a user after a
@@ -36,7 +37,7 @@ export const grantPotentialSuperAdminClaim = async (userId: string): Promise<boo
     if (existingClaims.potentialSuperAdmin === true) {
       return true;
     }
-    await auth().setCustomUserClaims(userId, {
+    await setUserClaims(userId, {
       ...existingClaims,
       potentialSuperAdmin: true,
     });

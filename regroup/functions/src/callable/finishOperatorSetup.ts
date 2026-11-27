@@ -4,6 +4,7 @@ import { houseRolesCollection, ratsFirestore, userCollection } from '../api/fire
 import type { User } from '../entities/User';
 import { writeOperatorSetupFlags } from '../houses/operatorSetup';
 import { grantHouseRoles } from '../util/claims';
+import { refuseDemoAccount } from '../util/demoAccount';
 
 export type FinishOperatorSetupResponse =
   { completed: false } | { completed: true; houseIds: string[] };
@@ -135,6 +136,7 @@ const grantMissingRoles = async (
  * `{ completed: false }` when an incomplete caller owns no houses.
  */
 export const finishOperatorSetup = onCall(async (request): Promise<FinishOperatorSetupResponse> => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Login required');
   }
