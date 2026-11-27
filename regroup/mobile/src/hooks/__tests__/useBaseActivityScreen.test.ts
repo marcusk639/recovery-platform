@@ -842,6 +842,28 @@ describe('challengeDispute before the admin record loads', () => {
     expect(mockMutateAsync).not.toHaveBeenCalled();
   });
 
+  // The modal is already closed by then, so the refusal must reach the user
+  // some other way, as disputeActivity's failure does.
+  it('tells the user why, when the challenge is submitted from the modal', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined as any);
+    const staff = { id: 'admin-user', guestId: '' };
+    const { result } = renderHook(() =>
+      useBaseActivityScreen(makeProps({ user: staff, disputes, userAsAdmin: undefined })),
+    );
+    act(() => { result.current.showModal('confirm', activity); });
+    let returnValue: boolean | undefined;
+    await act(async () => {
+      returnValue = await result.current.handleDisputeSubmission({ message: 'Not done' });
+    });
+    expect(returnValue).toBe(false);
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Challenge not sent',
+      'Your account is still loading. Try again in a moment.',
+    );
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
   it('signs the challenge with the admin record once it has loaded', async () => {
     const staff = { id: 'admin-user', guestId: '' };
     const { result } = renderHook(() =>
