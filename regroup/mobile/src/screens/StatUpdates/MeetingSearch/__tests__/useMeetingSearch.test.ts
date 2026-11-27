@@ -4,9 +4,10 @@
  * own, and a check-in must not go ahead when that list could not be loaded.
  */
 import { act, renderHook } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 
 const mockNotify = jest.fn();
-const mockCheckInMutate = jest.fn();
+const mockCheckInMutate = jest.fn(() => Promise.resolve());
 const mockUseActivities = jest.fn();
 const mockUseSelectedGuest = jest.fn();
 let mockUserAsGuest: { id: string } | null = null;
@@ -30,7 +31,7 @@ jest.mock('../../../../hooks/activity', () => ({
 }));
 jest.mock('../../../../state/queries/meetingQueries', () => ({
   useSearchMeetings: jest.fn(() => ({ mutate: jest.fn(), isPending: false, data: undefined })),
-  useCheckIntoMeeting: () => ({ mutate: mockCheckInMutate, isPending: false }),
+  useCheckIntoMeeting: () => ({ mutateAsync: mockCheckInMutate, isPending: false }),
 }));
 jest.mock('../../../../util/permissions', () => ({
   checkAndRequestLocationPermissions: jest.fn(() => Promise.resolve(false)),
@@ -38,7 +39,7 @@ jest.mock('../../../../util/permissions', () => ({
 jest.mock('../../../../util/geolocation', () => ({ getCurrentPosition: jest.fn() }));
 jest.mock('../../../../util/logging', () => ({ logException: jest.fn() }));
 
-import { useMeetingSearch } from '../useMeetingSearch';
+import { SEARCH_TERM_DEBOUNCE_MS, useMeetingSearch } from '../useMeetingSearch';
 
 const meeting: any = { id: 'meeting-1', name: 'AA', day: 'all', time: '00:00' };
 
@@ -116,6 +117,40 @@ describe('checkInto', () => {
     expect(mockCheckInMutate).not.toHaveBeenCalled();
   });
 
+  it('tells the user when the hourly limit refused the check-in', async () => {
+    // The test meeting is off-hours: confirm "Check In Anyway".
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => buttons?.[1]?.onPress?.());
+    const limit =
+      "You've checked into meetings many times in the last hour. Please try again in 5 minutes.";
+    mockCheckInMutate.mockImplementationOnce(() =>
+      Promise.reject({ code: 'resource-exhausted', message: limit }),
+    );
+    const { result } = render();
+
+    await act(async () => result.current.checkInto(meeting));
+
+    expect(mockNotify).toHaveBeenCalledWith('Check-in Failed', limit, []);
+    alert.mockRestore();
+  });
+
+  it('tells the user a check-in failed, without showing raw server text', async () => {
+    // The test meeting is off-hours: confirm "Check In Anyway".
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => buttons?.[1]?.onPress?.());
+    mockCheckInMutate.mockImplementationOnce(() =>
+      Promise.reject({ code: 'internal', message: 'INTERNAL' }),
+    );
+    const { result } = render();
+
+    await act(async () => result.current.checkInto(meeting));
+
+    expect(mockNotify).toHaveBeenCalledWith(
+      'Check-in Failed',
+      "Couldn't check you in. Please try again.",
+      [],
+    );
+    alert.mockRestore();
+  });
+
   it('refuses with no resident to check in', () => {
     mockUseSelectedGuest.mockReturnValue({ guest: null });
     mockUseActivities.mockReturnValue({ activities: [], loading: false, idle: true, error: null });
@@ -156,5 +191,129 @@ describe('searching by location', () => {
     expect(geolocation.getCurrentPosition).toHaveBeenCalledTimes(1);
     expect(mutate).toHaveBeenCalledTimes(1);
     expect(mutate.mock.calls[0][0].location).toEqual({ lat: 30.2672, lng: -97.7431 });
+  });
+
+  it('searches once typing pauses, not on every keystroke', async () => {
+    jest.useFakeTimers();
+    try {
+      permissions.checkAndRequestLocationPermissions.mockResolvedValue(true);
+      geolocation.getCurrentPosition.mockImplementation((success: any) =>
+        success({ coords: { latitude: 30.2672, longitude: -97.7431 } }),
+      );
+      const mutate = jest.fn();
+      queries.useSearchMeetings.mockReturnValue({ mutate, data: undefined, isPending: false, isError: false });
+
+      const { result } = render();
+      await act(async () => {});
+      expect(mutate).toHaveBeenCalledTimes(1); // the location search
+
+      for (const text of ['s', 'se', 'ser', 'sere']) {
+        act(() => result.current.setSearchTerm(text));
+        act(() => jest.advanceTimersByTime(SEARCH_TERM_DEBOUNCE_MS - 100));
+      }
+      expect(mutate).toHaveBeenCalledTimes(1);
+
+      act(() => jest.advanceTimersByTime(SEARCH_TERM_DEBOUNCE_MS));
+      expect(mutate).toHaveBeenCalledTimes(2);
+      expect(mutate.mock.calls[1][0].criteria).toEqual({ name: 'sere' });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('searches at once, with the current text, when a filter changes mid-typing', async () => {
+    jest.useFakeTimers();
+    try {
+      permissions.checkAndRequestLocationPermissions.mockResolvedValue(true);
+      geolocation.getCurrentPosition.mockImplementation((success: any) =>
+        success({ coords: { latitude: 30.2672, longitude: -97.7431 } }),
+      );
+      const mutate = jest.fn();
+      queries.useSearchMeetings.mockReturnValue({ mutate, data: undefined, isPending: false, isError: false });
+
+      const { result } = render();
+      await act(async () => {});
+      act(() => result.current.setSearchTerm('hope'));
+      act(() => result.current.setSearchFilters({ ...result.current.filters, type: 'AA' } as any));
+
+      expect(mutate).toHaveBeenCalledTimes(2);
+      expect(mutate.mock.calls[1][0]).toMatchObject({ criteria: { name: 'hope' } });
+      expect(mutate.mock.calls[1][0].filters.type).toBe('AA');
+      // The pending keystroke search was cancelled, not run as well.
+      act(() => jest.advanceTimersByTime(SEARCH_TERM_DEBOUNCE_MS * 2));
+      expect(mutate).toHaveBeenCalledTimes(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('skips a search that would repeat the last one (spaces, or text typed then deleted)', async () => {
+    jest.useFakeTimers();
+    try {
+      permissions.checkAndRequestLocationPermissions.mockResolvedValue(true);
+      geolocation.getCurrentPosition.mockImplementation((success: any) =>
+        success({ coords: { latitude: 30.2672, longitude: -97.7431 } }),
+      );
+      const mutate = jest.fn();
+      queries.useSearchMeetings.mockReturnValue({ mutate, data: undefined, isPending: false, isError: false });
+
+      const { result } = render();
+      await act(async () => {});
+      act(() => result.current.setSearchTerm('  '));
+      act(() => result.current.setSearchTerm('ho'));
+      act(() => result.current.setSearchTerm(''));
+      act(() => jest.advanceTimersByTime(SEARCH_TERM_DEBOUNCE_MS * 2));
+
+      expect(mutate).toHaveBeenCalledTimes(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('searches at once when the box is cleared after a search by name', async () => {
+    jest.useFakeTimers();
+    try {
+      permissions.checkAndRequestLocationPermissions.mockResolvedValue(true);
+      geolocation.getCurrentPosition.mockImplementation((success: any) =>
+        success({ coords: { latitude: 30.2672, longitude: -97.7431 } }),
+      );
+      const mutate = jest.fn();
+      queries.useSearchMeetings.mockReturnValue({ mutate, data: undefined, isPending: false, isError: false });
+
+      const { result } = render();
+      await act(async () => {});
+      act(() => result.current.setSearchTerm('hope'));
+      act(() => jest.advanceTimersByTime(SEARCH_TERM_DEBOUNCE_MS));
+      expect(mutate).toHaveBeenCalledTimes(2);
+
+      act(() => result.current.setSearchTerm(''));
+      expect(mutate).toHaveBeenCalledTimes(3);
+      expect(mutate.mock.calls[2][0].criteria).toBeUndefined();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("gives the search's hourly-limit message, or the generic one", () => {
+    const queries2 = require('../../../../state/queries/meetingQueries');
+    const limit =
+      "You've searched for meetings many times in the last hour. Please try again in 3 minutes.";
+    queries2.useSearchMeetings.mockReturnValue({
+      mutate: jest.fn(),
+      isPending: false,
+      isError: true,
+      error: { code: 'resource-exhausted', message: limit },
+    });
+    expect(render().result.current.searchErrorMessage).toBe(limit);
+
+    queries2.useSearchMeetings.mockReturnValue({
+      mutate: jest.fn(),
+      isPending: false,
+      isError: true,
+      error: { code: 'unavailable', message: 'UNAVAILABLE' },
+    });
+    expect(render().result.current.searchErrorMessage).toBe(
+      "Couldn't load meetings. Please try again.",
+    );
   });
 });

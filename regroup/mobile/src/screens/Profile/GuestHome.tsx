@@ -7,7 +7,10 @@ import { View, TouchableOpacity, Share, Alert } from "react-native";
 
 // Hooks
 import { useGuest, useGuests } from "../../state/queries";
-import { useMayViewHouseMoney } from "../../state/queries/houseTierQueries";
+import {
+  useMayEditGuestMoney,
+  useMayViewHouseMoney,
+} from "../../state/queries/houseTierQueries";
 import { useAppSelector } from "../../state/store";
 import { useModal } from "../../context";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
@@ -36,6 +39,7 @@ import { Guest, Stat } from "../../entities/Guest";
 import { ActivityType } from "../../entities/ActivityModel";
 import { House, StripeAccountStatus } from "../../entities/House";
 import { formatCentsAsCurrency } from "../RentPayment/rentPaymentHelpers";
+import CustomRentField from "../../components/custom-rent/CustomRentField";
 import { User } from "../../entities/User";
 import { Guests } from "../../types";
 import { Health } from "../../constants/health";
@@ -235,6 +239,9 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
   const mayViewHouseMoney = useMayViewHouseMoney(house?.id ?? "");
   const mayViewPayments =
     mayViewHouseMoney || (!!user?.id && currentGuest?.userId === user.id);
+  // A resident's rate and balance: managers and above, never on their own
+  // record (rules: rentMoneyByManager, ownMoneyUnchanged; rent spec §4.6).
+  const maySetRentMoney = useMayEditGuestMoney(currentGuest);
 
   // Activity system: pre-fetch week summary (hooks must be called before early returns).
   // React Query is the sole source of truth — the prior `hooks/activity/useWeekSummary`
@@ -542,6 +549,23 @@ const GuestHome: React.FC<Props> = ({ navigation }) => {
           onPress={() => navigation.navigate(Routes.PaymentHistory)}
           testID="payment-history-card"
         />
+      )}
+
+      {/******************************* RATE AND BALANCE (managers and above) *******************************/}
+      {maySetRentMoney && (
+        <StatSection
+          name="Balance"
+          description="Correct a balance or give a credit"
+          iconName="chevron-right"
+          iconColor={color.dark_grey}
+          boxedIconName="balance-scale"
+          iconBackgroundColor={color.medium_grey}
+          onPress={() => navigation.navigate(Routes.GuestBalance)}
+          testID="guest-balance-card"
+        />
+      )}
+      {maySetRentMoney && (
+        <CustomRentField guest={currentGuest!} house={house} />
       )}
 
       {/******************************* MAKE A PAYMENT (guest only) *******************************/}

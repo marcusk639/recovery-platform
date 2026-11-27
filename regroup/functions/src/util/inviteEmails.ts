@@ -84,5 +84,8 @@ export async function sendOneInviteEmail(
     to: toEmail,
     from: regroupEmail,
     subject: `Sober Living Invite`,
+    // Click tracking wraps the link in a SendGrid redirect that carries the
+    // whole URL, token included, and keeps the app link from opening the app.
+    clickTracking: false,
   });
 }

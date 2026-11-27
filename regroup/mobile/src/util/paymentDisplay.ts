@@ -55,3 +55,39 @@ export const isCurrentResident = (guest: ResidentFields): boolean =>
 /** What a resident owes now, in cents; a credit counts as nothing owed. */
 export const owedNowCents = (guest: ResidentFields): number =>
   Math.max(0, (guest.rentOwed ?? 0) + (guest.choreFees ?? 0));
+
+// ─── Rent charges (rent spec §4.5): shown beside payments in Payment History ───
+
+type ChargeFields = {
+  firstDay: string;
+  lastDay: string;
+  daysCovered: number;
+  daysInPeriod: number;
+  rateSource: 'house' | 'custom';
+};
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** A house-local YYYY-MM-DD as numbers, never parsed through a zone. */
+export const dayParts = (day: string) => {
+  const [y, m, d] = day.split('-').map(Number);
+  return { y, m, d };
+};
+
+/** "Rent, Nov 16–22", "Rent, Nov 30–Dec 6": calendar dates, never shifted by a zone. */
+export function chargeLabel(c: ChargeFields): string {
+  const a = dayParts(c.firstDay);
+  const b = dayParts(c.lastDay);
+  const start = `${MONTHS[a.m - 1]} ${a.d}`;
+  if (c.firstDay === c.lastDay) return `Rent, ${start}`;
+  const end = a.m === b.m && a.y === b.y ? `${b.d}` : `${MONTHS[b.m - 1]} ${b.d}`;
+  return `Rent, ${start}–${end}`;
+}
+
+/** "5 of 7 days" for a prorated charge, "own rate" for a custom one; '' otherwise. */
+export function chargeDetail(c: ChargeFields): string {
+  const bits: string[] = [];
+  if (c.daysCovered < c.daysInPeriod) bits.push(`${c.daysCovered} of ${c.daysInPeriod} days`);
+  if (c.rateSource === 'custom') bits.push('own rate');
+  return bits.join(' · ');
+}
