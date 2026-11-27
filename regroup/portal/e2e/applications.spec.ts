@@ -101,11 +101,20 @@ test('the application stays approved when intake is abandoned, as on the phone',
   await expect(page.getByTestId('btn-approve')).toHaveCount(0);
 });
 
-test('a peer leader can work applications, as on the phone', async ({ page }) => {
+// Owners and managers only (owner, 2026-11-27): an application holds the applicant's
+// recovery history and contact details, and the rules refuse a peer leader's read.
+test('a peer leader gets no applications: no tab, no count, and no page by URL', async ({ page }) => {
   await makePeerLeader('manager');
-  await openApplication(page);
-  await page.getByText('Mark as Reviewing').click();
-  await expect.poll(async () => (await app().get()).data()!.status).toBe('reviewing');
+  const tiers = page.waitForResponse((r) => r.url().includes('myHouseTiers'));
+  await signInAs(page, 'manager');
+  await tiers;
+  await expect(page.locator('#nav-disputes')).toBeVisible();
+  await expect(page.locator('#nav-applications')).toHaveCount(0);
+  await expect(page.getByTestId('house-numbers')).not.toContainText('Applications waiting');
+  await page.goto(APP_URL);
+  await expect(page.getByText("This page isn't available for your role.")).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText('Test Applicant')).toHaveCount(0);
+  expect((await app().get()).data()!.status).toBe('pending');
 });
 
 test('home counts one fewer application waiting after a review', async ({ page }) => {
