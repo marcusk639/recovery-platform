@@ -1,5 +1,15 @@
-import { Injectable, Provider } from '@angular/core';
-import { AngularFireAnalytics, AngularFireAnalyticsModule } from '@angular/fire/analytics';
+import { Injectable, NgZone, Optional, PLATFORM_ID, Provider } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
+import { FirebaseApp } from '@angular/fire';
+import {
+  AngularFireAnalytics,
+  AngularFireAnalyticsModule,
+  APP_NAME,
+  APP_VERSION,
+  COLLECTION_ENABLED,
+  CONFIG,
+  DEBUG_MODE,
+} from '@angular/fire/analytics';
 
 /** The subset of an environment file this module reads. */
 export interface AnalyticsAwareEnvironment {
@@ -47,13 +57,88 @@ export function analyticsImports(
   return env.useAnalytics === false ? [] : [AngularFireAnalyticsModule];
 }
 
+// Pages whose URL can carry an invitation token: the landing page's paths
+// (regroup/app-links.json `paths`) and /redirect, which pre-launch emails used.
+// That page is gone (it renders the not-found page now), but such a link still
+// carries a token in ?url=, so it stays here.
+const APP_LINK_PATH = /^\/(invite|checkout-return|app|redirect)(\/|$)/;
+
 /**
- * The no-op AngularFireAnalytics when analytics is off; nothing otherwise.
- * Provided from AppModule, which takes precedence over AngularFireAnalytics'
- * own `providedIn: 'any'` (the app has no lazy-loaded modules).
+ * Turns Google Analytics off for a page load that starts on an app-link page.
+ * Its automatic page_view sends the full URL, and an invitation link's query
+ * carries the token. gtag reads `ga-disable-<id>` when it sends, so this must
+ * run before bootstrap: firebase's own setAnalyticsCollectionEnabled only lands
+ * after the page_view is queued.
+ */
+export function disableAnalyticsOnAppLinkPages(
+  win: Window,
+  measurementId: string | undefined,
+): boolean {
+  if (!measurementId || !APP_LINK_PATH.test(win.location.pathname)) {
+    return false;
+  }
+  (win as unknown as Record<string, boolean>)[`ga-disable-${measurementId}`] = true;
+  return true;
+}
+
+/**
+ * AngularFireAnalytics, or the no-op one on a page load that starts on an
+ * app-link page, so the Analytics SDK never loads there. The ga-disable flag
+ * alone isn't enough: it names the configured measurement id, and firebase
+ * sends with the id it fetches. Arguments are AngularFireAnalytics' own deps.
+ */
+export function analyticsUnlessAppLinkPage(
+  document: Document,
+  app: FirebaseApp,
+  collectionEnabled: boolean | null,
+  appVersion: string | null,
+  appName: string | null,
+  debugMode: boolean | null,
+  config: object | null,
+  // tslint:disable-next-line:ban-types (PLATFORM_ID is typed Object)
+  platformId: Object,
+  zone: NgZone,
+): AngularFireAnalytics | NoopAngularFireAnalytics {
+  if (APP_LINK_PATH.test(document.location?.pathname ?? '')) {
+    return new NoopAngularFireAnalytics();
+  }
+  return new AngularFireAnalytics(
+    app,
+    collectionEnabled,
+    appVersion,
+    appName,
+    debugMode,
+    config as any,
+    platformId,
+    zone,
+  );
+}
+
+/**
+ * The no-op AngularFireAnalytics when analytics is off; otherwise the real one
+ * except on app-link pages (analyticsUnlessAppLinkPage). Provided from
+ * AppModule, which takes precedence over AngularFireAnalytics' own
+ * `providedIn: 'any'` and the module's provider (no lazy-loaded modules), so
+ * AngularFireAnalyticsModule's eager constructor gets this one too.
  */
 export function analyticsProviders(env: AnalyticsAwareEnvironment): Provider[] {
   return env.useAnalytics === false
     ? [{ provide: AngularFireAnalytics, useClass: NoopAngularFireAnalytics }]
-    : [];
+    : [
+        {
+          provide: AngularFireAnalytics,
+          useFactory: analyticsUnlessAppLinkPage,
+          deps: [
+            DOCUMENT,
+            FirebaseApp,
+            [new Optional(), COLLECTION_ENABLED],
+            [new Optional(), APP_VERSION],
+            [new Optional(), APP_NAME],
+            [new Optional(), DEBUG_MODE],
+            [new Optional(), CONFIG],
+            PLATFORM_ID,
+            NgZone,
+          ],
+        },
+      ];
 }

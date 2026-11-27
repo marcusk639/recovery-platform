@@ -389,7 +389,7 @@ describe('SignUpScreen', () => {
       expect(queryByTestId('signup-form')).toBeNull();
     });
 
-    it('keeps the sign-up form, with its error, for a user created by this sign-up', async () => {
+    it('keeps the sign-up form (where a later step\'s error shows) for a user created by this sign-up', async () => {
       const store = buildStore({ invitation, user: { uid: 'anon', isAnonymous: true } });
       const { getByTestId, queryByTestId } = render(
         <Provider store={store}>

@@ -42,14 +42,30 @@ describe('clearing state.user.invitation', () => {
     expect(store.getState().user.invitation).toBeNull();
   });
 
-  it('COMPLETE user + stale invitation after login ends on Main', () => {
+  // An invitation that arrived signed out survives sign-in (launch spec §4.2,
+  // owner decision 2026-11-06; P5 Task 3): after a login it opens the
+  // invitation screen, where the user accepts it or continues to the app.
+  it('keeps it through login, so the invitation screen opens for the account', () => {
     const store = withStaleInvitation();
     store.dispatch({
       type: 'user/login/fulfilled',
       payload: { user: completeGuest, token: {}, setupRecoveryFailed: false },
     });
     const { user, invitation } = store.getState().user;
-    expect(invitation).toBeNull();
+    expect(invitation).toMatchObject({ token: 't' });
+    const nav = improvedNavigationService.getInitialNavigation(user, invitation);
+    expect(nav.initialRoute).toBe(Routes.PriorAuth);
+    expect(nav.authInitialRoute).toBe(Routes.Signup);
+  });
+
+  it('COMPLETE user ends on Main once the invitation is accepted or left', () => {
+    const store = withStaleInvitation();
+    store.dispatch({
+      type: 'user/login/fulfilled',
+      payload: { user: completeGuest, token: {}, setupRecoveryFailed: false },
+    });
+    store.dispatch(clearInvitation());
+    const { user, invitation } = store.getState().user;
     const nav = improvedNavigationService.getInitialNavigation(user, invitation);
     expect(nav.initialRoute).toBe(Routes.Main);
     expect(nav.initialMainRoute).toBe(Routes.Guest);

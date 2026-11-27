@@ -155,27 +155,34 @@ account instead (Admin SDK `updateUser(uid, { phoneNumber: null })`) before laun
 
 ### Part B — App links and store prerequisites (start now; outside lead times)
 
-#### B1. App links (B5, the console half)
+#### B1. App links: the Play fingerprint (B5)
 
-The live `https://regroup-app.com/.well-known/assetlinks.json` names package `com.rats.dev` with a
-SHA-256 that matches neither the debug key nor the upload key. The Android app is `com.regroup.app`. The
-live `apple-app-site-association` names a different Apple team ID from the one in the repo. Firebase
-Hosting generates both files from the apps registered in the project.
+Since #300 the web build writes both app-link files itself, from one source, `regroup/app-links.json`.
+Firebase Hosting serves those files instead of the ones it used to generate from the apps registered in
+the console. Until the steps below are done, the production `assetlinks.json` is an empty list, so
+Android App Links don't verify in production; the build prints a WARNING about it. Until then,
+invitees open the app from the web landing page rather than straight from the link. iOS needs nothing
+here: its entry (`D8K3FS4HAX.com.rats.dev`) is already in the file.
 
-1. Firebase console → `phoenix-cleanhouse` → Project settings → Your apps:
-   - **Android** `com.regroup.app`: add the **app signing** SHA-256 from Play Console → Setup → App
-     signing. That page needs the approved Play account (owner track). Add the **upload** key's SHA-256
-     too.
-   - **iOS:** confirm the bundle ID the App Store listing uses (`com.rats.dev` per the Xcode target, an
-     open question in the plan), and set the Team ID from developer.apple.com → Membership.
-2. After the hosting deploy (C6), check:
+1. Play Console → Setup → App signing. This page needs the approved Play account (owner track). Copy
+   the **app signing** key's SHA-256 certificate fingerprint for `com.regroup.app`.
+2. In `regroup/app-links.json`, under `phoenix-cleanhouse` → `android` → `com.regroup.app`, replace
+   `<OWNER: Play app-signing SHA-256>` with that fingerprint. The generator refuses anything that isn't
+   32 colon-separated hex pairs. You can add the **upload** key's SHA-256 as a second entry. Commit the
+   change on a branch and merge it like any other change.
+3. Check the generated files before deploying:
    ```bash
-   curl -s https://regroup-app.com/.well-known/assetlinks.json
-   curl -s https://regroup-app.com/.well-known/apple-app-site-association
+   cd regroup/web && node scripts/generate-app-links.mjs --project phoenix-cleanhouse --out /tmp/app-links-check
+   ```
+   The placeholder WARNING should be gone, and `/tmp/app-links-check/assetlinks.json` should name
+   `com.regroup.app` with the fingerprint.
+4. Deploy web hosting (C6). Then check what's served:
+   ```bash
+   cd regroup/web && node scripts/check-app-links.mjs https://regroup-app.com --project phoenix-cleanhouse
    ```
 
-**Expected result:** assetlinks names `com.regroup.app` with the Play app-signing SHA-256, and the AASA
-names the team ID and bundle ID of the live listing.
+**Expected result:** the check passes. Both well-known URLs return 200 JSON with no redirect, the same
+as the generated files, and assetlinks names `com.regroup.app` with the Play app-signing SHA-256.
 
 #### B2. Privacy policy and claims (B8, the legal half)
 
@@ -394,6 +401,23 @@ close sales again, run the same with `--value=false`.
    The current version is 0.55 (39).
 4. **Review notes:** the demo operator account and what a reviewer should try.
 5. **Before release:** the owner's notice to existing operators (roadmap owner track, P10 step 10.1).
+
+### Part F — Minimum app version (spec §5 step 10.6)
+
+Only once the new version is downloadable in that store: set earlier, it blocks everyone on that
+platform from an app they can't get yet. Each platform has its own value (iOS `1.53` and Android
+`0.55` today; use the version you just released).
+
+```bash
+cd functions
+npm run switch:set -- --switch=minVersion --platform=ios --value=<new iOS version>            # dry run
+npm run switch:set -- --switch=minVersion --platform=ios --value=<new iOS version> --apply
+npm run switch:set -- --switch=minVersion --platform=android --value=<new Android version> --apply
+```
+
+**Expected result:** within a minute, an older build shows "Update required" with a store button, and
+the new build opens normally. To undo it, run the same with `--value=none` (or a lower version):
+blocked users get straight back in on their next launch or return to the app.
 
 ## Verification
 

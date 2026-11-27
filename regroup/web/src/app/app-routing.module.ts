@@ -16,7 +16,6 @@ import { PrivacyPolicyComponent } from './components/privacypolicy/privacy-polic
 import { TermsComponent } from './components/terms/privacy-policy/terms.component';
 import { MyAccountComponent } from './components/accounts/my-account/my-account.component';
 import { AuthGuard } from './guards/auth.guard';
-import { RedirectComponent } from './components/redirect/redirect.component';
 import { AppLinkLandingComponent } from './components/app-link-landing/app-link-landing.component';
 
 // The site template's demo pages (lorem ipsum, sample reviews, a placeholder
@@ -50,9 +49,6 @@ export const routes: Routes = [
   { path: 'contact', component: ContactPageComponent },
   { path: 'privacy-policy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
-  // Invitation emails link here (functions/src/util/inviteEmails.ts) with the
-  // app link in ?url=; the page opens the app, else the store.
-  { path: 'redirect', component: RedirectComponent },
   // The paths regroup/app-links.json claims for the app. With the app installed
   // and its links verified, the OS opens the app and this page never loads;
   // otherwise it offers "Open in Regroup" and the store links.

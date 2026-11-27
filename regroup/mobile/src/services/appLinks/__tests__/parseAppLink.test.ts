@@ -95,6 +95,8 @@ describe('parseAppLink — checkout return', () => {
     ['https://regroup-app.com/checkout-return?result=success', 'success'],
     ['regroup-app://checkout-return?result=canceled', 'canceled'],
     ['regroup-app://app/checkout-return?result=portal', 'portal'],
+    // app-links.json claims /app/*, so the https form reaches the app too.
+    ['https://regroup-app.com/app/checkout-return?result=success', 'success'],
   ])('parses %s', (url, result) => {
     expect(parseAppLink(url)).toEqual({ kind: 'checkout-return', result });
   });
@@ -103,6 +105,8 @@ describe('parseAppLink — checkout return', () => {
     'regroup-app://app/checkout-return',
     'regroup-app://app/checkout-return?result=paid',
     'regroup-app://app/checkout-return?result=success&result=canceled',
+    'https://regroup-app.com/app/checkout-return?result=paid',
+    'https://evil.example/app/checkout-return?result=success',
   ])('returns null for %s', (url) => {
     expect(parseAppLink(url)).toBeNull();
   });
@@ -169,16 +173,13 @@ describe('parseAppLink with a malformed tracking parameter', () => {
   });
 });
 
-// Invitation emails sent before the https /invite format wrap the app link in
-// the web /redirect page (#286); with app links verified, the app receives it.
-describe('parseAppLink — the web /redirect wrapper', () => {
+// The web /redirect page is gone (owner decision 2026-11-27): emails link to
+// /invite, and no invitation outside pre-launch testing used the old wrapper.
+describe('parseAppLink — the old web /redirect wrapper', () => {
   const wrap = (inner: string) => `https://regroup-app.com/redirect?url=${encodeURIComponent(inner)}`;
 
-  it('unwraps a custom-scheme token invitation', () => {
-    expect(parseAppLink(wrap('com.rats.dev://?type=invitation&token=abc'))).toEqual({
-      kind: 'invitation',
-      token: 'abc',
-    });
+  it('no longer unwraps a custom-scheme token invitation', () => {
+    expect(parseAppLink(wrap('com.rats.dev://?type=invitation&token=abc'))).toBeNull();
   });
 
   it('refuses a wrapped link that is not a custom-scheme app link', () => {

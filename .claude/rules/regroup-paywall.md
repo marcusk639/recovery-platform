@@ -45,8 +45,9 @@ Deliberately NOT gated — do not "fix" these:
   `reactivateOperatorSubscription`, `createBillingPortalSession`,
   `updatePaymentInfo`, the Stripe Connect trio) — gating any of these deadlocks a
   lapsed operator out of paying.
-- Reads (`listPayments`, `complianceExport`, `rentRoiMetrics`) — the gate covers
-  writes; data is not held hostage.
+- Reads (`listPayments`, `complianceExport`, `rentRoiMetrics`, `getDocumentLink`) — the
+  gate covers writes; data is not held hostage. A resident of a blocked house keeps
+  their own payment history and documents (the app's `ResidentLimitedView`).
 
 **Testing note:** because Phase A grants on absent status, a test whose house fixture
 omits `subscriptionStatus` passes whether or not the gate is wired at all. Assert the

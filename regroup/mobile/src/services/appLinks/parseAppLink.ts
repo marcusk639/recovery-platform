@@ -12,8 +12,7 @@
  *   regroup-app://checkout-return?result=R
  *   regroup-app://app/checkout-return?result=R
  *   https://<web origin>/checkout-return?result=R    (R: success | canceled | portal)
- *   https://<web origin>/redirect?url=<custom-scheme link above>   (older invitation
- *     emails; unwrapped one level, and only to a custom-scheme link)
+ *   https://<web origin>/app/checkout-return?result=R
  *
  * The https origin is the one appLinkPrefixes() accepts, and nothing else.
  *
@@ -44,7 +43,6 @@ type Query = Map<string, string[]>;
 // is skipped.
 const STRICT_KEYS = new Set([
   'token',
-  'url',
   'type',
   'result',
   'invitationType',
@@ -121,11 +119,14 @@ const checkoutReturn = (query: Query): AppLink | null => {
     : null;
 };
 
-export function parseAppLink(url: string): AppLink | null {
-  return parse(url, true);
+interface AppTarget {
+  custom: boolean;
+  route: string;
+  rawQuery: string;
 }
 
-function parse(url: string, allowRedirect: boolean): AppLink | null {
+/** The route and raw query of a URL addressed to the app (a custom scheme or the web origin). */
+const appTarget = (url: string): AppTarget | null => {
   if (typeof url !== 'string') return null;
   const parts = URL_PARTS.exec(url.trim());
   if (!parts) return null;
@@ -142,7 +143,25 @@ function parse(url: string, allowRedirect: boolean): AppLink | null {
     if (!origin || `${scheme}://${authority.toLowerCase()}` !== origin) return null;
     route = path;
   }
-  route = route.replace(/^\/+|\/+$/g, '');
+  return { custom, route: route.replace(/^\/+|\/+$/g, ''), rawQuery };
+};
+
+/**
+ * Whether a URL is addressed to the app as an invitation (the invite route, or
+ * the custom scheme's `type=invitation`), whether or not it parses. Splash
+ * tells the user about one that doesn't (brokenInvitation.ts).
+ */
+export function claimsInvitation(url: string): boolean {
+  const target = appTarget(url);
+  if (!target) return false;
+  if (target.route === 'invite') return true;
+  return target.custom && target.route === '' && /(^|&)type=invitation(&|$)/.test(target.rawQuery);
+}
+
+export function parseAppLink(url: string): AppLink | null {
+  const target = appTarget(url);
+  if (!target) return null;
+  const { custom, route, rawQuery } = target;
 
   const query = parseQuery(rawQuery);
   if (!query) return null;
@@ -154,13 +173,9 @@ function parse(url: string, allowRedirect: boolean): AppLink | null {
       return tokenInvitation(query);
     case 'checkout-return':
       return checkoutReturn(query);
+    // Also on https: app-links.json claims /app/*, so the OS opens it here.
     case 'app/checkout-return':
-      return custom ? checkoutReturn(query) : null;
-    case 'redirect': {
-      const inner = custom || !allowRedirect ? null : single(query, 'url');
-      const innerScheme = inner ? URL_PARTS.exec(inner.trim())?.[1]?.toLowerCase() : undefined;
-      return inner && innerScheme && CUSTOM_SCHEMES.includes(innerScheme) ? parse(inner, false) : null;
-    }
+      return checkoutReturn(query);
     default:
       return null;
   }

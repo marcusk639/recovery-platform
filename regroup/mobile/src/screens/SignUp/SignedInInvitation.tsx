@@ -4,7 +4,7 @@
  * account; every invitation can be left with "Continue to the app".
  * services/appLinks/signedInInvitation.ts does the work.
  */
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { RatsText } from '../../components/rats-text';
 import RatsButton from '../../components/rats-button/rats-button';
@@ -17,6 +17,7 @@ import {
   acceptInvitationAsCurrentUser,
   leaveInvitation,
 } from '../../services/appLinks/signedInInvitation';
+import { guestRecordExists } from '../../services/invitationMembership';
 import { color, fontSize, normalize } from '../../styles/theme';
 
 interface Props {
@@ -29,6 +30,9 @@ const SignedInInvitation: React.FC<Props> = ({ notice }) => {
   const invitation = useAppSelector((state) => state.user.invitation);
   const user = useAppSelector((state) => state.user.user);
   const [busy, setBusy] = useState(false);
+  // `busy` disables the button only after a re-render; this stops a second tap
+  // before that.
+  const inFlight = useRef(false);
   const [error, setError] = useState<string | null>(null);
   const { mutateAsync: createGuest } = useCreateGuest();
   const { mutateAsync: createAdmin } = useCreateAdmin();
@@ -44,7 +48,8 @@ const SignedInInvitation: React.FC<Props> = ({ notice }) => {
   const message = error ?? notice ?? null;
 
   const accept = async () => {
-    if (!token) return;
+    if (!token || inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setError(null);
     const result = await acceptInvitationAsCurrentUser(invitation, {
@@ -55,9 +60,11 @@ const SignedInInvitation: React.FC<Props> = ({ notice }) => {
         createAdmin,
         updateUser: (u: User, updates: Partial<User>) =>
           dispatch(updateUserRTK({ user: u, updates })).unwrap(),
+        guestExists: guestRecordExists,
       },
     });
     if (!result.ok) {
+      inFlight.current = false;
       setError(result.message);
       setBusy(false);
     }

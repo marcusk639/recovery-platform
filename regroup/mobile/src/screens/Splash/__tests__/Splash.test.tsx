@@ -881,6 +881,18 @@ describe("Splash (withSplash HOC)", () => {
       const linkListener = () =>
         (mockOnLink.mock.calls[0] as any[])[0] as (link: { url: string }) => void;
 
+      it("tells the user when an invitation link is broken, instead of doing nothing", async () => {
+        const { Alert } = require("react-native");
+        const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+        renderSplash({ user: signedInUser, loggedIn: true });
+        await act(async () => {});
+        act(() => linkListener()({ url: "regroup-app://invite?token=bad!" }));
+
+        expect(alert).toHaveBeenCalledTimes(1);
+        expect(navigateToInvitation).not.toHaveBeenCalled();
+        alert.mockRestore();
+      });
+
       it("opens the invitation screen for an invitation link received while signed in", async () => {
         renderSplash({ user: signedInUser, loggedIn: true });
         await act(async () => {});

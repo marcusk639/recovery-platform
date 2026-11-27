@@ -7,7 +7,13 @@ process.env.FIREBASE_STORAGE_EMULATOR_HOST = `${EMULATOR_HOST}:${EMULATOR_PORTS.
 const stored = async (path: string) =>
   (await getStorage().bucket('demo-regroup-e2e.appspot.com').file(path).exists())[0];
 
-const documents = async () => admin().collection('documents').where('houseId', '==', 'test-house-123').get();
+// The documents this spec creates: the seed's own records (e2e-doc-*, for the
+// app's My Documents card, maestro/scripts/seed/docs.js) are left out.
+const documents = async () => {
+  const snap = await admin().collection('documents').where('houseId', '==', 'test-house-123').get();
+  const docs = snap.docs.filter((d) => !d.id.startsWith('e2e-doc-'));
+  return { size: docs.length, docs };
+};
 
 test.beforeEach(() => reseed());
 
