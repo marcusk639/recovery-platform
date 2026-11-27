@@ -14,6 +14,8 @@ describe('AuthServiceService', () => {
   let deleteDoc: jasmine.Spy;
   let currentUserDelete: jasmine.Spy;
   let currentUser: { uid: string; delete: jasmine.Spy } | null;
+  // What onAuthStateChanged reports first (autoLogin / signedInAccount).
+  let authState: { uid: string; email: string; isAnonymous: boolean } | null;
 
   beforeEach(() => {
     initializeSubscription = jasmine.createSpy('initializeSubscription');
@@ -23,6 +25,7 @@ describe('AuthServiceService', () => {
       .createSpy('delete')
       .and.callFake(() => Promise.resolve({ delete: () => Promise.resolve() }));
     currentUser = null;
+    authState = null;
 
     TestBed.configureTestingModule({
       imports: [ReactiveFormsModule],
@@ -48,6 +51,11 @@ describe('AuthServiceService', () => {
               return Promise.resolve(currentUser);
             },
             signOut,
+            // Async like Firebase: autoLogin reads its unsubscribe inside the callback.
+            onAuthStateChanged: (cb: (u: unknown) => void) => {
+              setTimeout(() => cb(authState));
+              return () => undefined;
+            },
           },
         },
         {
@@ -162,5 +170,47 @@ describe('AuthServiceService', () => {
 
     expect(deleteSpy).not.toHaveBeenCalled();
     expect(initializeSubscription).not.toHaveBeenCalled();
+  });
+
+  describe('signed-in checkout for an existing account (M9)', () => {
+    it('finds no account when signed out, or signed in anonymously', async () => {
+      expect(await service.signedInAccount()).toBeNull();
+      authState = { uid: 'anon-1', email: null, isAnonymous: true };
+      expect(await service.signedInAccount()).toBeNull();
+    });
+
+    it('returns the stored record, with the id and email from Auth', async () => {
+      authState = { uid: 'uid-9', email: 'op@example.com', isAnonymous: false };
+      const stored = { ...new User(), firstName: 'Ann', email: '' } as User;
+      spyOn(service, 'getUser').and.resolveTo(stored);
+      const account = await service.signedInAccount();
+      expect(account).toEqual(
+        jasmine.objectContaining({ id: 'uid-9', uid: 'uid-9', email: 'op@example.com', firstName: 'Ann' }),
+      );
+    });
+
+    it('subscribes the existing account without creating one', async () => {
+      const createUser = spyOn(service as any, 'createUser');
+      const user = { ...new User(), id: 'uid-9', email: 'op@example.com' } as User;
+      initializeSubscription.and.resolveTo({ id: 'uid-9', claimGranted: true });
+
+      await service.subscribeExistingOperator(user, 'pm_1', 'traditional', 'starter', 'year');
+
+      expect(initializeSubscription).toHaveBeenCalledWith(user, 'pm_1', 'traditional', 'starter', 'year');
+      expect(createUser).not.toHaveBeenCalled();
+    });
+
+    it('never deletes or signs out the existing account when checkout fails', async () => {
+      const user = { ...new User(), id: 'uid-9', email: 'op@example.com' } as User;
+      const refusal = { code: 'functions/failed-precondition', details: { reason: 'plan-exists' } };
+      initializeSubscription.and.rejectWith(refusal);
+
+      await expectAsync(
+        service.subscribeExistingOperator(user, 'pm_1', 'traditional', 'starter'),
+      ).toBeRejectedWith(refusal);
+
+      expect(deleteAccount).not.toHaveBeenCalled();
+      expect(signOut).not.toHaveBeenCalled();
+    });
   });
 });

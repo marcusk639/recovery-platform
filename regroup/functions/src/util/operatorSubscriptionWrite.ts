@@ -8,7 +8,8 @@ type HousesMap = Record<string, unknown>;
  * createHouses enforces and a new subscription carries none, so replacing it
  * let an operator at the cap subscribe again (a new trial, another tier or
  * interval, or the next day) and add a full new set of houses. Runs in a
- * transaction so it cannot race createHouses adding to the map. Returns the
+ * transaction so it cannot race createHouses adding to the map. Replacing the
+ * metadata also clears the checkout lock (util/checkoutGuard). Returns the
  * metadata as written.
  */
 export const writeOperatorSubscription = async <M extends object>(
@@ -20,7 +21,11 @@ export const writeOperatorSubscription = async <M extends object>(
     const snap = await tx.get(ref);
     const houses = (snap.data()?.subscriptionMetadata?.houses ?? {}) as HousesMap;
     const written = { ...meta, houses };
-    tx.update(ref, { subscriptionMetadata: stripUndefinedDeep(written) });
+    // potentialSuperAdmin on the doc is what the app routes an operator who has
+    // not finished setup by. A new web signup writes it when it creates the
+    // account; an existing account checking out while signed in has no such
+    // write, so the checkout sets it here, with the plan it is for.
+    tx.update(ref, { subscriptionMetadata: stripUndefinedDeep(written), potentialSuperAdmin: true });
     return written;
   });
 };
