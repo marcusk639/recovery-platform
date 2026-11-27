@@ -12,6 +12,7 @@
  *   regroup-app://checkout-return?result=R
  *   regroup-app://app/checkout-return?result=R
  *   https://<web origin>/checkout-return?result=R    (R: success | canceled | portal)
+ *   https://<web origin>/app/checkout-return?result=R
  *   https://<web origin>/redirect?url=<custom-scheme link above>   (older invitation
  *     emails; unwrapped one level, and only to a custom-scheme link)
  *
@@ -179,8 +180,9 @@ function parse(url: string, allowRedirect: boolean): AppLink | null {
       return tokenInvitation(query);
     case 'checkout-return':
       return checkoutReturn(query);
+    // Also on https: app-links.json claims /app/*, so the OS opens it here.
     case 'app/checkout-return':
-      return custom ? checkoutReturn(query) : null;
+      return checkoutReturn(query);
     case 'redirect': {
       const inner = custom || !allowRedirect ? null : single(query, 'url');
       const innerScheme = inner ? URL_PARTS.exec(inner.trim())?.[1]?.toLowerCase() : undefined;

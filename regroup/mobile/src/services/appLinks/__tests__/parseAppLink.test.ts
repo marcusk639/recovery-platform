@@ -95,6 +95,8 @@ describe('parseAppLink — checkout return', () => {
     ['https://regroup-app.com/checkout-return?result=success', 'success'],
     ['regroup-app://checkout-return?result=canceled', 'canceled'],
     ['regroup-app://app/checkout-return?result=portal', 'portal'],
+    // app-links.json claims /app/*, so the https form reaches the app too.
+    ['https://regroup-app.com/app/checkout-return?result=success', 'success'],
   ])('parses %s', (url, result) => {
     expect(parseAppLink(url)).toEqual({ kind: 'checkout-return', result });
   });
@@ -103,6 +105,8 @@ describe('parseAppLink — checkout return', () => {
     'regroup-app://app/checkout-return',
     'regroup-app://app/checkout-return?result=paid',
     'regroup-app://app/checkout-return?result=success&result=canceled',
+    'https://regroup-app.com/app/checkout-return?result=paid',
+    'https://evil.example/app/checkout-return?result=success',
   ])('returns null for %s', (url) => {
     expect(parseAppLink(url)).toBeNull();
   });

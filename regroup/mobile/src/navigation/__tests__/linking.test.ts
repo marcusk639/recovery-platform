@@ -161,6 +161,8 @@ describe('isHandledElsewhere (parseAppLink decides, per prefix, on the full URL)
     'regroup-app://checkout-return?result=success',
     'https://regroup-app.com/checkout-return?result=portal',
     'regroup-app://app/checkout-return?result=canceled',
+    // app-links.json claims /app/*, so the OS opens this one in the app too.
+    'https://regroup-app.com/app/checkout-return?result=success',
   ])('declines %s', (url) => {
     expect(isHandledElsewhere(url)).toBe(true);
   });
@@ -177,7 +179,6 @@ describe('isHandledElsewhere (parseAppLink decides, per prefix, on the full URL)
     // The parser accepts these only on the custom schemes, so the guard
     // does not claim them on the web origin either (no silent drop).
     'https://regroup-app.com/?type=invitation&token=t1',
-    'https://regroup-app.com/app/checkout-return?result=success',
   ])('leaves %s to navigation', (url) => {
     expect(isHandledElsewhere(url)).toBe(false);
   });
@@ -227,15 +228,12 @@ describe('linking getInitialURL and subscribe filter with the same parser', () =
     ]) {
       listeners.forEach((l) => l({ url }));
     }
-    expect(seen).toEqual([
-      'regroup-app://app/activities',
-      'https://regroup-app.com/app/checkout-return?result=success',
-    ]);
+    expect(seen).toEqual(['regroup-app://app/activities']);
     unsubscribe();
     expect(remove).toHaveBeenCalledTimes(1);
   });
 
-  it('an unclaimed https checkout-return path resolves to no screen', () => {
+  it('navigation itself never resolves the checkout-return path', () => {
     signInAs({ uid: 'u1', isAnonymous: false });
     expect(
       linkingConfig.getStateFromPath!('/app/checkout-return?result=success', linkingConfig.config),
