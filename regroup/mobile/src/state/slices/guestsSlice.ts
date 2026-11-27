@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { Guest } from '../../entities/Guest';
+import { isLogoutFulfilled } from './accountReset';
 
 type AsyncStatus = 'idle' | 'loading' | 'succeeded' | 'failed';
 
@@ -74,6 +75,10 @@ const guestsSlice = createSlice({
       state.deleteStatus = 'idle';
       state.customizePhaseStatus = 'idle';
     },
+  },
+  // Guest records belong to the account that signed out.
+  extraReducers: builder => {
+    builder.addMatcher(isLogoutFulfilled, () => initialState);
   },
 });
 
