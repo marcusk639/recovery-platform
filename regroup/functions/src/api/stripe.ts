@@ -11,6 +11,7 @@ import {
 } from "../util/tierPricing";
 import { assertPaymentMethodUsable } from "./cardValidation";
 import { periodEndSeconds } from "../util/subscriptionPeriod";
+import { isResourceMissing } from "../util/stripe";
 
 /**
  * Trial length for all new subscriptions. Stripe applies trial_period_days
@@ -489,6 +490,19 @@ const ENDED_STATUSES = new Set(["canceled", "incomplete_expired"]);
  * consistent, and a retry sends the same email. Then a metadata search, which
  * finds one under another email but can lag writes by a minute or more.
  */
+/**
+ * A customer's subscriptions, or none when Stripe no longer has the customer:
+ * deleting a customer cancels its subscriptions, so nothing live is there.
+ */
+const listSubscriptionsOf = async (customer: string): Promise<Stripe.Subscription[]> => {
+  try {
+    return (await stripe.subscriptions.list({ customer, status: "all", limit: 20 })).data;
+  } catch (error) {
+    if (isResourceMissing(error)) return [];
+    throw error;
+  }
+};
+
 export const findLiveSubscriptionForUser = async (
   userId: string,
   email: string,
@@ -505,8 +519,8 @@ export const findLiveSubscriptionForUser = async (
   const customerIds = new Set(customers.data.map((c) => c.id));
   if (knownCustomerId) customerIds.add(knownCustomerId);
   for (const customer of customerIds) {
-    const subs = await stripe.subscriptions.list({ customer, status: "all", limit: 20 });
-    const live = subs.data.find(isLive);
+    const subs = await listSubscriptionsOf(customer);
+    const live = subs.find(isLive);
     if (live) return live;
   }
   const found = await stripe.subscriptions.search({

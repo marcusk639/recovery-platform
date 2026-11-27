@@ -52,7 +52,11 @@ import {
   removeHouseFromSubscription,
 } from "../util/subscriptionHouses";
 import { grantPotentialSuperAdminClaim } from "../util/superAdminClaim";
-import { writeOperatorSubscription } from "../util/operatorSubscriptionWrite";
+import {
+  changeSubscriptionHouses,
+  setSubscriptionStatus,
+  writeOperatorSubscription,
+} from "../util/operatorSubscriptionWrite";
 import {
   assertCheckoutHeld,
   claimCheckout,
@@ -229,6 +233,19 @@ async function reverseUnrecordedCheckout(
   // message says. (A live orphan above keeps the lock until it expires.)
   await restoreReversedCheckout(claim, subscriptionId);
   throw new HttpsError("internal", CHECKOUT_REVERSED_MESSAGE);
+}
+
+/**
+ * Sets the stored status alone (setSubscriptionStatus). A record that names
+ * another subscription by now is left alone and logged.
+ */
+async function writeStatusOf(uid: string, subscriptionId: string, status: string): Promise<void> {
+  if (await setSubscriptionStatus(uid, subscriptionId, status)) return;
+  logger.warn("Subscription status not written: the record names another subscription", {
+    userId: uid,
+    subscriptionId,
+    status,
+  });
 }
 
 /** Whether Stripe shows the subscription ended; false when it can't be read. */
@@ -592,7 +609,11 @@ export const reactivateOperatorSubscription = onCall(
       );
     }
     logger.info("Subscription reactivated");
-    await updateUser(data.user.id, { subscriptionMetadata });
+    if (replacement) {
+      await updateUser(data.user.id, { subscriptionMetadata });
+    } else {
+      await writeStatusOf(data.user.id, storedMetadata.subscriptionId, "active");
+    }
     if (replacement) {
       // The webhooks find a subscription only through its subscriptions doc, and
       // the replacement's first events can arrive before the record above points
@@ -648,7 +669,7 @@ export const cancelUserSubscription = onCall(
       ...firestoreUser.subscriptionMetadata,
       status: "cancelling",
     };
-    await updateUser(request.auth.uid, { subscriptionMetadata });
+    await writeStatusOf(request.auth.uid, data.subscriptionId, "cancelling");
     return { ...data.user, subscriptionMetadata };
   },
 );
@@ -707,15 +728,13 @@ export const updateSubscriptionGuests = onCall(
           );
         }
       }
-      const currentGuests = houses[houseId]?.numberOfGuests ?? 0;
-      const newGuests =
-        action === "add" ? currentGuests + 1 : Math.max(0, currentGuests - 1);
-      await updateUser(user.id!, {
-        subscriptionMetadata: {
-          ...guestMeta,
-          houses: { ...houses, [houseId]: { numberOfGuests: newGuests } },
-          lastUpdatedAt: new Date().toISOString(),
-        },
+      // From the stored map, so a resident counted meanwhile isn't lost; a
+      // house removed meanwhile stays removed.
+      await changeSubscriptionHouses(user.id!, (stored) => {
+        if (!(houseId in stored)) return stored;
+        const current = stored[houseId]?.numberOfGuests ?? 0;
+        const next = action === "add" ? current + 1 : Math.max(0, current - 1);
+        return { ...stored, [houseId]: { numberOfGuests: next } };
       });
       logger.info("Tier subscription resident occupancy updated", {
         ownerUserId,
@@ -792,11 +811,17 @@ export const updateSubscriptionHouses = onCall(
           );
         }
       }
-      const updatedMeta =
-        action === "add"
-          ? addHousesToSubscription(houseMeta, houseIds ?? [])
-          : removeHouseFromSubscription(houseMeta, houseIds[0]);
-      await updateUser(user.id!, { subscriptionMetadata: updatedMeta });
+      // Changed from the stored map, so the property cap counts houses
+      // createHouses added meanwhile, and none of them is dropped.
+      const houses = await changeSubscriptionHouses(user.id!, (stored) => {
+        const meta = { ...houseMeta, houses: stored };
+        return (
+          action === "add"
+            ? addHousesToSubscription(meta, houseIds ?? [])
+            : removeHouseFromSubscription(meta, houseIds[0])
+        ).houses;
+      });
+      const updatedMeta = { ...houseMeta, houses };
       logger.info("Tier subscription house occupancy updated", {
         ownerUserId,
         action,

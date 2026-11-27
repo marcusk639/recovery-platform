@@ -120,6 +120,20 @@ jest.mock('../../api/firestore', () => ({
   getInvitationsForHouse: (...args: unknown[]) => mockGetInvitationsForHouse(...args),
   updateUser: (...args: unknown[]) => mockUpdateUser(...args),
 }));
+// Occupancy is written through changeSubscriptionHouses (tested in
+// subscriptionMetadataWrites.test.ts); here it applies to the mocked owner and
+// records the result on mockUpdateUser, as the write these tests check for.
+jest.mock('../../util/operatorSubscriptionWrite', () => ({
+  changeSubscriptionHouses: async (
+    uid: string,
+    change: (h: Record<string, { numberOfGuests: number }>) => object,
+  ) => {
+    const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
+    const houses = change(meta.houses ?? {});
+    await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, houses } });
+    return houses;
+  },
+}));
 
 // Token util — deterministic for testing.
 jest.mock('../../util/tokens', () => ({

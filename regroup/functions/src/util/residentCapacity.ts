@@ -1,6 +1,7 @@
 import { logger } from 'firebase-functions';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { getUser, getInvitationsForHouse, updateUser } from '../api/firestore';
+import { getUser, getInvitationsForHouse } from '../api/firestore';
+import { changeSubscriptionHouses } from './operatorSubscriptionWrite';
 import { totalResidents } from './tierCaps';
 import { Invitation, InvitationRole } from '../entities/Invitation';
 import OperatorSubscription from '../entities/OperatorSubscription';
@@ -116,13 +117,9 @@ export async function recordResidentAccepted(
   const meta = owner?.subscriptionMetadata;
   if (!meta?.tier) return;
 
-  const houses = meta.houses ?? {};
-  const current = houses[houseId]?.numberOfGuests ?? 0;
-  await updateUser(ownerId, {
-    subscriptionMetadata: {
-      ...meta,
-      houses: { ...houses, [houseId]: { numberOfGuests: current + 1 } },
-      lastUpdatedAt: new Date().toISOString(),
-    },
-  });
+  // From the stored map, writing only it: see changeSubscriptionHouses.
+  await changeSubscriptionHouses(ownerId, (houses) => ({
+    ...houses,
+    [houseId]: { numberOfGuests: (houses[houseId]?.numberOfGuests ?? 0) + 1 },
+  }));
 }

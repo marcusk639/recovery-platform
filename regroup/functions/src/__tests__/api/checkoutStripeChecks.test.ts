@@ -169,6 +169,30 @@ describe('findLiveSubscriptionForUser', () => {
     expect(mockSubscriptionsSearch).not.toHaveBeenCalled();
   });
 
+  // Stripe cancels a customer's subscriptions when it deletes the customer, so a
+  // stored customer it no longer has holds nothing live. Reactivate used to
+  // answer "try again in a minute" there, which never got better.
+  it("treats a stored customer Stripe no longer has as holding no subscription", async () => {
+    mockSubscriptionsList.mockImplementation(async ({ customer }: { customer: string }) => {
+      if (customer === 'cus_gone') {
+        throw Object.assign(new Error('No such customer'), {
+          type: 'StripeInvalidRequestError',
+          code: 'resource_missing',
+        });
+      }
+      return { data: [] };
+    });
+    await expect(findLiveSubscriptionForUser('uid_1', 'op@test.com', 'cus_gone')).resolves.toBeNull();
+    expect(mockSubscriptionsSearch).toHaveBeenCalled();
+  });
+
+  it('still fails on any other error listing the stored customer', async () => {
+    mockSubscriptionsList.mockRejectedValue(new Error('stripe down'));
+    await expect(findLiveSubscriptionForUser('uid_1', 'op@test.com', 'cus_1')).rejects.toThrow(
+      'stripe down',
+    );
+  });
+
   it('refuses an id that could change the search query', async () => {
     await expect(findLiveSubscriptionForUser("x' OR status:'active", 'a@b.c')).rejects.toThrow(
       /unexpected user id/,

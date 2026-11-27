@@ -124,9 +124,30 @@ jest.mock("../../util/houseRoles", () => ({
   },
 }));
 
+// The field-only writes are tested in subscriptionMetadataWrites.test.ts. Here
+// they apply to the mocked user and record the result on mockUpdateUser, so
+// these tests keep asserting what the record becomes.
+type MockHouses = Record<string, { numberOfGuests: number }>;
+const mockChangeSubscriptionHouses = jest.fn(
+  async (uid: string, change: (houses: MockHouses) => MockHouses) => {
+    const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
+    const houses = change(meta.houses ?? {});
+    await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, houses } });
+    return houses;
+  },
+);
+const mockSetSubscriptionStatus = jest.fn(async (uid: string, _sub: string, status: string) => {
+  const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
+  await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, status } });
+  return true;
+});
 jest.mock("../../util/operatorSubscriptionWrite", () => ({
   writeOperatorSubscription: (uid: string, meta: object) =>
     mockWriteOperatorSubscription(uid, meta),
+  changeSubscriptionHouses: (uid: string, change: (h: MockHouses) => MockHouses) =>
+    mockChangeSubscriptionHouses(uid, change),
+  setSubscriptionStatus: (uid: string, sub: string, status: string) =>
+    mockSetSubscriptionStatus(uid, sub, status),
 }));
 
 jest.mock("../../util/email", () => ({
