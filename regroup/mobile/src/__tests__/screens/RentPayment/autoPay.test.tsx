@@ -82,6 +82,11 @@ const mockCreateRentPaymentIntent = jest.fn().mockResolvedValue({
   paymentIntentId: 'pi_test',
 });
 const mockRecordRentPayment = jest.fn().mockResolvedValue({});
+// The history's rent charges have their own suite (RentPaymentScreen.test.tsx).
+jest.mock('../../../state/queries/rentChargeQueries', () => ({
+  useResidentCharges: () => ({ data: [], isError: false }),
+}));
+
 jest.mock('../../../services/payments', () => ({
   createRentPaymentIntent: (...args: any[]) => mockCreateRentPaymentIntent(...args),
   recordRentPayment: (...args: any[]) => mockRecordRentPayment(...args),

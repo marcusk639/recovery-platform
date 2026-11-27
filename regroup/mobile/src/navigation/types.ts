@@ -115,6 +115,8 @@ export enum Routes {
   PhaseSetup = 'phaseSetup',
   HouseSettings = 'houseSettings',
   StripeSettings = 'stripeSettings',
+  RentSettings = 'rentSettings',
+  GuestBalance = 'guestBalance',
   GuestInfo = 'guestInfo',
   PhaseCustomization = 'phaseCustomization',
   SubscriptionHandler = 'subscriptionHandler',
@@ -200,6 +202,8 @@ export type RootStackParamList = {
   [Routes.PhaseSetup]: undefined;
   [Routes.HouseSettings]: undefined;
   [Routes.StripeSettings]: undefined;
+  [Routes.RentSettings]: undefined;
+  [Routes.GuestBalance]: undefined;
   [Routes.GuestInfo]: { userId: string };
   [Routes.PhaseCustomization]: undefined;
   [Routes.SubscriptionHandler]: undefined;

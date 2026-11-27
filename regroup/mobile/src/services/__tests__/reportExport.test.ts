@@ -13,6 +13,51 @@ const makePayment = (overrides: Partial<RentPayment> = {}): RentPayment => ({
 });
 
 describe('exportPaymentHistoryCSV', () => {
+  // Rent charges (rent spec §4.5): the same columns, money owed rather than paid.
+  const rentCharge = {
+    id: 'guest-1_2026-11-16',
+    guestId: 'guest-1',
+    houseId: 'house-1',
+    amountCents: 12500,
+    daysCovered: 5,
+    daysInPeriod: 7,
+    firstDay: '2026-11-18',
+    lastDay: '2026-11-22',
+    rateSource: 'house',
+  } as any;
+
+  it('exports a rent charge in its own Charged column, prorated days in the description', () => {
+    const csv = exportPaymentHistoryCSV([], { 'guest-1': 'Jane Smith' }, [rentCharge]);
+    const lines = csv.split('\n');
+    expect(lines[0]).toBe('Date,Guest,Amount ($),Refunded ($),Net ($),Status,Description,Charged ($)');
+    expect(lines[1]).toBe('2026-11-18,Jane Smith,,,,Rent charge,"Rent, Nov 18–22 (5 of 7 days)",125.00');
+  });
+
+  it("keeps Amount and Net as what was paid, so they still sum to money received", () => {
+    const csv = exportPaymentHistoryCSV([makePayment({ amount: 17500 })], {}, [
+      { ...rentCharge, amountCents: 17500, daysCovered: 7, firstDay: '2026-04-27', lastDay: '2026-05-03' },
+    ]);
+    const lines = csv.split('\n');
+    expect(lines[1]).toBe('2026-05-01,guest-1,175.00,0.00,175.00,succeeded,Rent Payment,');
+    expect(lines[2]).toBe('2026-04-27,guest-1,,,,Rent charge,"Rent, Apr 27–May 3",175.00');
+  });
+
+  it('a $0 scholarship week exports 0.00, not -0.00', () => {
+    const csv = exportPaymentHistoryCSV([], {}, [{ ...rentCharge, amountCents: 0 }]);
+    expect(csv.split('\n')[1].endsWith(',0.00')).toBe(true);
+  });
+
+  it('puts charges and payments in date order, newest first, with the header unchanged', () => {
+    const csv = exportPaymentHistoryCSV(
+      [makePayment({ createdAt: '2026-11-25T10:00:00.000Z' }), makePayment({ id: 'p0', createdAt: '2026-11-10T10:00:00.000Z' })],
+      {},
+      [rentCharge],
+    );
+    const lines = csv.split('\n');
+    expect(lines[0]).toBe('Date,Guest,Amount ($),Refunded ($),Net ($),Status,Description,Charged ($)');
+    expect(lines.slice(1).map((l) => l.slice(0, 10))).toEqual(['2026-11-25', '2026-11-18', '2026-11-10']);
+  });
+
   it('returns a CSV string with header row', () => {
     const csv = exportPaymentHistoryCSV([makePayment()], {});
     const lines = csv.split('\n');

@@ -20,6 +20,7 @@ import {
 } from '../../state/slices/setupSlice';
 import map from 'lodash/map';
 import cloneDeep from 'lodash/cloneDeep';
+import omit from 'lodash/omit';
 import ChoreSetup from '../SetupWizards/ChoreSetup';
 import ManagerSettings from './ManagerSettings';
 import AdminManagement from './AdminManagement';
@@ -108,9 +109,11 @@ const HouseSettings: React.FC<Props> = (props) => {
     async (values: House) => {
       dismissFormModal();
       dispatch(updateSetupHouse(values));
+      // Rent is the Rent screen's alone (it previews charges first). These whole-house
+      // saves start from a cached copy, which would write an older schedule back.
       await updateHouseMutation.mutateAsync({
         houseId: values.id,
-        values,
+        values: omit(values, ['rentFrequency', 'weeklyRent', 'monthlyRent']),
       });
       initializeHouseSetup();
     },
@@ -178,6 +181,8 @@ const HouseSettings: React.FC<Props> = (props) => {
     showFormModal(<HouseSetup {...setupProps()} />, null, true);
   }, [showFormModal, setupProps]);
 
+  const rentOn = house?.rentFrequency === 'weekly' || house?.rentFrequency === 'monthly';
+
   const SETTINGS = useMemo(
     () => ({
       details: {
@@ -220,6 +225,16 @@ const HouseSettings: React.FC<Props> = (props) => {
         label: 'Guests',
         description: 'Invite new guests',
         iconName: 'user',
+        color: color.medium_grey,
+      },
+      // Rent spec §4.1: with charging off, the entry prompts the manager to set it up.
+      rent: {
+        action: () => navigation.navigate(Routes.RentSettings),
+        label: 'Rent',
+        description: rentOn
+          ? 'Rent schedule and price'
+          : 'Not set up: residents are not charged rent',
+        iconName: 'money-bill',
         color: color.medium_grey,
       },
       // The owner only: the Stripe Connect callables accept only owners.
@@ -292,6 +307,7 @@ const HouseSettings: React.FC<Props> = (props) => {
       navigation,
       mayViewHouseMoney,
       isOwner,
+      rentOn,
     ],
   );
 
@@ -334,11 +350,13 @@ const HouseSettings: React.FC<Props> = (props) => {
                   ? 'managers-section'
                   : key === 'guests'
                     ? 'manage-guests-button'
-                    : key === 'guestImport'
-                      ? 'guest-import-section'
-                      : key === 'balances'
-                        ? 'balances-section'
-                        : undefined
+                    : key === 'rent'
+                      ? 'rent-settings-section'
+                      : key === 'guestImport'
+                        ? 'guest-import-section'
+                        : key === 'balances'
+                          ? 'balances-section'
+                          : undefined
               }
             />
           );

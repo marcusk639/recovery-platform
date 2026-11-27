@@ -4,6 +4,8 @@ export interface Email {
   subject: string;
   text: string;
   html?: string;
+  /** false: send with SendGrid click tracking off (links that carry a token). */
+  clickTracking?: false;
 }
 
 export interface InviteEmailPayload {

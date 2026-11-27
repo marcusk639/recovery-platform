@@ -53,6 +53,8 @@ import HousesOverview from '../screens/HousesOverview/HousesOverview';
 import NewMeeting from '../screens/StatUpdates/NewMeeting';
 import GuestList from '../screens/GuestList/GuestList';
 import { PhaseConfigSetup } from '../screens/SetupWizards/PhaseSetup/PhaseConfigSetup';
+import RentSettingsScreen from '../screens/HouseSettings/RentSettingsScreen';
+import GuestBalanceScreen from '../screens/GuestUpdate/GuestBalanceScreen';
 import UserInfo from '../screens/Profile/UserInfo';
 import PhaseCustomization from '../screens/Profile/PhaseCustomization';
 import SubscriptionHandler from '../screens/SubscriptionHandler/SubscriptionHandler';
@@ -343,6 +345,14 @@ export const RootNavigator = ({
       <RootStack.Screen
         name={Routes.StripeSettings}
         component={guardedScreens[Routes.StripeSettings]}
+      />
+      <RootStack.Screen
+        name={Routes.RentSettings}
+        component={RentSettingsScreen}
+      />
+      <RootStack.Screen
+        name={Routes.GuestBalance}
+        component={GuestBalanceScreen}
       />
       <RootStack.Screen name={Routes.GuestInfo} component={UserInfo} />
       <RootStack.Screen

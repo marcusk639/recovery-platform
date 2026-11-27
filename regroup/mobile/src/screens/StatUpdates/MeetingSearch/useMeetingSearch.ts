@@ -32,6 +32,17 @@ import {
   useSearchMeetings,
   useCheckIntoMeeting,
 } from '../../../state/queries/meetingQueries';
+import {
+  checkInErrorMessage,
+  meetingSearchErrorMessage,
+} from '../../../services/meetingErrors';
+
+/**
+ * Typing in the search bar searches once typing pauses for this long, not on
+ * every keystroke: each search is a paid findMeetings call, and each account
+ * gets a set number of them an hour.
+ */
+export const SEARCH_TERM_DEBOUNCE_MS = 500;
 
 export interface UseMeetingSearchProps {
   navigation: any;
@@ -47,6 +58,10 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
   const meetings: RatsMeeting[] = (searchMeetingsMutation.data as any) ?? [];
   const searchingForMeetings = searchMeetingsMutation.isPending;
   const searchFailed = searchMeetingsMutation.isError;
+  // The hourly-limit refusal says when to try again; anything else is generic.
+  const searchErrorMessage = meetingSearchErrorMessage(
+    searchMeetingsMutation.error,
+  );
   const checkingIn = checkIntoMeetingMutation.isPending;
   const checkInSuccessful = checkIntoMeetingMutation.isSuccess;
   const checkInError = (checkIntoMeetingMutation.error as Error)?.message ?? '';
@@ -86,6 +101,10 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
 
   // Local state
   const [searchTerm, setSearchTermState] = useState('');
+  // The filters and trimmed term of the last search started, to skip repeats.
+  const lastSearch = useRef<{ filters: MeetingFilters; term: string } | null>(
+    null,
+  );
   const [filters, setFiltersState] = useState<MeetingFilters>(
     new MeetingFilters(),
   );
@@ -125,17 +144,29 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
     initializeLocation();
   }, []);
 
-  // Execute search when filters change (with location)
+  // Search when the filters change (with a location) or once typing pauses.
+  // A filter change or a cleared box searches at once, with the current text,
+  // and cancels a pending keystroke search, so one change is one paid call.
   useEffect(() => {
-    // Only search if we have a location set
-    if (filters.location) {
+    if (!filters.location) return;
+    const location = filters.location;
+    const term = searchTerm.trim();
+    const last = lastSearch.current;
+    if (last && last.filters === filters && last.term === term) return;
+    const run = () => {
+      lastSearch.current = { filters, term };
       searchMeetingsMutation.mutate({
-        location: filters.location,
+        location,
         filters,
-        criteria:
-          searchTerm.length > 0 ? { name: searchTerm.trim() } : undefined,
+        criteria: term.length > 0 ? { name: term } : undefined,
       });
+    };
+    if (!last || last.filters !== filters || term.length === 0) {
+      run();
+      return;
     }
+    const timer = setTimeout(run, SEARCH_TERM_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, searchTerm]);
 
@@ -211,15 +242,28 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
       const guestId = (userAsGuest || guest)?.id ?? '';
       const houseId = house?.id ?? '';
       const userId = user?.id ?? '';
-      checkIntoMeetingMutation.mutate({
-        checkInInput: checkinInput,
-        meeting,
-        guestId,
-        houseId,
-        userId,
-      });
+      // mutateAsync, not mutate's onError: React Query drops mutate's
+      // callbacks when the screen unmounts, and the user must still be told.
+      // Includes the hourly-limit refusal, which says when to try again.
+      checkIntoMeetingMutation
+        .mutateAsync({
+          checkInInput: checkinInput,
+          meeting,
+          guestId,
+          houseId,
+          userId,
+        })
+        .catch(err => notify('Check-in Failed', checkInErrorMessage(err), []));
     },
-    [userLocation, userAsGuest, guest, house, user, checkIntoMeetingMutation],
+    [
+      userLocation,
+      userAsGuest,
+      guest,
+      house,
+      user,
+      checkIntoMeetingMutation,
+      notify,
+    ],
   );
 
   // Check into meeting
@@ -324,6 +368,7 @@ export const useMeetingSearch = (props: UseMeetingSearchProps) => {
     meetings,
     searchingForMeetings,
     searchFailed,
+    searchErrorMessage,
     checkingIn,
     checkInSuccessful,
     checkInError,
