@@ -22,6 +22,15 @@ const useMyHouseTiers = (enabled: boolean) =>
     staleTime: 5 * 60 * 1000,
   });
 
+/**
+ * The caller's tier in this house ('owner', 'manager', 'peerLeader'), or
+ * undefined while it loads, if it could not be read, or with no tier there.
+ */
+export const useMyHouseTier = (houseId: string, enabled = true): string | undefined => {
+  const { data } = useMyHouseTiers(enabled && !!houseId);
+  return enabled && houseId ? data?.[houseId] : undefined;
+};
+
 export const useMayEditRentMoney = (houseId: string): boolean => {
   const { data } = useMyHouseTiers(!!houseId);
   return !!houseId && RENT_MONEY_TIERS.has(data?.[houseId] ?? '');

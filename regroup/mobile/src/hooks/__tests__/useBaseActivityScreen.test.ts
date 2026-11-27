@@ -821,3 +821,62 @@ describe('useBaseActivityScreen', () => {
     });
   });
 });
+
+// P5 Task 19: a challenge is signed with the viewer's guest or admin record.
+// Before the admin record loads, a staff member's challenge went out with an
+// empty challenger.
+describe('challengeDispute before the admin record loads', () => {
+  const activity = { id: 'a1', disputeId: 'd1' } as any;
+  const disputes = { d1: { id: 'd1', challenges: [] } } as any;
+
+  beforeEach(() => mockMutateAsync.mockClear());
+
+  it('refuses rather than write an empty challenger', async () => {
+    const staff = { id: 'admin-user', guestId: '' };
+    const { result } = renderHook(() =>
+      useBaseActivityScreen(makeProps({ user: staff, disputes, userAsAdmin: undefined })),
+    );
+    await expect(result.current.challengeDispute(activity, 'Not done')).rejects.toThrow(
+      'Your account is still loading',
+    );
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+  });
+
+  // The modal is already closed by then, so the refusal must reach the user
+  // some other way, as disputeActivity's failure does.
+  it('tells the user why, when the challenge is submitted from the modal', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined as any);
+    const staff = { id: 'admin-user', guestId: '' };
+    const { result } = renderHook(() =>
+      useBaseActivityScreen(makeProps({ user: staff, disputes, userAsAdmin: undefined })),
+    );
+    act(() => { result.current.showModal('confirm', activity); });
+    let returnValue: boolean | undefined;
+    await act(async () => {
+      returnValue = await result.current.handleDisputeSubmission({ message: 'Not done' });
+    });
+    expect(returnValue).toBe(false);
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Challenge not sent',
+      'Your account is still loading. Try again in a moment.',
+    );
+    expect(mockMutateAsync).not.toHaveBeenCalled();
+    alertSpy.mockRestore();
+  });
+
+  it('signs the challenge with the admin record once it has loaded', async () => {
+    const staff = { id: 'admin-user', guestId: '' };
+    const { result } = renderHook(() =>
+      useBaseActivityScreen(
+        makeProps({ user: staff, disputes, userAsAdmin: { id: 'admin-rec-1' } }),
+      ),
+    );
+    await act(async () => {
+      await result.current.challengeDispute(activity, 'Not done');
+    });
+    const { house } = (mockMutateAsync.mock.calls[0] as any)[0];
+    expect(house.disputes.d1.challenges).toEqual([
+      { challenger: 'admin-rec-1', message: 'Not done' },
+    ]);
+  });
+});

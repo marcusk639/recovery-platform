@@ -18,6 +18,7 @@ import {
   isAdmin,
   displayRole,
   isSameUser,
+  canAddHouse,
 } from '../roles';
 import { camelCaseToDisplayForm } from '../../util/display';
 
@@ -165,5 +166,30 @@ describe('isSameUser', () => {
   it('returns false when member.userId does not match', () => {
     const member: any = { userId: 'user-123' };
     expect(isSameUser(member, 'user-456')).toBe(false);
+  });
+});
+
+// ─── canAddHouse (P5 Task 19) ────────────────────────────────────────────────
+
+describe('canAddHouse', () => {
+  it('is true for the owner of a house', () => {
+    expect(canAddHouse({}, { superAdmin: ['h1'] })).toBe(true);
+  });
+
+  it('is true for a new operator with no house yet', () => {
+    expect(canAddHouse({ potentialSuperAdmin: true }, null)).toBe(true);
+  });
+
+  it('is false for a manager or peer leader (an admin record that owns nothing)', () => {
+    expect(canAddHouse({ potentialSuperAdmin: false }, { superAdmin: [] })).toBe(false);
+  });
+
+  it('is false for a resident', () => {
+    expect(canAddHouse({}, null)).toBe(false);
+  });
+
+  it('is false until both are known', () => {
+    expect(canAddHouse(null, null)).toBe(false);
+    expect(canAddHouse(undefined, undefined)).toBe(false);
   });
 });
