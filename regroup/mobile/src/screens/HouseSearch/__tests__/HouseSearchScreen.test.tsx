@@ -563,6 +563,26 @@ describe('HouseSearchScreen', () => {
       await waitFor(() => expect(getByText(/San Francisco/)).toBeTruthy());
       expect(queryByText('100 Main St')).toBeNull();
     });
+
+    // Android draws edge to edge: without the bottom inset the last card's
+    // VIEW DETAILS button sits under the navigation bar, where nobody can tap it.
+    it('keeps the last card clear of the bottom safe-area inset', async () => {
+      const SafeArea = require('react-native-safe-area-context');
+      const insetSpy = jest
+        .spyOn(SafeArea, 'useSafeAreaInsets')
+        .mockReturnValue({ top: 0, right: 0, bottom: 48, left: 0 });
+      const permModule = require('../../../util/permissions');
+      permModule.checkAndRequestLocationPermissions.mockResolvedValueOnce(true);
+      mockSearchForHouses.mockResolvedValue({ [BASE_HOUSE.id]: BASE_HOUSE });
+      const { getByText, UNSAFE_getByType } = renderScreen();
+      await waitFor(() => expect(getByText('Sunrise Recovery')).toBeTruthy());
+      const { FlatList, StyleSheet } = require('react-native');
+      const list = UNSAFE_getByType(FlatList);
+      expect(StyleSheet.flatten(list.props.contentContainerStyle)).toEqual(
+        expect.objectContaining({ paddingBottom: 48 }),
+      );
+      insetSpy.mockRestore();
+    });
   });
 
   // ─── Filter button interaction ───────────────────────────────────────────────

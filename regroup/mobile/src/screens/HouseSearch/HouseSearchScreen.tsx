@@ -42,6 +42,7 @@ import { HouseSearchFilterForm } from './HouseSearchFilterForm';
 import { HouseListing } from '../../entities/HouseListing';
 import RatsAvatar from '../../components/rats-avatar';
 import { RatsFlatList } from '../../components/rats-flat-list';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RatsIcon } from '../../components/rats-icon';
 import HealthConstants from '../../constants/health';
 import { getAddressDisplay } from '../../util/address';
@@ -84,6 +85,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
   const { showPopover, setPopoverRef } = useNotification();
 
   const dispatch = useAppDispatch();
+  const bottomInset = useSafeAreaInsets().bottom;
 
   // Phase C removed the searchForHouses thunk and the searchedHouses /
   // searchingHouses slice fields it wrote to. Search state now lives in
@@ -204,9 +206,12 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
         updateCellsBatchingPeriod={100} // Increase time between renders
         windowSize={7} // Reduce the window size
         ItemSeparatorComponent={() => <View style={{ height: normalize(5) }} />}
+        // Android draws edge to edge: keep the last card's VIEW DETAILS
+        // button above the navigation bar.
+        contentContainerStyle={{ paddingBottom: bottomInset }}
       />
     );
-  }, [searchedHouses, searchTerm]);
+  }, [searchedHouses, searchTerm, bottomInset]);
 
   const renderDescription = useCallback((row: any) => {
     return row.description;
