@@ -54,6 +54,10 @@ const mockApplyBundleDiscountToSubscription = jest
 jest.mock("../../api/stripe", () => ({
   initializeCustomer: mockInitializeCustomer,
   initializeTierCustomer: mockInitializeTierCustomer,
+  // Checkout's Stripe-side checks: no unrecorded subscription here
+  // (covered in subscriptionCheckoutStripe.test.ts).
+  findLiveSubscriptionForUser: async () => null,
+  failedBeforeSubscription: () => false,
   updateSubscriptionItem: mockUpdateSubscriptionItem,
   getSubscriptionItem: mockGetSubscriptionItem,
   updateSubscriptionMetadata: mockUpdateSubscriptionMetadata,
@@ -79,7 +83,21 @@ const mockGetHousesByAttributes = jest.fn();
 const mockGetHouse = jest.fn(async (id: string) => ({ id, ownerId: "user-1" }));
 const mockUpsertSubscriptionDoc = jest.fn();
 
+// The checkout guard's transaction reads the user through mockGetUser, so each
+// test's mocked Firestore user is what the guard decides on.
+const mockTxUpdate = jest.fn();
 jest.mock("../../api/firestore", () => ({
+  userCollection: { doc: (id: string) => ({ id }) },
+  ratsFirestore: {
+    runTransaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+      fn({
+        get: async (ref: { id: string }) => {
+          const stored = await mockGetUser(ref.id);
+          return { exists: stored != null, data: () => stored };
+        },
+        update: (...args: unknown[]) => mockTxUpdate(...args),
+      }),
+  },
   getUser: mockGetUser,
   updateUser: mockUpdateUser,
   getHousesByAttributes: mockGetHousesByAttributes,
@@ -175,6 +193,27 @@ const fakeUser = {
   },
 };
 
+// The stored record createOperatorSubscription's checkout guard reads
+// (util/checkoutGuard). A new checkout is for an account that never had a
+// plan; fakeUser, with a live subscription, is refused.
+const freshUser = {
+  id: "user-1",
+  email: "user@test.com",
+  subscriptionMetadata: {
+    customerId: "",
+    subscriptionId: "",
+    items: { houseItemId: "", guestItemId: "" },
+    houses: {},
+    status: "",
+  },
+};
+// A canceled legacy (tier-less) plan: Reactivate refuses it, so checkout is
+// the way back, and the houses it recorded must survive the new subscription.
+const canceledLegacyUserWithHouses = {
+  ...fakeUser,
+  subscriptionMetadata: { ...fakeUser.subscriptionMetadata, status: "canceled" },
+};
+
 const fakeUserWith2Houses = {
   ...fakeUser,
   subscriptionMetadata: {
@@ -233,7 +272,7 @@ describe("createOperatorSubscription", () => {
       items: { houseItemId: "", guestItemId: "" },
       currentPeriodEnd: Date.now() + 1000000,
     };
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     mockInitializeTierCustomer.mockResolvedValue(fakeMeta);
     mockUpdateUser.mockResolvedValue(undefined);
 
@@ -255,7 +294,7 @@ describe("createOperatorSubscription", () => {
   });
 
   it("rejects checkout for a not-for-sale tier (Oxford Network, P-8)", async () => {
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     await expect(
       call(createOperatorSubscription, {
         user: fakeUser,
@@ -270,9 +309,9 @@ describe("createOperatorSubscription", () => {
   it("builds the requested plan, never the legacy Oxford shape from Firestore's oxfordEnabled", async () => {
     // Security: billing tier must be server-authoritative (Firestore), not client-supplied.
     const oxfordFirestoreUser = {
-      ...fakeUser,
+      ...freshUser,
       subscriptionMetadata: {
-        ...fakeUser.subscriptionMetadata,
+        ...freshUser.subscriptionMetadata,
         oxfordEnabled: true,
       },
     };
@@ -318,7 +357,7 @@ describe("createOperatorSubscription", () => {
       currentPeriodEnd: Date.now() + 1000000,
       status: "trialing",
     };
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     mockInitializeTierCustomer.mockResolvedValue(fakeMeta);
     mockUpdateUser.mockResolvedValue(undefined);
 
@@ -348,7 +387,7 @@ describe("createOperatorSubscription", () => {
       items: { houseItemId: "", guestItemId: "" },
       currentPeriodEnd: Date.now() + 1000000,
     };
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     mockInitializeTierCustomer.mockResolvedValue(fakeMeta);
     mockUpdateUser.mockResolvedValue(undefined);
 
@@ -378,7 +417,7 @@ describe("createOperatorSubscription", () => {
       currentPeriodEnd: periodEnd,
       status: "active",
     };
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     mockInitializeTierCustomer.mockResolvedValue(fakeMeta);
     mockUpdateUser.mockResolvedValue(undefined);
 
@@ -415,7 +454,7 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
 
   it("does not grant the claim when checkout is refused because tier billing is off", async () => {
     delete process.env.TIER_BILLING_ENABLED;
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
 
     await expect(
       call(createOperatorSubscription, {
@@ -433,7 +472,7 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
   it("grants the claim after a successful tier-billing subscription and reports it in the response", async () => {
     process.env.TIER_BILLING_ENABLED = "true";
     process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     mockInitializeTierCustomer.mockResolvedValue({
       customerId: "cus_tier",
       subscriptionId: "sub_tier",
@@ -461,7 +500,7 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
   it("writes a tier subscription through writeOperatorSubscription and returns the kept houses map", async () => {
     process.env.TIER_BILLING_ENABLED = "true";
     process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(canceledLegacyUserWithHouses);
     mockInitializeTierCustomer.mockResolvedValue({
       customerId: "cus_tier",
       subscriptionId: "sub_tier",
@@ -483,7 +522,7 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
 
   it("a checkout refused because tier billing is off writes no subscription", async () => {
     delete process.env.TIER_BILLING_ENABLED;
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
 
     await expect(
       call(createOperatorSubscription, {
@@ -501,7 +540,7 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
   it("does not grant a claim when subscription creation is rejected before Stripe is called", async () => {
     // Tier billing on, so the refusal is the not-for-sale tier, not billing off.
     process.env.TIER_BILLING_ENABLED = "true";
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
 
     await expect(
       call(createOperatorSubscription, {
@@ -516,7 +555,7 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
   });
 
   it("does not grant a claim when the Stripe call itself throws", async () => {
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     process.env.TIER_BILLING_ENABLED = "true";
     mockInitializeTierCustomer.mockRejectedValue(new Error("card_declined"));
 
@@ -533,7 +572,7 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
   });
 
   it("does not fail the callable when the claim grant reports false, and surfaces claimGranted: false", async () => {
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     process.env.TIER_BILLING_ENABLED = "true";
     mockInitializeTierCustomer.mockResolvedValue({
       customerId: "cus_new",
@@ -977,7 +1016,7 @@ describe("createSubscription — tier routing", () => {
   beforeEach(() => {
     process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = "price_test_pro_123";
     process.env.TIER_BILLING_ENABLED = "true";
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     mockInitializeTierCustomer.mockResolvedValue({
       ...fakeMetaBase,
       houseType: "traditional",
@@ -1316,7 +1355,7 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
   it("uses initializeTierCustomer (not legacy) when the flag is on", async () => {
     process.env.TIER_BILLING_ENABLED = "true";
     process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     mockInitializeTierCustomer.mockResolvedValue({
       customerId: "cus_tier",
       subscriptionId: "sub_tier",
@@ -1361,7 +1400,7 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
     process.env.TIER_BILLING_ENABLED = "true";
     process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
     const periodEnd = Date.now() + 7 * 86400000;
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     mockInitializeTierCustomer.mockResolvedValue({
       customerId: "cus_tier",
       subscriptionId: "sub_tier",
@@ -1397,7 +1436,7 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
   it("forwards an annual billingInterval to initializeTierCustomer", async () => {
     process.env.TIER_BILLING_ENABLED = "true";
     process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     mockInitializeTierCustomer.mockResolvedValue({
       customerId: "cus_tier",
       subscriptionId: "sub_tier",
@@ -1429,7 +1468,7 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
   it("rejects an invalid billingInterval with invalid-argument", async () => {
     process.env.TIER_BILLING_ENABLED = "true";
     process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
 
     await expect(
       call(createOperatorSubscription, {
@@ -1445,7 +1484,7 @@ describe("createOperatorSubscription — tier-billing flag branch", () => {
 
   it("refuses, before Stripe, when the flag is off (no legacy fallback)", async () => {
     process.env.TIER_BILLING_ENABLED = "false";
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
 
     await expect(
       call(createOperatorSubscription, {
@@ -1574,7 +1613,7 @@ describe("checkout and reactivation wait for sales to open", () => {
   });
 
   it("checkout refuses while sales are closed, before Stripe is called", async () => {
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
 
     await expect(
       call(createOperatorSubscription, {
@@ -1682,7 +1721,7 @@ describe("createOperatorSubscription — a failure after Stripe is reversed", ()
   beforeEach(() => {
     process.env.TIER_BILLING_ENABLED = "true";
     process.env.STRIPE_PRICE_TRAD_STARTER = "price_starter";
-    mockGetUser.mockResolvedValue(fakeUser);
+    mockGetUser.mockResolvedValue(freshUser);
     mockUpdateUser.mockResolvedValue(undefined);
     mockInitializeTierCustomer.mockResolvedValue({
       customerId: "cus_tier",

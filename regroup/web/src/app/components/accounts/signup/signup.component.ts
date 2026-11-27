@@ -14,6 +14,42 @@ import {
   TierSelection,
 } from 'src/app/entities/TierCatalog';
 
+export type AccountNotice = 'plan-exists' | 'plan-ended' | 'not-operator-account';
+
+/**
+ * Mirrors createOperatorSubscription's refusals (util/checkoutGuard.ts) from the
+ * signed-in account's record, so the page says so before asking for a card. The
+ * server decides; this only picks what to show.
+ */
+export function accountNoticeFor(
+  account: User,
+  catalogTiers: TierCatalogEntry[] | null,
+): AccountNotice | null {
+  const meta: any = account.subscriptionMetadata || {};
+  const status = meta.status || '';
+  if (status === 'canceled') {
+    // Reactivate restarts a tier still for sale; otherwise (no tier, or one no
+    // longer sold) checkout is the way back. Until the catalog loads, assume
+    // the plan can be reactivated: the card step waits for the catalog anyway.
+    const onSale =
+      !catalogTiers ||
+      catalogTiers.some(
+        (t) => t.houseType === meta.houseType && t.tier === meta.tier && t.availableForSale,
+      );
+    if (meta.tier && onSale) {
+      return 'plan-ended';
+    }
+  } else if (status === 'incomplete_expired') {
+    // Never started, so nothing bills and no trial was used: checkout is allowed.
+  } else if (status || meta.subscriptionId) {
+    return 'plan-exists';
+  }
+  if (account.isGuest || (account.isAdmin && !account.isSuperAdmin)) {
+    return 'not-operator-account';
+  }
+  return null;
+}
+
 @Component({
   selector: 'app-signup',
   templateUrl: './signup.component.html',
@@ -40,6 +76,13 @@ export class SignupComponent implements OnInit {
   // reaches the card form, so createOperatorSubscription is never called.
   salesClosed = false;
   trialDays: number | null = null;
+  // Signed in as a non-anonymous web user (launch item M9): no account step and
+  // no email-in-use check; the card step checks out this account, and a failure
+  // never deletes it. checkingAccount holds the account step until it's known.
+  account: User | null = null;
+  checkingAccount = true;
+  accountNotice: AccountNotice | null = null;
+  private catalogTiers: TierCatalogEntry[] | null = null;
 
   constructor(
     private auth: AuthService,
@@ -64,6 +107,10 @@ export class SignupComponent implements OnInit {
     return this.route.snapshot?.queryParamMap?.get('from') === 'app';
   }
 
+  get accountQueryParams() {
+    return this.fromApp ? { from: 'app' } : {};
+  }
+
   get valid() {
     return this.formGroup.valid;
   }
@@ -79,6 +126,7 @@ export class SignupComponent implements OnInit {
   };
 
   ngOnInit(): void {
+    this.loadSignedInAccount();
     this.formGroup = this.auth.buildAuthForm();
     this.formGroup.get('email').valueChanges.subscribe((value) => {
       this.error = '';
@@ -94,6 +142,8 @@ export class SignupComponent implements OnInit {
     this.tierCatalog.getCatalog().subscribe({
       next: (catalog) => {
         this.trialDays = catalog.trialDays > 0 ? catalog.trialDays : null;
+        this.catalogTiers = catalog.tiers;
+        this.refreshAccountNotice();
         if (catalog.salesOpen !== true) {
           this.salesClosed = true;
           this.pickerVisible = false;
@@ -123,6 +173,7 @@ export class SignupComponent implements OnInit {
         this.billingInterval = period === 'year' && match.prices.year ? 'year' : 'month';
         this.pickerVisible = false;
         this.resolvingTier = false;
+        this.startExistingCheckout();
       },
       error: () => {
         // The picker step shows the error in place of the picker: no plan,
@@ -133,6 +184,43 @@ export class SignupComponent implements OnInit {
         this.resolvingTier = false;
       },
     });
+  }
+
+  private async loadSignedInAccount(): Promise<void> {
+    if (!isPlatformBrowser(this.platformId)) {
+      // Server render: no Firebase session. The browser re-checks on load.
+      this.checkingAccount = false;
+      return;
+    }
+    try {
+      this.account = await this.auth.signedInAccount();
+    } catch {
+      this.account = null;
+    }
+    this.refreshAccountNotice();
+    this.checkingAccount = false;
+    this.startExistingCheckout();
+  }
+
+  private refreshAccountNotice(): void {
+    this.accountNotice = this.account ? accountNoticeFor(this.account, this.catalogTiers) : null;
+  }
+
+  /** Once both the account and a plan are known, go straight to the card step. */
+  private startExistingCheckout(): void {
+    if (!this.account || this.accountNotice || !this.selectedTier || this.salesClosed) {
+      return;
+    }
+    this.user = this.account;
+    this.signUpStarted = true;
+  }
+
+  async signOut(): Promise<void> {
+    await this.auth.logout();
+    this.account = null;
+    this.accountNotice = null;
+    this.user = undefined;
+    this.signUpStarted = false;
   }
 
   onTierSelected(selection: TierSelection): void {

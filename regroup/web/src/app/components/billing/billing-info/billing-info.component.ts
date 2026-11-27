@@ -33,6 +33,13 @@ export class BillingInfoComponent implements OnInit {
   @Input() houseType: HouseType;
   @Input() tier: string;
   @Input() billingInterval: BillingInterval = 'month';
+  // Signed in on /signup (launch item M9): check out this account instead of
+  // creating one. A failure never deletes it (AuthService.subscribeExistingOperator).
+  @Input() existingAccount = false;
+  @Input() fromApp = false;
+  // Set when the server refuses because the account has a plan, or had one:
+  // the page links to my-account, where Reactivate and Manage Billing live.
+  accountRefusal: 'plan-exists' | 'plan-ended' | null = null;
 
   elements: Elements;
   cardNumber: StripeElement;
@@ -146,8 +153,13 @@ export class BillingInfoComponent implements OnInit {
     this.setSubmitFn();
   }
 
+  get accountQueryParams() {
+    return this.fromApp ? { from: 'app' } : {};
+  }
+
   buy() {
     const name = this.stripeTest.get('name').value;
+    this.accountRefusal = null;
     this.setLoading(true);
     return (
       this.stripeService.stripe
@@ -165,7 +177,11 @@ export class BillingInfoComponent implements OnInit {
                 paymentMethod: result.paymentMethod,
               });
             } else {
-              await this.authService.subscribeOperator(
+              const subscribe = this.existingAccount
+                ? this.authService.subscribeExistingOperator
+                : this.authService.subscribeOperator;
+              await subscribe.call(
+                this.authService,
                 this.user,
                 result.paymentMethod.id,
                 this.houseType,
@@ -189,6 +205,8 @@ export class BillingInfoComponent implements OnInit {
           // message that hides why checkout failed.
           const message = (error && (error as any).message) || 'Payment failed. Please try again.';
           this.displayErrors('card-errors', { error: { message } });
+          const reason = error && (error as any).details && (error as any).details.reason;
+          this.accountRefusal = reason === 'plan-exists' || reason === 'plan-ended' ? reason : null;
           this.authService.clearCachedDetails();
         })
     );

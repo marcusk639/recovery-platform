@@ -13,7 +13,7 @@ jest.mock("stripe", () =>
   })),
 );
 
-import { reactivateSubscription } from "../../api/stripe";
+import { failedBeforeSubscription, reactivateSubscription } from "../../api/stripe";
 import OperatorSubscription from "../../entities/OperatorSubscription";
 
 describe("reactivateSubscription", () => {
@@ -75,5 +75,37 @@ describe("reactivateSubscription", () => {
     const fresh = await reactivateSubscription("cus_3", meta, "uid_3");
 
     expect(fresh.status).toBe("incomplete");
+  });
+
+  // The callable frees the checkout lock only for errors marked as happening
+  // before any subscription could exist; nothing else proves there is none.
+  describe("which errors it marks as before any subscription", () => {
+    const tierMeta = () =>
+      Object.assign(new OperatorSubscription(), {
+        tier: "standard",
+        houseType: "oxford",
+        customerId: "cus_4",
+        houses: {},
+      });
+
+    it("marks a tier with no configured price: Stripe is never called", async () => {
+      delete process.env.STRIPE_PRICE_OXFORD_STANDARD;
+      const error = await reactivateSubscription("cus_4", tierMeta(), "uid_4").catch(
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
+      expect(failedBeforeSubscription(error)).toBe(true);
+    });
+
+    it("does not mark a failed create, which may follow a subscription Stripe made", async () => {
+      process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_std";
+      mockSubscriptionsCreate.mockRejectedValue(new Error("timeout"));
+      const error = await reactivateSubscription("cus_4", tierMeta(), "uid_4").catch(
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(Error);
+      expect(failedBeforeSubscription(error)).toBe(false);
+    });
   });
 });

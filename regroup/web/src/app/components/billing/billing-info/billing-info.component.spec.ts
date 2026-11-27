@@ -103,4 +103,84 @@ describe('BillingInfoComponent', () => {
       delete (window as any).ReactNativeWebView;
     }
   });
+
+  describe('an existing, signed-in account (M9)', () => {
+    let authService: any;
+    const paysWithCard = () => {
+      component.initialSubscription = true;
+      component.existingAccount = true;
+      component.houseType = 'traditional';
+      component.tier = 'starter';
+      component.setLoading = () => {};
+      component.setBillingCompleted = jasmine.createSpy('setBillingCompleted');
+      (component as any).stripeService = {
+        stripe: {
+          createPaymentMethod: () =>
+            ({ toPromise: () => Promise.resolve({ paymentMethod: { id: 'pm_9' } }) }) as any,
+        },
+      };
+      component.stripeTest.get('name').setValue('Test User');
+    };
+
+    beforeEach(() => {
+      authService = TestBed.inject(AuthService) as any;
+      authService.subscribeOperator = jasmine.createSpy('subscribeOperator');
+      authService.subscribeExistingOperator = jasmine.createSpy('subscribeExistingOperator');
+      authService.clearCachedDetails = () => {};
+    });
+
+    it('checks out the signed-in account, never the create-account path', async () => {
+      authService.subscribeExistingOperator.and.resolveTo({});
+      paysWithCard();
+      await component.buy();
+      expect(authService.subscribeExistingOperator).toHaveBeenCalledWith(
+        component.user,
+        'pm_9',
+        'traditional',
+        'starter',
+        'month',
+      );
+      expect(authService.subscribeOperator).not.toHaveBeenCalled();
+      expect(component.setBillingCompleted).toHaveBeenCalledWith(true);
+    });
+
+    it('shows the refusal from the server and links to my-account when the account has a plan', async () => {
+      authService.subscribeExistingOperator.and.rejectWith({
+        code: 'functions/failed-precondition',
+        message: 'You already have a plan. Manage it from your account page.',
+        details: { reason: 'plan-exists' },
+      });
+      paysWithCard();
+      component.fromApp = true;
+      await component.buy();
+      fixture.detectChanges();
+
+      const el: HTMLElement = fixture.nativeElement;
+      expect(el.querySelector('#card-errors').textContent).toContain('You already have a plan');
+      const link = el.querySelector('[data-testid="go-to-account"]');
+      expect(link).not.toBeNull();
+      expect(component.accountQueryParams).toEqual({ from: 'app' });
+      expect(component.setBillingCompleted).not.toHaveBeenCalled();
+    });
+
+    it('points an ended plan to Reactivate', async () => {
+      authService.subscribeExistingOperator.and.rejectWith({
+        message: 'Your plan ended. Reactivate it from your account page.',
+        details: { reason: 'plan-ended' },
+      });
+      paysWithCard();
+      await component.buy();
+      fixture.detectChanges();
+      const link = fixture.nativeElement.querySelector('[data-testid="go-to-account"]');
+      expect(link.textContent).toContain('Reactivate');
+    });
+
+    it('shows no account link for other failures, such as a declined card', async () => {
+      authService.subscribeExistingOperator.and.rejectWith({ message: 'Your card was declined.' });
+      paysWithCard();
+      await component.buy();
+      fixture.detectChanges();
+      expect(fixture.nativeElement.querySelector('[data-testid="go-to-account"]')).toBeNull();
+    });
+  });
 });
