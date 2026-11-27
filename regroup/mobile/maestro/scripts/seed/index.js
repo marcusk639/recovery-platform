@@ -157,6 +157,9 @@ async function main() {
   }
 
   await db.doc(`houses/${d.HOUSE}/applications/test-app-1`).set(d.application(now));
+  await db
+    .doc(`houses/${d.OXFORD}/business-meetings/e2e-meeting-1`)
+    .set(d.businessMeeting(oxford.uid, now));
 
   // An unredeemed guest invitation with a known token, for the token-form deep
   // link flows (deep-link-invitation-token*.yaml). The doc id is the token

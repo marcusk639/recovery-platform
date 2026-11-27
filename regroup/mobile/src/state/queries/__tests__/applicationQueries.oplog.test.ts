@@ -138,13 +138,16 @@ describe('useSubmitApplication', () => {
       id = await result.current.mutateAsync({ houseId: 'h1', data });
     });
 
-    expect(id).toBe('auto-1');
+    // One application per applicant per house (owner, 2026-11-27): the id is
+    // `${houseId}_${uid}`, checked before the write.
+    expect(id).toBe('h1_u1');
     expect(getOpLog()).toEqual([
+      { op: 'get', path: 'houses/h1/applications/h1_u1' },
       {
         op: 'set',
-        path: 'houses/h1/applications/auto-1',
+        path: 'houses/h1/applications/h1_u1',
         data: {
-          id: 'auto-1',
+          id: 'h1_u1',
           houseId: 'h1',
           applicantUid: 'u1',
           ...data,

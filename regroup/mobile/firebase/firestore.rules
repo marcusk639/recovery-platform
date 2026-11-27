@@ -503,6 +503,14 @@ service cloud.firestore {
       allow read, update, delete: if isSameUser(resource.data.reporter);
     }
     
+    // An applicant's own applications, across houses: the landing screen's
+    // "Check my application" (owner, 2026-11-27). Only a query filtered on the
+    // caller's own applicantUid passes; staff list a house's applications
+    // through the houses/{houseId}/applications rule below.
+    match /{path=**}/applications/{appId} {
+      allow read: if signedIn() && resource.data.applicantUid == request.auth.uid;
+    }
+
     // A house's public listing (EMU-009, owner 2026-11-27): the only house data
     // a signed-out visitor (the app's anonymous session) may read, for house
     // search and the summary they apply from. Written only by the server
@@ -662,10 +670,42 @@ service cloud.firestore {
         allow write: if false;
       }
 
-      // Resident applications: applicant creates own; admin reads + updates status
+      // Resident applications: applicant creates own; admin reads + updates status.
+      // Any session may apply, the app's anonymous one included (P5 D1 = option
+      // (a)), so a create carries exactly the fields submitApplication writes
+      // (services/applications.ts), for this house, as pending: no operator
+      // fields (operatorNote, reviewedBy, ...) and no self-approval.
+      // An application's text field: absent, or a string of at most n characters.
+      function applicationText(d, field, n) {
+        return !(field in d) || (d[field] is string && d[field].size() <= n);
+      }
+
       match /applications/{appId} {
-        allow create: if signedIn() && request.resource.data.applicantUid == request.auth.uid;
+        // One application per applicant per house (owner, 2026-11-27): the id
+        // is `${houseId}_${uid}`, so a second create is an update, which only
+        // house admins may make.
+        allow create: if signedIn()
+          && appId == houseId + '_' + request.auth.uid
+          && exists(/databases/$(database)/documents/houses/$(houseId))
+          && request.resource.data.applicantUid == request.auth.uid
+          && request.resource.data.keys().hasOnly([
+            'id', 'houseId', 'applicantUid', 'applicantName', 'applicantEmail',
+            'applicantPhone', 'sobrietyDate', 'programType', 'currentSituation',
+            'references', 'status', 'createdAt', 'updatedAt'])
+          && request.resource.data.houseId == houseId
+          && request.resource.data.get('id', appId) == appId
+          && request.resource.data.status == 'pending'
+          && applicationText(request.resource.data, 'applicantName', 200)
+          && applicationText(request.resource.data, 'applicantEmail', 320)
+          && applicationText(request.resource.data, 'applicantPhone', 40)
+          && applicationText(request.resource.data, 'sobrietyDate', 40)
+          && applicationText(request.resource.data, 'programType', 40)
+          && applicationText(request.resource.data, 'currentSituation', 2000)
+          && applicationText(request.resource.data, 'references', 1000);
         allow read: if signedIn() && (resource.data.applicantUid == request.auth.uid || isAdmin([houseId]));
+        // The applicant's own slot, while it is still empty too: the app reads
+        // it before applying (resource is null then, so the rule above fails).
+        allow get: if signedIn() && appId == houseId + '_' + request.auth.uid;
         allow update: if isAdmin([houseId]);
         allow delete: if false;
       }

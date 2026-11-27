@@ -50,5 +50,15 @@ tags:
     visible:
       id: "intake-form-screen"
     timeout: 30000
+# ...pre-filled from the application (P5 Task 16): test-app-1 is "Test Applicant".
+- assertVisible:
+    id: "intake-first-name-input"
+    text: "Test"
+- assertVisible:
+    id: "intake-last-name-input"
+    text: "Applicant"
+- assertVisible:
+    id: "intake-email-input"
+    text: "test-applicant@rats-e2e.invalid"
 - runFlow:
     file: ../subflows/logout.yaml

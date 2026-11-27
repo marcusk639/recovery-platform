@@ -11,12 +11,8 @@ import {
   color,
   fontFamily,
 } from "../../styles/theme";
-import { Routes, AuthStackNavigationProp } from "../../navigation/types";
+import { Routes, AuthScreenNavigationProp } from "../../navigation/types";
 import Admin from "../../entities/Admin";
-import {
-  initializeInvitation,
-  setSignUpRole,
-} from "../../state/slices/userSlice";
 import { isNil, map } from "lodash";
 import { Admins } from "../../types";
 import RatsAvatar from "../../components/rats-avatar";
@@ -28,13 +24,13 @@ import { RatsIcon } from "../../components/rats-icon";
 import { houseImage } from "../../../assets/index";
 import WeekStatSummary from "../../components/week-stat-summary";
 import { camelCaseToDisplayForm } from "../../util/display";
-import { useAppSelector, useAppDispatch } from "../../state/store";
+import { useAppSelector } from "../../state/store";
 import { useSelectedHouse } from "../../hooks/useSelectedHouse";
 import { useHouseListing } from "../../state/queries/houseListingQueries";
 import { STAT_BUTTON_TEXT } from "../../styles/theme";
 
 interface Props {
-  navigation: AuthStackNavigationProp;
+  navigation: AuthScreenNavigationProp;
 }
 
 /** The share of beds open, 0 to 100, for the summary ring. */
@@ -66,8 +62,6 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     [id: string]: boolean;
   }>({});
 
-  const dispatch = useAppDispatch();
-
   // RTK Typed Selectors (no more 'as any')
   // A prospective resident is signed out (the app's anonymous session), so
   // this reads the house's public listing, not houses/{id}, which is for its
@@ -76,25 +70,16 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
   const { data: house } = useHouseListing(houseId);
   const admins = useAppSelector((state) => state.admin.houseAdmins);
 
-  const startSignUp = useCallback(() => {
+  // D1 = option (a) (P5 Task 16): a prospective resident applies on the
+  // anonymous session the app already holds. Self-signup stays on the landing
+  // screen's sign-up entry.
+  const startApplication = useCallback(() => {
     if (!house) return;
-    // Create a minimal Invitation object - actual values will be set during signup
-    const invitation = {
+    navigation.navigate(Routes.Apply, {
       houseId: house.id,
-      type: "guest" as const,
-      inviterId: "",
-      email: "",
-      initialPhase: "",
-      expirationDate: new Date(),
-      ownerId: "",
-      id: "",
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    dispatch(initializeInvitation(invitation));
-    dispatch(setSignUpRole("guest"));
-    navigation.navigate(Routes.Signup, {});
-  }, [dispatch, house, navigation]);
+      houseName: house.name,
+    });
+  }, [house, navigation]);
 
   const toggleCollapsible = useCallback(
     (user: Admin) => () => {
@@ -261,7 +246,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
       <RatsButton
         testID="apply-button"
         title="APPLY"
-        onPress={startSignUp}
+        onPress={startApplication}
         light
         style={STAT_BUTTON_TEXT}
       />

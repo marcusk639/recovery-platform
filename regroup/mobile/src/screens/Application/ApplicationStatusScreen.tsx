@@ -8,7 +8,10 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { color } from '../../styles/theme';
-import { useMyApplications } from '../../state/queries/applicationQueries';
+import {
+  useApplication,
+  useMyApplications,
+} from '../../state/queries/applicationQueries';
 import { ApplicationStatus } from '../../entities/Application';
 import { Routes } from '../../navigation/types';
 
@@ -29,10 +32,19 @@ const STATUS_COLOR: Record<ApplicationStatus, string> = {
 export default function ApplicationStatusScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { houseId, houseName } = route.params ?? {};
+  const { houseId, houseName, applicationId } = route.params ?? {};
 
-  const { data: applications, isLoading } = useMyApplications();
-  const thisApp = applications?.find(a => a.houseId === houseId);
+  // Read the application by its path when we have its id (ApplyScreen and the
+  // landing screen's "Check my application" pass it). Without one, find it in
+  // the list of my own applications (a collection-group read the rules allow
+  // only for the caller's applicantUid).
+  const byId = useApplication(houseId ?? '', applicationId ?? '');
+  const mine = useMyApplications(!applicationId);
+  const thisApp = applicationId
+    ? byId.data ?? undefined
+    : mine.data?.find(a => a.houseId === houseId);
+  const isLoading = applicationId ? byId.isLoading : mine.isLoading;
+  const loadFailed = applicationId ? byId.isError : mine.isError;
 
   if (isLoading) {
     return (
@@ -43,7 +55,7 @@ export default function ApplicationStatusScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} testID="application-status-screen">
       <Text style={styles.title}>
         {thisApp ? 'Your Application' : 'Application Submitted'}
       </Text>
@@ -52,6 +64,7 @@ export default function ApplicationStatusScreen() {
       {thisApp ? (
         <>
           <View
+            testID="application-status-badge"
             style={[
               styles.badge,
               { backgroundColor: STATUS_COLOR[thisApp.status] },
@@ -73,6 +86,10 @@ export default function ApplicationStatusScreen() {
             </Text>
           )}
         </>
+      ) : loadFailed ? (
+        <Text style={styles.body}>
+          Couldn't load your application's status. Try again later.
+        </Text>
       ) : (
         <Text style={styles.body}>
           Your application has been received. The house manager will review it
@@ -82,7 +99,9 @@ export default function ApplicationStatusScreen() {
 
       <TouchableOpacity
         style={styles.secondaryBtn}
-        onPress={() => navigation.navigate(Routes.HouseSearch)}>
+        onPress={() =>
+          navigation.navigate(Routes.PriorAuth, { screen: Routes.HouseSearch })
+        }>
         <Text style={styles.secondaryBtnText}>Apply to Another House</Text>
       </TouchableOpacity>
     </View>

@@ -261,4 +261,33 @@ function application(now) {
   };
 }
 
-module.exports = { application, documents, HOUSE, OXFORD, OXFORD_NEW, uidOf, iso, operator, resident, house, activity, payments };
+/** An upcoming Oxford business meeting, for oxford-business-meeting.yaml. */
+function businessMeeting(createdBy, now) {
+  return {
+    id: 'e2e-meeting-1',
+    houseId: OXFORD,
+    scheduledDate: iso(now + 7 * 86400000),
+    agenda: [],
+    attendees: [],
+    quorumMet: false,
+    minutes: '',
+    createdBy,
+    createdAt: iso(now),
+  };
+}
+
+module.exports = {
+  application,
+  businessMeeting,
+  documents,
+  HOUSE,
+  OXFORD,
+  OXFORD_NEW,
+  uidOf,
+  iso,
+  operator,
+  resident,
+  house,
+  activity,
+  payments,
+};

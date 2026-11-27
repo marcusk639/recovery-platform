@@ -1,0 +1,53 @@
+# OXF-007 — Oxford: a business meeting opens its detail screen.
+# Persona: oxford operator (owner of test-house-oxford). Seeded: one upcoming
+# meeting, e2e-meeting-1 (maestro/scripts/seed/docs.js businessMeeting()).
+# Before P5 Task 15 the row tap navigated to a route no navigator registered,
+# so nothing opened.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/oxford-business-meeting.yaml
+appId: ${APP_ID}
+tags:
+  - oxford
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-oxford-operator@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: ".*Oxford House Hub.*"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    text: ".*Oxford House Hub.*"
+- extendedWaitUntil:
+    visible:
+      id: "oxford-dashboard-content"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "oxford-meetings-card"
+    direction: DOWN
+    centerElement: true
+- tapOn:
+    id: "oxford-meetings-card"
+- extendedWaitUntil:
+    visible:
+      id: "business-meeting-row-e2e-meeting-1"
+    timeout: 30000
+- tapOn:
+    id: "business-meeting-row-e2e-meeting-1"
+# The detail screen shows the meeting's attendance section.
+- extendedWaitUntil:
+    visible:
+      id: "business-meeting-detail-screen"
+    timeout: 15000
+- assertVisible:
+    id: "meeting-attendance-section"
+- runFlow:
+    file: ../subflows/logout.yaml
