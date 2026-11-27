@@ -1,0 +1,39 @@
+# The landing screen's Demo link ("Use the demo", landing-demo-link) signs in
+# to the shared App Review demo account and opens the app on its demo house.
+# Before the fix it signed in but stayed on the landing screen (found
+# 2026-11-27 on the E2EEmulator iOS build): the sign-in remounts the root
+# navigator, and the link navigated with the screen's old navigation. It now
+# resets the root like the login form (src/navigation/signedInNavigation.ts).
+# Persona: the demo account, seeded by maestro/scripts/seed/demoHouse.js; its
+# email and password are in the app (InitialLandingForm.tsx), so none is passed.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/landing-demo-link.yaml
+appId: ${APP_ID}
+tags:
+  - demo
+  - auth
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+# Cold anonymous Firebase auth can take 10-15s on a simulator.
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+- tapOn:
+    id: "landing-demo-link"
+# The demo account is staff of its demo house: Main opens on the House tab.
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 60000
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-button"
+    timeout: 30000
+- assertNotVisible:
+    id: "initial-landing-screen"
+- runFlow:
+    file: ../subflows/logout.yaml
