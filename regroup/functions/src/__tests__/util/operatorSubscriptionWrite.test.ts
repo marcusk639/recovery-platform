@@ -64,6 +64,20 @@ describe('writeOperatorSubscription', () => {
     expect(written.houses).toEqual({});
   });
 
+  it('marks the account as an operator, so the app routes an existing account to setup', async () => {
+    // An existing account that checks out while signed in never had the
+    // signup's potentialSuperAdmin write; the app routes on that flag.
+    mockUsers.op = { isGuest: false, subscriptionMetadata: { status: '', houses: {} } };
+    await writeOperatorSubscription('op', { tier: 'starter', status: 'trialing' });
+    expect(mockUsers.op.potentialSuperAdmin).toBe(true);
+  });
+
+  it('clears the checkout lock by replacing the metadata', async () => {
+    mockUsers.op = { subscriptionMetadata: { status: '', checkoutStartedAt: 123, houses: {} } };
+    await writeOperatorSubscription('op', { tier: 'starter', status: 'trialing' });
+    expect(mockUsers.op.subscriptionMetadata).not.toHaveProperty('checkoutStartedAt');
+  });
+
   it('drops undefined fields, which Firestore update rejects', async () => {
     mockUsers.op = {};
     await writeOperatorSubscription('op', { tier: 'starter', currentPeriodEnd: undefined });

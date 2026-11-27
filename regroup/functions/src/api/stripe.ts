@@ -212,7 +212,13 @@ export const reactivateSubscription = async (
   if (subscriptionMetadata.tier) {
     const houseType = subscriptionMetadata.houseType as HouseType;
     const tier = subscriptionMetadata.tier as TierKey;
-    const price = resolveTierPriceId(houseType, tier);
+    let price: string;
+    try {
+      price = resolveTierPriceId(houseType, tier);
+    } catch (error) {
+      // Before Stripe is called, so the callable may free the checkout lock.
+      throw markedBeforeSubscription(error);
+    }
     const subscription = await stripe.subscriptions.create(
       {
         customer: customerId,
@@ -434,6 +440,51 @@ export const initializeCustomer = async (
   return initializeSubscription(customer.id, oxfordEnabled, userId);
 };
 
+// Errors initializeTierCustomer threw before any subscription could exist (the
+// customer or the card check failed). Checkout frees its lock only for these:
+// after the subscription create, an error doesn't prove there is none.
+const beforeSubscriptionErrors = new WeakSet<object>();
+const markedBeforeSubscription = (error: unknown): unknown => {
+  if (typeof error === "object" && error !== null) beforeSubscriptionErrors.add(error);
+  return error;
+};
+export const failedBeforeSubscription = (error: unknown): boolean =>
+  typeof error === "object" && error !== null && beforeSubscriptionErrors.has(error);
+
+const ENDED_STATUSES = new Set(["canceled", "incomplete_expired"]);
+
+/**
+ * A Stripe subscription for this operator that hasn't ended, or null: checkout's
+ * second check, for one the operator record doesn't show (a checkout whose
+ * record write failed and could not be cancelled). Every tier subscription
+ * carries the operator's userId in its metadata.
+ *
+ * First the customers with this email and their subscriptions: list calls are
+ * consistent, and a retry sends the same email. Then a metadata search, which
+ * finds one under another email but can lag writes by a minute or more.
+ */
+export const findLiveSubscriptionForUser = async (
+  userId: string,
+  email: string,
+): Promise<Stripe.Subscription | null> => {
+  if (!/^[A-Za-z0-9_-]+$/.test(userId)) {
+    throw new Error("findLiveSubscriptionForUser: unexpected user id");
+  }
+  const isLive = (sub: Stripe.Subscription) =>
+    sub.metadata?.userId === userId && !ENDED_STATUSES.has(sub.status);
+  const customers = await stripe.customers.list({ email, limit: 20 });
+  for (const customer of customers.data) {
+    const subs = await stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 20 });
+    const live = subs.data.find(isLive);
+    if (live) return live;
+  }
+  const found = await stripe.subscriptions.search({
+    query: `metadata['userId']:'${userId}'`,
+    limit: 20,
+  });
+  return found.data.find(isLive) ?? null;
+};
+
 /**
  * Tier-model customer initialization. Mirrors initializeCustomer but creates a
  * single-item flat-fee tier subscription and returns the single
@@ -451,13 +502,20 @@ export const initializeTierCustomer = async (
   // and subscription; Firestore keeps whichever finishes last, orphaning the
   // other to bill forever with nothing pointing at it.
   const day = idempotencyDay();
-  const customer = await createCustomer(
-    email,
-    paymentMethod,
-    `cust-${userId}-${day}`,
-  );
-  // Same guard as the legacy path: validate before the subscription exists.
-  await assertPaymentMethodUsable(stripe, customer.id, paymentMethod);
+  let customer: Awaited<ReturnType<typeof createCustomer>>;
+  try {
+    customer = await createCustomer(
+      email,
+      paymentMethod,
+      `cust-${userId}-${day}`,
+    );
+    // Same guard as the legacy path: validate before the subscription exists.
+    await assertPaymentMethodUsable(stripe, customer.id, paymentMethod);
+  } catch (error) {
+    throw markedBeforeSubscription(error);
+  }
+  // From here an error is ambiguous: a timeout on create, or a failure reading
+  // its result, can follow a subscription Stripe did create.
   const subscription = await createTierSubscription(
     customer.id,
     houseType,
