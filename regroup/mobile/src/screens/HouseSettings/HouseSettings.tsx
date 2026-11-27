@@ -35,6 +35,7 @@ import { useAppSelector, useAppDispatch } from '../../state/store';
 import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 import { useGuests } from '../../state/queries/guestQueries';
 import { useMayViewHouseMoney } from '../../state/queries/houseTierQueries';
+import { useRoleToken } from '../../context/auth';
 import { Routes, RootStackParamList } from '../../navigation/types';
 
 interface Props {
@@ -66,6 +67,9 @@ const HouseSettings: React.FC<Props> = (props) => {
   const dispatch = useAppDispatch();
   const { house, houseId } = useSelectedHouse();
   const mayViewHouseMoney = useMayViewHouseMoney(houseId ?? '');
+  // Stripe Connect setup is the owner's: the Connect callables refuse managers.
+  const token = useRoleToken();
+  const isOwner = !!houseId && token?.role?.[houseId] === 'superAdmin';
   const queryClient = useQueryClient();
 
   // Refetch on focus so returning from a sub-screen that mutated settings
@@ -228,7 +232,7 @@ const HouseSettings: React.FC<Props> = (props) => {
       // Owners and managers only: peer leaders see no house money, and the
       // rules refuse their reads of the house's payment records. Each of these
       // screens also refuses a peer leader itself (guardedScreens.ts).
-      ...(mayViewHouseMoney
+      ...(isOwner
         ? {
             payments: {
               action: () => navigation.navigate(Routes.StripeSettings),
@@ -237,6 +241,10 @@ const HouseSettings: React.FC<Props> = (props) => {
               iconName: 'credit-card',
               color: color.medium_grey,
             },
+          }
+        : {}),
+      ...(mayViewHouseMoney
+        ? {
             paymentDashboard: {
               action: () => navigation.navigate(Routes.PaymentDashboard),
               label: 'Payment Dashboard',
@@ -280,6 +288,7 @@ const HouseSettings: React.FC<Props> = (props) => {
       setupProps,
       navigation,
       mayViewHouseMoney,
+      isOwner,
     ],
   );
 

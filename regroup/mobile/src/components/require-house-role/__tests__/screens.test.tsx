@@ -52,6 +52,9 @@ const MONEY_SCREENS = [
   Routes.StripeSettings,
   Routes.AdminReport,
 ];
+// Stripe Connect setup is the owner's (OPS-042): the Connect callables accept
+// only the house's owners, so a manager is refused it too.
+const OWNER_SCREENS = [Routes.StripeSettings];
 
 const renderRoute = (route: string, params: Record<string, string> = {}) => {
   const Screen = guardedScreens[route];
@@ -70,7 +73,15 @@ describe('operator-only screens check the role themselves', () => {
     expect(GUARDED_ROUTE_RANKS).toEqual({
       ...Object.fromEntries(ADMIN_SCREENS.map((r) => [r, 'admin'])),
       ...Object.fromEntries(MONEY_SCREENS.map((r) => [r, 'manager'])),
+      ...Object.fromEntries(OWNER_SCREENS.map((r) => [r, 'owner'])),
     });
+  });
+
+  it.each(OWNER_SCREENS)('%s refuses a manager', (route) => {
+    mockRole = { 'house-1': 'admin' };
+    mockMoneyAccess = 'yes';
+    const { getByTestId } = renderRoute(route);
+    expect(getByTestId('no-access-screen')).toBeTruthy();
   });
 
   it.each([...ADMIN_SCREENS, ...MONEY_SCREENS])('%s refuses a resident', (route) => {
@@ -95,13 +106,16 @@ describe('operator-only screens check the role themselves', () => {
     expect(getByTestId('no-access-screen')).toBeTruthy();
   });
 
-  it.each(MONEY_SCREENS)('%s waits for the tier, showing nothing of the screen', (route) => {
+  it.each(MONEY_SCREENS.filter((r) => !OWNER_SCREENS.includes(r)))(
+    '%s waits for the tier, showing nothing of the screen',
+    (route) => {
     mockRole = { 'house-1': 'admin' };
     mockMoneyAccess = 'checking';
     const { getByTestId, queryByTestId } = renderRoute(route);
     expect(getByTestId('role-check-pending')).toBeTruthy();
     expect(queryByTestId('no-access-screen')).toBeNull();
-  });
+    },
+  );
 
   it('checks the house a route names, not the selected one', () => {
     // An admin of the selected house opening another house's application.

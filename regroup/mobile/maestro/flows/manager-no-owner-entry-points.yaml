@@ -1,0 +1,67 @@
+# OPS-042 — A manager (staff of the house, not its owner) doesn't see the
+# owner's entry points: no Add Home on Profile, and no Payments (Stripe
+# Connect setup) in House Settings, whose callables accept only owners. A
+# manager does see the house's money (the Payment Dashboard).
+# Persona: test-staff-manager, the admin claim on test-house-123 with a
+# house-roles tier of manager (maestro/scripts/seed/docs.js staff()).
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/manager-no-owner-entry-points.yaml
+appId: ${APP_ID}
+tags:
+  - manager
+  - roles
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-staff-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+# Profile: no Add Home (it is for owners and operators setting up).
+- tapOn:
+    id: "profile-tab"
+- extendedWaitUntil:
+    visible:
+      id: "profile-screen"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: ".*Delete account.*"
+    direction: DOWN
+    timeout: 15000
+- assertNotVisible: ".*Add Home.*"
+- assertVisible: ".*My Profile.*"
+# House Settings: the money entries a manager may use, but not Connect setup.
+- tapOn:
+    id: "house-tab"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-button"
+    timeout: 30000
+- tapOn:
+    id: "house-settings-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 30000
+# Payments would sit right above the Payment Dashboard.
+- scrollUntilVisible:
+    element:
+      text: ".*Payment Dashboard.*"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- assertVisible:
+    id: "balances-section"
+- assertNotVisible: ".*Connect Stripe to accept rent payments.*"
+- scrollUntilVisible:
+    element:
+      text: ".*Shift Log.*"
+    direction: DOWN
+    timeout: 20000
+- assertNotVisible: ".*Connect Stripe to accept rent payments.*"
+- runFlow:
+    file: ../subflows/logout.yaml

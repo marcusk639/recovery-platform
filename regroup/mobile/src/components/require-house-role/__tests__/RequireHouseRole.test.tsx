@@ -25,7 +25,7 @@ jest.mock('../../screen-header', () => {
   );
 });
 
-const renderGuard = (minRank: 'admin' | 'manager', houseId: string | null = 'h1') =>
+const renderGuard = (minRank: 'admin' | 'manager' | 'owner', houseId: string | null = 'h1') =>
   render(
     <RequireHouseRole houseId={houseId} minRank={minRank}>
       <Text testID="the-screen">screen</Text>
@@ -54,6 +54,18 @@ describe('RequireHouseRole', () => {
     mockUseHouseMoneyAccess.mockReturnValue('yes');
     expect(renderGuard('manager').getByTestId('the-screen')).toBeTruthy();
     expect(mockUseHouseMoneyAccess).toHaveBeenCalledWith('h1', true);
+  });
+
+  it('shows an owner-rank screen to the owner, without asking for the tier', () => {
+    mockToken = { claims: {}, role: { h1: 'superAdmin' } };
+    expect(renderGuard('owner').getByTestId('the-screen')).toBeTruthy();
+    expect(mockUseHouseMoneyAccess).toHaveBeenCalledWith('h1', false);
+  });
+
+  it('refuses an owner-rank screen to a manager', () => {
+    mockToken = { claims: {}, role: { h1: 'admin' } };
+    mockUseHouseMoneyAccess.mockReturnValue('yes');
+    expect(renderGuard('owner').getByTestId('no-access-screen')).toBeTruthy();
   });
 
   it('refuses a resident, with a way back', () => {

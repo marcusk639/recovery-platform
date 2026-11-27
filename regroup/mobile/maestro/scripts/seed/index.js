@@ -69,7 +69,10 @@ async function main() {
   const guestB = d.resident('guest-b', 0);
   // Not onboarded yet, for oxford-onboarding.yaml. The other Oxford house has finished.
   const oxfordNew = d.operator('oxford-new-operator', d.OXFORD_NEW, true, now);
-  const people = [manager, oxford, oxfordNew, guestA, guestB];
+  // Staff below the owner on the test house (OPS-042, the peer-leader flows).
+  const staffManager = d.staff('staff-manager', 'manager');
+  const peerLeader = d.staff('peer-leader', 'peerLeader');
+  const people = [manager, oxford, oxfordNew, guestA, guestB, staffManager, peerLeader];
 
   // 1. Accounts, claims and users docs, before houses: the subscription trigger reads them.
   for (const p of people) {
@@ -82,7 +85,7 @@ async function main() {
     await auth.setCustomUserClaims(p.uid, p.claims);
     await db.doc(`users/${p.uid}`).set(p.user);
   }
-  for (const p of [manager, oxford, oxfordNew]) {
+  for (const p of [manager, oxford, oxfordNew, staffManager, peerLeader]) {
     await db.doc(`admins/${p.uid}`).set(p.admin);
   }
   await sleep(1500);
@@ -110,6 +113,15 @@ async function main() {
     via: 'seed',
   };
   await db.doc(`house-roles/${d.HOUSE}_${manager.uid}`).set(ownerRole);
+  for (const p of [staffManager, peerLeader]) {
+    await db.doc(`house-roles/${d.HOUSE}_${p.uid}`).set({
+      tier: p.tier,
+      primary: false,
+      grantedBy: manager.uid,
+      grantedAt: d.iso(now),
+      via: 'seed',
+    });
+  }
   await db.doc(`house-roles/${d.OXFORD}_${oxford.uid}`).set(ownerRole);
   await db.doc(`houses/${d.OXFORD_NEW}`).set(
     d.house(d.OXFORD_NEW, 'E2E New Oxford House', oxfordNew.uid, now, {

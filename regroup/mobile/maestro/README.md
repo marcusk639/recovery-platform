@@ -84,6 +84,8 @@ The Storage emulator writes upload chunks under `$TMPDIR/firebase/storage/blobs`
 
 Payments (`seed/docs.js`): resident A has card payments of $22.22, dated 30 days after the seed, and $11.11, five days old. Resident B has $77.77. They are stored as the webhook writes them, with a Timestamp `createdAt`.
 
+Staff below the owner on the test house: `test-staff-manager@rats-e2e.com` (house-roles tier `manager`) and `test-peer-leader@rats-e2e.com` (tier `peerLeader`), each with the admin claim and an admins record that owns nothing (`seed/docs.js` `staff()`). `test-manager@rats-e2e.com` is the house's owner despite its name.
+
 Also seeded: a pending application `test-app-1` ("Test Applicant") in the test house, and one upcoming business meeting `e2e-meeting-1` in the Oxford house. `operator-guest-import.yaml` picks `maestro/fixtures/guests.csv` (two fictional residents, one with a quoted comma); `stage-picker-files.sh` stages it beside the PDF.
 
 ## Writing flows

@@ -15,8 +15,10 @@ import { color, fontSize, normalize } from '../../styles/theme';
  *   (rent spec §4.7, portal spec §5). An `admin` claim alone can't tell a
  *   manager from a peer leader, so the tier comes from myHouseTiers, the same
  *   source the payments rules' callerRank and the portal use.
+ * - `owner`: the house's owners only (the `superAdmin` claim), for Stripe
+ *   Connect setup: the Connect callables accept only the house's owners.
  */
-export type HouseRank = 'admin' | 'manager';
+export type HouseRank = 'admin' | 'manager' | 'owner';
 
 interface Props {
   houseId: string | null | undefined;
@@ -69,6 +71,7 @@ const RequireHouseRole: React.FC<Props> = ({ houseId, minRank, children }) => {
 
   if (!token?.claims) return <Checking />;
   if (!isStaff) return <NoAccessScreen />;
+  if (minRank === 'owner' && !isOwner) return <NoAccessScreen />;
   if (needsTier) {
     if (moneyAccess === 'checking') return <Checking />;
     if (moneyAccess === 'no') return <NoAccessScreen />;

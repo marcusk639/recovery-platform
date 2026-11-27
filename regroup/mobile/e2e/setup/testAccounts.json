@@ -62,6 +62,24 @@
       "subscriptionMetadata": {
         "oxfordEnabled": true
       }
+    },
+    {
+      "id": "staff-manager",
+      "email": "test-staff-manager@rats-e2e.com",
+      "firstName": "Morgan",
+      "lastName": "Staff",
+      "role": "admin",
+      "houseId": "test-house-123",
+      "phone": "555-0107"
+    },
+    {
+      "id": "peer-leader",
+      "email": "test-peer-leader@rats-e2e.com",
+      "firstName": "Parker",
+      "lastName": "Peer",
+      "role": "admin",
+      "houseId": "test-house-123",
+      "phone": "555-0108"
     }
   ]
 }

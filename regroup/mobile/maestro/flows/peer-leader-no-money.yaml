@@ -1,0 +1,68 @@
+# A peer leader (staff of the house below a manager) sees none of the house's
+# money: House Settings has no Payments, Payment Dashboard or Balances, and
+# Profile has no Add Home. Each money screen also refuses a peer leader
+# itself (RequireHouseRole, the Jest guard table), and the payments rules
+# check the tier. No path in the app leads a peer leader to those screens, so
+# this flow proves the entry points; the screens' own refusal is OPS-041/048.
+# Persona: test-peer-leader, the admin claim on test-house-123 with a
+# house-roles tier of peerLeader (maestro/scripts/seed/docs.js staff()).
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/peer-leader-no-money.yaml
+appId: ${APP_ID}
+tags:
+  - peer-leader
+  - roles
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-peer-leader@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- tapOn:
+    id: "house-settings-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 30000
+# The money entries would sit right above Reports. The tier comes from a
+# callable, so give it time before checking they stay hidden.
+- waitForAnimationToEnd:
+    timeout: 5000
+- scrollUntilVisible:
+    element:
+      text: ".*Reports.*"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- assertNotVisible: ".*Payment Dashboard.*"
+- assertNotVisible:
+    id: "balances-section"
+- assertNotVisible: ".*Connect Stripe to accept rent payments.*"
+- scrollUntilVisible:
+    element:
+      text: ".*Shift Log.*"
+    direction: DOWN
+    timeout: 20000
+- assertNotVisible: ".*Payment Dashboard.*"
+- assertNotVisible:
+    id: "balances-section"
+- tapOn:
+    text: "Done"
+- tapOn:
+    id: "profile-tab"
+- extendedWaitUntil:
+    visible:
+      id: "profile-screen"
+    timeout: 15000
+- scrollUntilVisible:
+    element:
+      text: ".*Delete account.*"
+    direction: DOWN
+    timeout: 15000
+- assertNotVisible: ".*Add Home.*"
+- runFlow:
+    file: ../subflows/logout.yaml

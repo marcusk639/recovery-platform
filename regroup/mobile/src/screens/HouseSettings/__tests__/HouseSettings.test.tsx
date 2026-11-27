@@ -43,6 +43,11 @@ jest.mock('../../../state/queries/houseQueries', () => ({
 // Owners and managers see the house's money; peer leaders do not (the rules
 // refuse their reads of the house's payment records).
 let mockMayViewHouseMoney = true;
+// The house's owner by default; Payments (Stripe Connect setup) is theirs only.
+let mockRole: Record<string, string> = { 'house-1': 'superAdmin' };
+jest.mock('../../../context/auth', () => ({
+  useRoleToken: () => ({ claims: {}, role: mockRole }),
+}));
 jest.mock('../../../state/queries/houseTierQueries', () => ({
   useMayViewHouseMoney: () => mockMayViewHouseMoney,
 }));
@@ -421,6 +426,8 @@ describe('HouseSettings', () => {
     // money screen too, and StripeSettings now refuses a peer leader itself.
     it('hides the Payment Dashboard and Payments from a peer leader, who may not see house money', () => {
       mockMayViewHouseMoney = false;
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
       try {
         const store = buildStore();
         const { queryByText, getByText } = renderScreen(store);
@@ -428,7 +435,23 @@ describe('HouseSettings', () => {
         expect(queryByText('Payments')).toBeNull();
         expect(getByText('Reports')).toBeTruthy();
       } finally {
+        mockRole = ownerRole;
         mockMayViewHouseMoney = true;
+      }
+    });
+
+    // OPS-042 (owner, 2026-11-27): a manager sees the house's money but not
+    // Stripe Connect setup, which the Connect callables keep for owners.
+    it('hides Payments (Connect setup) from a manager, who still sees the Payment Dashboard', () => {
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { queryByText, getByText } = renderScreen(store);
+        expect(queryByText('Payments')).toBeNull();
+        expect(getByText('Payment Dashboard')).toBeTruthy();
+      } finally {
+        mockRole = ownerRole;
       }
     });
 

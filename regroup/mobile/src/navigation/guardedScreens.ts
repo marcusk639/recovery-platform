@@ -35,7 +35,8 @@ const SCREENS: Record<string, [React.ComponentType<any>, HouseRank]> = {
   [Routes.StaffNotes]: [StaffNotesFeed, 'admin'],
   [Routes.BalanceDashboard]: [BalanceDashboard, 'manager'],
   [Routes.PaymentDashboard]: [PaymentDashboard, 'manager'],
-  [Routes.StripeSettings]: [StripeSettingsScreen, 'manager'],
+  // Stripe Connect setup: the Connect callables accept only the house's owners.
+  [Routes.StripeSettings]: [StripeSettingsScreen, 'owner'],
   [Routes.AdminReport]: [AdminReportScreen, 'manager'],
 };
 
