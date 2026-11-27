@@ -1,0 +1,48 @@
+# A resident of an active house opens their own documents (owner decision
+# 2026-11-26): GuestHome's My Documents card opens the same read-only list the
+# blocked-house limited view opens. Their own document shows; another
+# resident's doesn't; there is no upload and no delete.
+# Persona: guest-a, with one seeded document (seed/docs.js documents()).
+# Run: maestro/scripts/run-flows.sh guest-my-documents
+appId: ${APP_ID}
+tags:
+  - guest
+  - documents
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "my-documents-card"
+    direction: DOWN
+    centerElement: true
+- assertNotVisible:
+    id: "documents-card"
+- tapOn:
+    id: "my-documents-card"
+- extendedWaitUntil:
+    visible:
+      id: "document-list-screen"
+    timeout: 30000
+- extendedWaitUntil:
+    visible:
+      id: "document-row-e2e-doc-a"
+    timeout: 30000
+- assertNotVisible:
+    id: "document-row-e2e-doc-b"
+- assertNotVisible:
+    id: "upload-document-button"
+- assertNotVisible:
+    id: "document-delete-e2e-doc-a"
+- runFlow:
+    file: ../subflows/logout.yaml

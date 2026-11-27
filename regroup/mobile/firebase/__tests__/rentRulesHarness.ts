@@ -9,6 +9,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 const RULES_PATH = path.resolve(__dirname, '../firestore.rules');
+// `firebase emulators:exec` sets this; 127.0.0.1:8080 is the default.
+const [HOST, PORT] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080').split(':');
 
 export const HOUSE = 'house123';
 export const OWNER = 'operator';
@@ -16,8 +18,6 @@ export const ADMIN = 'houseAdmin';
 export const PEER = 'peerLeader';
 export const RESIDENT = 'resident';
 export const OTHER_RESIDENT = 'otherResident';
-
-const [EMULATOR_HOST, EMULATOR_PORT] = (process.env.FIRESTORE_EMULATOR_HOST ?? '127.0.0.1:8080').split(':');
 
 /** Registers the suite's hooks. Call once at the top of a suite file. */
 /** Each suite passes its own project id: jest runs suites in parallel on one emulator. */
@@ -28,9 +28,8 @@ export function useRentRulesEnv(projectId: string) {
       projectId,
       firestore: {
         rules: fs.readFileSync(RULES_PATH, 'utf8'),
-        // The emulator emulators:exec started (FIRESTORE_EMULATOR_HOST), as the newer suites do.
-        host: EMULATOR_HOST,
-        port: Number(EMULATOR_PORT),
+        host: HOST,
+        port: Number(PORT),
       },
     });
   });

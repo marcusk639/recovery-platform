@@ -69,13 +69,13 @@ function operator(id, houseId, oxford, now) {
   };
 }
 
-function resident(id, rentOwed) {
+function resident(id, rentOwed, houseId = HOUSE) {
   const a = account(id);
   const uid = uidOf(id);
   return {
     uid,
     email: a.email,
-    claims: { guest: { [HOUSE]: true } },
+    claims: { guest: { [houseId]: true } },
     user: {
       id: uid,
       uid,
@@ -86,7 +86,7 @@ function resident(id, rentOwed) {
       isAdmin: false,
       isSuperAdmin: false,
       isAnonymous: false,
-      houseId: HOUSE,
+      houseId,
       guestId: id,
       infoEntered: true,
       orgSetupCompleted: false,
@@ -96,7 +96,7 @@ function resident(id, rentOwed) {
     guest: {
       id,
       userId: uid,
-      houseId: HOUSE,
+      houseId,
       firstName: a.firstName,
       lastName: a.lastName,
       displayName: `${a.firstName} ${a.lastName}`,
@@ -248,6 +248,26 @@ function rentCharges(now) {
   ];
 }
 
+/**
+ * Document records for guest-my-documents.yaml: one filed under guest-a's own
+ * record and one under guest-b's, which guest-a must not see. Records only;
+ * the flow lists them and opens none (the emulator can't sign links).
+ */
+function documents(now) {
+  const record = (id, guestId) => ({
+    id,
+    houseId: HOUSE,
+    guestId,
+    fileName: `${id}.pdf`,
+    storagePath: `houses/${HOUSE}/guests/${guestId}/documents/${id}`,
+    fileType: 'pdf',
+    category: 'lease',
+    uploadedBy: uidOf('manager'),
+    createdAt: iso(now - 86400000),
+  });
+  return [record('e2e-doc-a', 'guest-a'), record('e2e-doc-b', 'guest-b')];
+}
+
 /** A pending application, for operator-applications.yaml. */
 function application(now) {
   return {
@@ -269,6 +289,7 @@ function application(now) {
 
 module.exports = {
   application,
+  documents,
   HOUSE,
   OXFORD,
   OXFORD_NEW,
