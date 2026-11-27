@@ -71,6 +71,8 @@ src/
     myHouseTiers.ts  the caller's own tier per house, for the operator portal's display
     resolveFailedPayment.ts  resolveFailedPaymentOffline: money staff mark a failed payment
                      resolved off-platform (status only; payments is server-written)
+    previewRentCharges.ts  what each current resident would be charged if the house saved
+                     a schedule and price (managers and above; read-only, rent spec §5)
   triggers/
     firestore/      Firestore document triggers. index.ts: notify, notifyNewHouseCreated,
                     setHouseSubscriptionStatusOnCreate, sendContactEmail,
@@ -79,7 +81,7 @@ src/
                     activityWeekSummary.ts  onActivityWritten (owns week-summaries)
                     adminProfileSync.ts     onUserAdminProfileSync (users name/phone -> admins)
                     applicationNotice.ts    notifyOperatorOnApplication
-                    guestRestamp.ts         onGuestLinkedRestamp
+                    guestRestamp.ts         onGuestLinkedRestamp (activities' residentUid, charges' guestUserId)
                     guestWrite.ts           onGuestWrite
                     houseRentSettings.ts    onHouseRentSettingsWrite
                     houseTombstone.ts       onHouseDeleted
@@ -125,7 +127,7 @@ src/
 
 ### Rent charges
 
-Oxford houses are never charged this way: their dues are the members' equal expense share (`ees-records`), and `rentSettingsOf` and the rules keep price charging off there. When a house's charging turned on lives in server-only `rentHouseStates/{houseId}`, never on the house doc. Its writer is `onHouseRentSettingsWrite` (`triggers/firestore/houseRentSettings.ts`, retried): on a change to `rentFrequency`, `monthlyRent`, `weeklyRent`, `timezone` or `houseType` it stamps the house-local start day when charging turns on and clears it when charging turns off, deciding from the current house doc so redelivered or out-of-order events converge. `src/rent/chargeResident.ts` is the only writer that adds rent to `rentOwed` (hourly `rentCharges` job, `onGuestWrite`, catch-up). Records live in server-only `rentAccounts` / `rentCharges`. Stop switch: set `config/rentCharges.paused = true` (stops every charge without a deploy); `npm run rent:reverse:dry-run -- --house=ID` / `rent:reverse:apply` reverses by record and refuses unless paused or the house's charging is off. A reversal frees those days to be charged again, so un-pausing (or turning the house's charging back on) re-charges them unless the cause is fixed first.
+Oxford houses are never charged this way: their dues are the members' equal expense share (`ees-records`), and `rentSettingsOf` and the rules keep price charging off there. When a house's charging turned on lives in server-only `rentHouseStates/{houseId}`, never on the house doc. Its writer is `onHouseRentSettingsWrite` (`triggers/firestore/houseRentSettings.ts`, retried): on a change to `rentFrequency`, `monthlyRent`, `weeklyRent`, `timezone` or `houseType` it stamps the house-local start day when charging turns on and clears it when charging turns off, deciding from the current house doc so redelivered or out-of-order events converge. `src/rent/chargeResident.ts` is the only writer that adds rent to `rentOwed` (hourly `rentCharges` job, `onGuestWrite`, catch-up). Records live in server-only `rentAccounts` / `rentCharges`; a charge's `guestUserId` is the record's account when charged, and `onGuestLinkedRestamp` fills an empty one when the record later links to an account (`rent/chargeAccountStamp.ts`, never moving a set one). The rules let managers and owners (rank >= 2) and the charged resident read them, as payments. Stop switch: set `config/rentCharges.paused = true` (stops every charge without a deploy); `npm run rent:reverse:dry-run -- --house=ID` / `rent:reverse:apply` reverses by record and refuses unless paused or the house's charging is off. A reversal frees those days to be charged again, so un-pausing (or turning the house's charging back on) re-charges them unless the cause is fixed first.
 
 Sales-open switch: `config/sales.open` (`util/salesSwitch.ts`) decides whether new tier subscriptions can start. Missing, non-boolean or unreadable means closed. `createOperatorSubscription` and the canceled branch of `reactivateOperatorSubscription` read it on every call and refuse while it's closed; `getTierCatalog` reports it as `salesOpen` (cached 60s) with `trialDays`. Closed in production from the backend deploy until launch step 10.5; open on staging and the emulators (the payment suite's `globalSetup` opens it). Set it with `npm run switch:set`.
 

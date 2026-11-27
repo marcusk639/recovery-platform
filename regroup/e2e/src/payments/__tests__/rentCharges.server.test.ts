@@ -7,7 +7,13 @@
 // calendar months, dates in the house's zone (none set reads as New York).
 import type Stripe from 'stripe';
 import { commitAs, encodeFields, updateFields } from '../harness/firestoreRest';
-import { seedOperator, seedResident, SeededOperator, SeededResident } from '../harness/fixtures';
+import {
+  adminDb,
+  seedOperator,
+  seedResident,
+  SeededOperator,
+  SeededResident,
+} from '../harness/fixtures';
 import { docData } from '../harness/flows';
 import { assertSafeTarget } from '../harness/guards';
 import { runRentJob } from '../harness/rentJob';
@@ -241,4 +247,29 @@ test('CHARGE-008: a resident already in the house when charging turns on owes no
   });
   expect(await chargesOf(r)).toEqual([]);
   expect((await guest(r)).rentOwed).toBe(0);
+});
+
+// Owner decision 2026-11-26: a record staff entered with no account (intake) is
+// charged from the day it joins; when it later links to the resident's own account,
+// onGuestLinkedRestamp stamps that account on the charges, so the resident's history
+// (the rentCharges read rule checks guestUserId) shows them.
+test('CHARGE-009: charges made before a record links to an account get that account when it links', async () => {
+  const house = await houseChargingNow(op, WEEKLY);
+  const r = await seedResident(house, { guest: { userId: '' } });
+  const [charge] = await waitFor(
+    () => chargesOf(r),
+    (cs) => cs.length === 1,
+  );
+  expect(charge).toMatchObject({ guestUserId: null, amountCents: weekFrom(today()) });
+
+  await adminDb().doc(`guests/${r.guestId}`).update({ userId: r.uid });
+  const [stamped] = await waitFor(
+    () => chargesOf(r),
+    (cs) => cs[0]?.guestUserId === r.uid,
+  );
+  expect(stamped).toMatchObject({
+    id: charge.id,
+    guestUserId: r.uid,
+    amountCents: charge.amountCents,
+  });
 });

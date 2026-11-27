@@ -35,7 +35,7 @@ jest.mock('../../../state/queries/guestQueries', () => ({
   useUpdateGuest: () => ({ mutateAsync: mockMutateAsync }),
 }));
 jest.mock('../../../state/queries/houseTierQueries', () => ({
-  useMayEditRentMoney: (houseId: string) => mockMayEdit(houseId),
+  useMayEditGuestMoney: (guest: { houseId?: string } | null) => mockMayEdit(guest?.houseId),
 }));
 
 function renderForm() {

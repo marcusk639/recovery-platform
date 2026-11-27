@@ -1,0 +1,322 @@
+# Operator: turn on rent charges, admit a resident mid-week, collect the prorated rent.
+#
+# Rent spec §8 (required): a manager sets Weekly $175 in House Settings → Rent;
+# the preview shows each existing resident $0 now and a full first charge next
+# Monday (rent spec §2). A resident admitted through Intake today is charged
+# only for the days left this week (Monday to Sunday, America/Chicago): the
+# expected cents come from maestro-js/rent-expectations.js, the server's
+# formula. Staff see it as "$X due" on the profile and record its payment, and
+# the balance goes to $0. Then an own rate of $150 a week (launch plan Task 23)
+# is stored in cents with the schedule, and the preview's next charge for that
+# resident uses it.
+#
+# The intake record has no account, so it can't pay by card in the app; the
+# payment here is a manual (Zelle) record, as in operator-manual-payment.yaml.
+# Card payment of a balance is guest-rent-payment.yaml.
+# Needs E2E_STRIPE_ACCOUNT_ID at seed time (the payment dashboard loads Stripe).
+# Leaves the seeded house charging weekly: run-flows.sh re-seeds per run.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/operator-rent-setup.yaml
+appId: ${APP_ID}
+tags:
+  - operator
+  - payments
+  - rent
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-manager@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- runScript:
+    file: ../scripts/maestro-js/rent-expectations.js
+# ── 1. House Settings → Rent: Weekly, $175, preview, confirm ─────────────────
+- tapOn:
+    id: "house-settings-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      id: "rent-settings-section"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    id: "rent-settings-section"
+- extendedWaitUntil:
+    visible:
+      id: "rent-settings-screen"
+    timeout: 20000
+- assertVisible:
+    text: "Rent charging is off.*"
+- tapOn:
+    id: "rent-schedule-weekly"
+- tapOn:
+    id: "rent-price-input"
+- inputText: "175"
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          text: "Price a week.*"
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+- tapOn:
+    id: "rent-preview-button"
+- extendedWaitUntil:
+    visible:
+      id: "rent-preview-list"
+    timeout: 30000
+# Residents already here start at the next full period (rent spec §2).
+- assertVisible:
+    id: "rent-preview-row-guest-a"
+- assertVisible:
+    text: ".*\\$0\\.00 now · first charge \\$175\\.00 on ${output.nextMonday}.*"
+- scrollUntilVisible:
+    element:
+      id: "rent-confirm-button"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "rent-confirm-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 20000
+# ── 2. Intake a resident today ────────────────────────────────────────────────
+- launchApp:
+    stopApp: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: ".*Resident Intake.*"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn: ".*Resident Intake.*"
+- extendedWaitUntil:
+    visible:
+      id: "intake-form-screen"
+    timeout: 20000
+- tapOn:
+    id: "intake-first-name-input"
+- inputText: "Aaron"
+- tapOn:
+    id: "intake-last-name-input"
+- inputText: "Rentcheck"
+- tapOn:
+    id: "intake-email-input"
+- inputText: "aaron-rentcheck@rats-e2e.com"
+- hideKeyboard:
+    optional: true
+- repeat:
+    times: 3
+    commands:
+      - scrollUntilVisible:
+          element:
+            id: "intake-continue-button"
+          direction: DOWN
+          timeout: 10000
+      - tapOn:
+          id: "intake-continue-button"
+- scrollUntilVisible:
+    element:
+      id: "intake-submit-button"
+    direction: DOWN
+    timeout: 10000
+- tapOn:
+    id: "intake-submit-button"
+- extendedWaitUntil:
+    visible:
+      text: "OK"
+    timeout: 20000
+- tapOn: "OK"
+# ── 3. The server charged the days left this week, in cents ──────────────────
+- retry:
+    maxRetries: 5
+    commands:
+      - runScript:
+          file: ../scripts/maestro-js/rent-expectations.js
+          env:
+            EMAIL: aaron-rentcheck@rats-e2e.com
+      - assertTrue: ${output.guestId !== '' && output.rentOwed === output.expectedCents}
+# ── 4. Staff see it on the profile ("$X due") and set an own rate ────────────
+# Relaunch, so the profile opens on the first resident by name: Aaron.
+- launchApp:
+    stopApp: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 30000
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: ".*\\$${output.expectedDollars} due.*"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- scrollUntilVisible:
+    element:
+      id: "custom-rent-input"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    id: "custom-rent-input"
+- inputText: "150"
+- hideKeyboard:
+    optional: true
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          text: "Rent rate"
+# Hiding the keyboard scrolls the profile back: bring Save into view first.
+- scrollUntilVisible:
+    element:
+      id: "custom-rent-save"
+    direction: DOWN
+    centerElement: true
+    timeout: 10000
+- tapOn:
+    id: "custom-rent-save"
+- extendedWaitUntil:
+    visible:
+      text: "Own rate: \\$150\\.00 a week"
+    timeout: 20000
+- runScript:
+    file: ../scripts/maestro-js/rent-expectations.js
+    env:
+      EMAIL: aaron-rentcheck@rats-e2e.com
+- assertTrue: ${output.customRentCents === 15000 && output.customRentFrequency === 'weekly'}
+# ── 5. Record the payment of exactly the prorated amount ─────────────────────
+- launchApp:
+    stopApp: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- tapOn:
+    id: "house-settings-button"
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-screen"
+    timeout: 30000
+- scrollUntilVisible:
+    element:
+      text: ".*Payment Dashboard.*"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    text: ".*Payment Dashboard.*"
+- extendedWaitUntil:
+    visible:
+      id: "manual-payment-fab"
+    timeout: 60000
+- tapOn:
+    id: "manual-payment-fab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-pill-${output.guestId}"
+    timeout: 15000
+- tapOn:
+    id: "guest-pill-${output.guestId}"
+- tapOn:
+    text: "Amount ($)"
+- inputText: ${output.expectedDollars}
+# iOS: the decimal pad has no return key, so tap the modal title. Android: no
+# hideKeyboard here, which closes the modal itself (back press); tapping the
+# method below closes the keyboard.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          text: "Record Manual Payment"
+- tapOn:
+    text: "Zelle"
+- tapOn:
+    text: "Record"
+- extendedWaitUntil:
+    notVisible:
+      id: "guest-pill-${output.guestId}"
+    timeout: 20000
+- retry:
+    maxRetries: 5
+    commands:
+      - runScript:
+          file: ../scripts/maestro-js/rent-expectations.js
+          env:
+            EMAIL: aaron-rentcheck@rats-e2e.com
+      - assertTrue: ${output.rentOwed === 0}
+# ── 6. The next charge uses the own rate: $150.00 next Monday ────────────────
+- launchApp:
+    stopApp: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "main-app-screen"
+    timeout: 30000
+- tapOn:
+    id: "house-settings-button"
+- scrollUntilVisible:
+    element:
+      id: "rent-settings-section"
+    direction: DOWN
+    centerElement: true
+    timeout: 20000
+- tapOn:
+    id: "rent-settings-section"
+- extendedWaitUntil:
+    visible:
+      text: "Weekly: \\$175\\.00 a week"
+    timeout: 20000
+- tapOn:
+    id: "rent-preview-button"
+- extendedWaitUntil:
+    visible:
+      id: "rent-preview-row-${output.guestId}"
+    timeout: 30000
+- assertVisible:
+    text: ".*first charge \\$150\\.00 on ${output.nextMonday}.*"
+- assertVisible:
+    text: "Their own rate"
+- tapOn:
+    id: "rent-done-button"
+- launchApp:
+    stopApp: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "house-tab"
+    timeout: 30000
+- runFlow:
+    file: ../subflows/logout.yaml

@@ -33,6 +33,8 @@ import { useSelectedHouse } from '../../hooks/useSelectedHouse';
 import { usePaymentHistoryRecords } from './usePaymentHistoryRecords';
 import { useAppSelector } from '../../state/store';
 import { PAYMENT_TONE_COLOR, paymentDisplayStatus } from '../../util/paymentStatus';
+import ChargeRow from './ChargeRow';
+import { buildHistoryItems, HistoryItem } from './paymentHistoryItems';
 
 const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
 
@@ -48,7 +50,7 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
   const { house, isLoading: loadingHouse } = useSelectedHouse();
   const signedInUid = useAppSelector(s => s.user.user?.id);
 
-  const { payments, loading, error } = usePaymentHistoryRecords(
+  const { payments, charges, chargesError, loading, error } = usePaymentHistoryRecords(
     guest,
     house,
     signedInUid,
@@ -68,7 +70,7 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
         guestId,
         houseId: house?.id ?? '',
       }));
-      const csv = exportPaymentHistoryCSV(rentPayments, guestNames);
+      const csv = exportPaymentHistoryCSV(rentPayments, guestNames, charges);
       await Share.share({ message: csv, title: 'Payment History Export' });
     } catch (err) {
       logException(err);
@@ -76,7 +78,12 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
   };
 
 
-  const renderItem = useCallback(({ item }: { item: RentPayment }) => {
+  // Rent charges sit between the payments by date (rent spec §4.5).
+  const items = buildHistoryItems(payments, charges);
+
+  const renderItem = useCallback(({ item: entry }: { item: HistoryItem }) => {
+    if (entry.kind === 'charge') return <ChargeRow charge={entry.charge} />;
+    const item: RentPayment = entry.payment;
     const { label, tone } = paymentDisplayStatus(item);
     const refundedCents = item.refundedAmountCents ?? 0;
     const createdMs = toDateSafe(item.createdAt)?.getTime();
@@ -178,7 +185,12 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
   return (
     <View testID="payment-history-screen" style={styles.container}>
       <ScreenHeader renderBackButton header="Payment History" />
-      {payments.length === 0 ? (
+      {chargesError ? (
+        <View testID="rent-charges-error" style={styles.chargesNote}>
+          <RatsText translate={false} text={chargesError} style={styles.errorText} />
+        </View>
+      ) : null}
+      {items.length === 0 ? (
         <View testID="payment-history-empty" style={styles.centered}>
           <RatsText
             translate={false}
@@ -196,10 +208,10 @@ const PaymentHistory: React.FC<Props> = ({ navigation }) => {
             testID="export-csv-button"
           />
           <FlatList
-            data={payments}
-            keyExtractor={item => item.id}
+            data={items}
+            keyExtractor={item => item.key}
             renderItem={renderItem}
-            extraData={payments}
+            extraData={items}
             contentContainerStyle={styles.listContent}
           />
         </>
@@ -266,6 +278,10 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: fontSize.extraSmall,
     color: color.white,
+  },
+  chargesNote: {
+    paddingHorizontal: normalize(12),
+    paddingTop: normalize(8),
   },
   centered: {
     flex: 1,
