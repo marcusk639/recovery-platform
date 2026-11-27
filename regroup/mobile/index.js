@@ -21,6 +21,7 @@ import './i18n';
 import { NavigationContainer } from '@react-navigation/native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { navigationRef } from './src/navigation/service';
+import { linkingConfig } from './src/navigation/linking';
 import { RatsKeyboardProvider } from './src/components/rats-keyboard';
 
 // An e2e emulator build whose emulators do not answer must stop, not carry on.
@@ -54,7 +55,7 @@ ensureNotificationChannels();
 const root = () => (
   <Provider store={store}>
     <QueryClientProvider client={queryClient}>
-      <NavigationContainer ref={navigationRef}>
+      <NavigationContainer ref={navigationRef} linking={linkingConfig}>
         <GestureHandlerRootView style={{ flex: 1 }}>
           <RatsKeyboardProvider>
             <App />

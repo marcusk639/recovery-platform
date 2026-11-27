@@ -92,6 +92,13 @@ jest.mock('../../../components/ErrorBoundary', () => {
   return ({ children }: any) => <View>{children}</View>;
 });
 
+// ── VersionGate mock (pass-through: its own suite covers it) ─────────────────
+
+jest.mock('../../../components/version-gate/VersionGate', () => {
+  const { View } = require('react-native');
+  return ({ children }: any) => <View>{children}</View>;
+});
+
 // ── Context providers mock ────────────────────────────────────────────────────
 
 jest.mock('../../../context', () => ({

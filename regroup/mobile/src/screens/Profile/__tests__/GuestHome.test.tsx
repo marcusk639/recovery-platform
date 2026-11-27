@@ -710,6 +710,45 @@ describe("GuestHome", () => {
       expect(queryByTestId("make-payment-button")).toBeNull();
     });
   });
+
+  // ─── My Documents (resident, own record) ──────────────────────────────────
+  // Owner decision 2026-11-26: residents of an active house open their own
+  // documents here, the same read-only list the limited view opens. The
+  // store's signed-in user is "admin-1".
+  describe("my documents (resident only)", () => {
+    const OWN = { ...BASE_GUEST, userId: "admin-1" };
+
+    it("shows a resident My Documents on their own record", () => {
+      mockIsAdmin.mockReturnValue(false);
+      const { getByTestId, queryByTestId } = renderScreen({ selectedGuest: OWN });
+      expect(getByTestId("my-documents-card")).toBeTruthy();
+      expect(queryByTestId("documents-card")).toBeNull();
+    });
+
+    it("opens their own documents, as the limited view does", () => {
+      mockIsAdmin.mockReturnValue(false);
+      const { getByTestId } = renderScreen({ selectedGuest: OWN });
+      fireEvent.press(getByTestId("my-documents-card"));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith("documents", {
+        houseId: "house-1",
+        guestId: "guest-1",
+        title: "My Documents",
+      });
+    });
+
+    it("doesn't show it on a record that isn't theirs", () => {
+      mockIsAdmin.mockReturnValue(false);
+      const { queryByTestId } = renderScreen();
+      expect(queryByTestId("my-documents-card")).toBeNull();
+    });
+
+    it("doesn't show it to staff, who keep their Documents card", () => {
+      mockIsAdmin.mockReturnValue(true);
+      const { getByTestId, queryByTestId } = renderScreen({ selectedGuest: OWN });
+      expect(queryByTestId("my-documents-card")).toBeNull();
+      expect(getByTestId("documents-card")).toBeTruthy();
+    });
+  });
 });
 
 describe("Rent reminder notification scheduling", () => {

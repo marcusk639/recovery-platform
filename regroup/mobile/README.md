@@ -59,7 +59,7 @@ src/
   entities/      # Data models (Guest, House, Officer, Vote, etc.)
   hooks/         # Custom React hooks
   context/       # React contexts (Auth, Data, Modal, Notification)
-  navigation/    # React Navigation setup + deep linking
+  navigation/    # React Navigation setup + allowlisted deep linking (linking.ts)
   util/          # Utilities (compliance, formatting, permissions)
 e2e/             # E2E seed fixtures (e2e/setup/) and test-credential notes
 maestro/         # Maestro flows, subflows and seed/run scripts

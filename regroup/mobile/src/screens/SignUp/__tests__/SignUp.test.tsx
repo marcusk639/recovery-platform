@@ -12,6 +12,8 @@
  *  - Renders SignUpWebView instead of the form for superAdmin role
  *  - Error from state is passed through to child form (via stateError)
  *  - Expired invitation sets error state
+ *  - A signed-in user with an invitation sees the accept / continue section,
+ *    not the sign-up form (launch P5 Task 3)
  */
 
 // ─── Navigation mock ──────────────────────────────────────────────────────────
@@ -143,6 +145,14 @@ jest.mock('../SignUpForm', () => {
         <Text testID="signup-form-error">{error.message}</Text>
       ) : null}
     </View>
+  );
+});
+
+// Stub the signed-in invitation section (tested in SignedInInvitation.test.tsx)
+jest.mock('../SignedInInvitation', () => {
+  const { View, Text } = require('react-native');
+  return ({ notice }: any) => (
+    <View testID="signed-in-invitation">{notice ? <Text>{notice}</Text> : null}</View>
   );
 });
 
@@ -359,6 +369,52 @@ describe('SignUpScreen', () => {
       };
       const { getByTestId } = renderScreen({ invitation });
       expect(getByTestId('signup-screen')).toBeTruthy();
+    });
+
+    const invitation = {
+      id: '',
+      email: 'g@rats-e2e.com',
+      houseId: 'house-1',
+      type: 'admin',
+      ownerId: '',
+      token: 'tok-1',
+    };
+
+    it('shows the accept / continue section instead of the form to a signed-in user', () => {
+      const { getByTestId, queryByTestId } = renderScreen({
+        invitation,
+        user: { uid: 'u1', email: 'g@rats-e2e.com', isGuest: true, isAnonymous: false },
+      });
+      expect(getByTestId('signed-in-invitation')).toBeTruthy();
+      expect(queryByTestId('signup-form')).toBeNull();
+    });
+
+    it('keeps the sign-up form (where a later step\'s error shows) for a user created by this sign-up', async () => {
+      const store = buildStore({ invitation, user: { uid: 'anon', isAnonymous: true } });
+      const { getByTestId, queryByTestId } = render(
+        <Provider store={store}>
+          <SignUpScreen navigation={mockNavigation} route={mockRoute} />
+        </Provider>,
+      );
+      // createUser converts the anonymous account; a later step (redeem or
+      // createGuest) then fails and the form shows the error.
+      await act(async () => {
+        store.dispatch({
+          type: 'user/createUser/fulfilled',
+          payload: { uid: 'anon', email: 'g@rats-e2e.com', isAnonymous: false },
+        });
+      });
+      expect(getByTestId('signup-form')).toBeTruthy();
+      expect(queryByTestId('signed-in-invitation')).toBeNull();
+    });
+
+    it('shows the sign-up form to an anonymous user with an invitation', () => {
+      const { getByTestId, queryByTestId } = renderScreen({
+        invitation,
+        user: { uid: 'anon', isAnonymous: true },
+      });
+      expect(getByTestId('signup-form')).toBeTruthy();
+      expect(queryByTestId('signed-in-invitation')).toBeNull();
     });
   });
 });
