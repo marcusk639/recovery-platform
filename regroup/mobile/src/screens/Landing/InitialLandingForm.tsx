@@ -2,16 +2,20 @@ import React, { useState } from "react";
 import { withFormik, Field, FormikProps } from "formik";
 import { useNavigation } from "@react-navigation/native";
 import * as yup from "yup";
-import { View, TouchableOpacity, TextStyle, ViewStyle } from "react-native";
+import {
+  Alert,
+  View,
+  TouchableOpacity,
+  TextStyle,
+  ViewStyle,
+} from "react-native";
 import {
   AuthScreenNavigationProp,
   AuthStackParamList,
   Routes,
 } from "../../navigation/types";
-import {
-  navigateAuthStackRoute,
-  navigateToMain,
-} from "../../navigation/authNavigation";
+import { navigateAuthStackRoute } from "../../navigation/authNavigation";
+import { resetToSignedInRoute } from "../../navigation/signedInNavigation";
 import RatsRadioButtonGroup from "../../components/rats-radio-button-group";
 import RatsButton from "../../components/rats-button/rats-button";
 import {
@@ -27,13 +31,22 @@ import { RatsHR } from "../../components/rats-horizontal-rule";
 import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
 import { useAppSelector, useAppDispatch } from "../../state/store";
 import { User } from "../../entities/User";
+import { logException } from "../../util/logging";
+
+export const DEMO_SIGN_IN_FAILED_MESSAGE =
+  "Couldn't open the demo. Please try again.";
 
 interface FormValues {
   potentialUserType: string;
 }
 
 interface FormViewProps extends FormikProps<FormValues> {
-  login: (email: string, password: string) => Promise<void>;
+  /** The login thunk's dispatched promise (`.unwrap()` rejects on failure). */
+  login: (
+    email: string,
+    password: string
+  ) => { unwrap: () => Promise<{ user: User }> };
+  invitation?: unknown;
 }
 
 const InitialLandingFormView = (props: FormViewProps) => {
@@ -71,11 +84,23 @@ const InitialLandingFormView = (props: FormViewProps) => {
     );
   };
 
+  // The sign-in remounts the root navigator (App.tsx navigationKey), so this
+  // screen's `navigation` is gone by the time it resolves: navigating with it
+  // left the app on the landing screen. Reset the root like LoginForm does.
   const showDemo = async () => {
     setLoading(true);
-    await props.login("demo_user@appdemo.net", "DemoUser1");
-    setLoading(false);
-    navigateToMain(navigation);
+    let user: User;
+    try {
+      ({ user } = await props
+        .login("demo_user@appdemo.net", "DemoUser1")
+        .unwrap());
+    } catch (error) {
+      logException(error, "InitialLandingForm: demo sign-in failed");
+      setLoading(false);
+      Alert.alert(DEMO_SIGN_IN_FAILED_MESSAGE);
+      return;
+    }
+    resetToSignedInRoute(user, { hasInvitation: !!props.invitation });
   };
 
   if (loading) {
@@ -242,6 +267,7 @@ const FormikForm = withFormik<any, FormValues>({
 const InitialLandingForm = () => {
   const dispatch = useAppDispatch();
   const user = useAppSelector((state) => state.user.user);
+  const invitation = useAppSelector((state) => state.user.invitation);
   const navigation = useNavigation<AuthScreenNavigationProp>();
 
   const handleLogin = (email: string, password: string) =>
@@ -254,6 +280,7 @@ const InitialLandingForm = () => {
     <FormikForm
       user={user}
       login={handleLogin}
+      invitation={invitation}
       initialSignUp={handleInitialSignUp}
       navigation={navigation}
     />
