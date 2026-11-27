@@ -43,6 +43,16 @@ describe('staffUids', () => {
     expect(where).toHaveBeenCalledWith('houseId', '==', 'h1');
   });
 
+  it('leaves peer leaders out when asked (applications are for owners and managers)', async () => {
+    docs = [
+      record('owner', 'owner'),
+      record('mgr', 'manager'),
+      record('peer', 'peerLeader'),
+      record('res', 'resident'),
+    ];
+    await expect(staffUids('h1', { peerLeaders: false })).resolves.toEqual(['owner', 'mgr']);
+  });
+
   it('returns an empty list for a house with no records', async () => {
     docs = [];
     await expect(staffUids('h1')).resolves.toEqual([]);

@@ -75,6 +75,15 @@ const mockUseHouseApplications = jest.fn(
 jest.mock('../../../state/queries/applicationQueries', () => ({
   useHouseApplications: (...args: any[]) => mockUseHouseApplications(...args),
 }));
+// Owners and managers only review applications (owner decision 2026-11-27).
+let mockMayReviewApplications = true;
+jest.mock('../../../state/queries/houseTierQueries', () => ({
+  ...jest.requireActual('../../../state/queries/houseTierQueries'),
+  useMayReviewApplications: (houseId: string) => mockUseMayReviewApplications(houseId),
+}));
+const mockUseMayReviewApplications = jest.fn(
+  (houseId: string) => houseId === 'house-1' && mockMayReviewApplications,
+);
 
 // ─── Can component mock — always render the "yes" branch by default ───────────
 // We override per-describe block where needed
@@ -387,6 +396,7 @@ describe('HouseSummary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCanGranted = true;
+    mockMayReviewApplications = true;
     mockToken = { role: { 'house-1': 'admin' }, claims: {} };
     // Default: React Query returns no data (falls back to Redux guests)
     mockUseGuests.mockReturnValue({
@@ -623,15 +633,35 @@ describe('HouseSummary', () => {
 
   // ─── Applications query (#197) ───────────────────────────────────────────────
   describe('applications query', () => {
-    it('runs for a house admin', () => {
+    it('runs for an owner or manager of the house', () => {
       renderScreen();
+      expect(mockUseMayReviewApplications).toHaveBeenCalledWith('house-1');
       expect(mockUseHouseApplications).toHaveBeenCalledWith('house-1', true);
+    });
+
+    it('does not run for a peer leader, whom the rules refuse, and hides the Applications card', () => {
+      mockMayReviewApplications = false;
+      const { queryByText } = renderScreen();
+      expect(mockUseHouseApplications).not.toHaveBeenCalledWith('house-1', true);
+      expect(mockUseHouseApplications).toHaveBeenLastCalledWith('house-1', false);
+      expect(queryByText('Applications')).toBeNull();
+    });
+
+    it('shows the Applications card to an owner or manager', () => {
+      const { getByText } = renderScreen();
+      expect(getByText('Applications')).toBeTruthy();
     });
 
     it('does not run for a resident, whom the rules refuse', () => {
       mockToken = { role: { 'house-1': 'guest' }, claims: {} };
       renderScreen();
       expect(mockUseHouseApplications).not.toHaveBeenCalledWith('house-1', true);
+    });
+
+    it("does not ask for a resident's staff tier, which they can't hold", () => {
+      mockToken = { role: { 'house-1': 'guest' }, claims: {} };
+      renderScreen();
+      expect(mockUseMayReviewApplications).not.toHaveBeenCalledWith('house-1');
     });
   });
 });

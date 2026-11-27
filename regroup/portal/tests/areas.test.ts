@@ -64,3 +64,12 @@ test('a peer leader gets neither Payments nor Balances (owner, 2026-11-09)', () 
   const full = sectionsFor(true, true);
   expect(full[full.indexOf('payments') + 1]).toBe('balances');
 });
+
+// An application holds the applicant's recovery history and contact details, so
+// the rules let only owners and managers read one (owner, 2026-11-27).
+test('a peer leader gets no Applications tab, and no application page by URL', () => {
+  expect(sectionsFor(true, false)).not.toContain('applications');
+  expect(sectionsFor(true, true)).toContain('applications');
+  expect(needsFullView('route-ApplicationList')).toBe(true);
+  expect(needsFullView('route-ApplicationDetail')).toBe(true);
+});

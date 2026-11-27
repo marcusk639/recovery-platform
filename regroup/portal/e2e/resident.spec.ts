@@ -70,7 +70,7 @@ test('sort and filter are still there on coming back from a resident', async ({ 
   await expect(page.getByTestId('guest-list-item')).toHaveCount(1);
 });
 
-test('a peer leader sees no house money, balances, Payments or Reports', async ({ page }) => {
+test('a peer leader sees no house money, balances, applications, Payments or Reports', async ({ page }) => {
   await makePeerLeader('manager');
   // Money stays hidden while the tier is checked, so assert only once it has answered.
   const tiers = page.waitForResponse((r) => r.url().includes('myHouseTiers'));
@@ -84,7 +84,8 @@ test('a peer leader sees no house money, balances, Payments or Reports', async (
   await expect(page.locator('#nav-reports')).toHaveCount(0);
   await page.click('#nav-home');
   const house = page.getByRole('row', { name: /E2E Test House/ });
-  await expect(house.getByRole('cell').nth(4)).toHaveText('1');
+  // Applications are for owners and managers too (owner, 2026-11-27): a dash, not an error.
+  await expect(house.getByRole('cell').nth(4)).toHaveText('—');
   await expect(house).not.toContainText('$');
   await expect(page.getByTestId('total-overdue')).toHaveCount(0);
 });

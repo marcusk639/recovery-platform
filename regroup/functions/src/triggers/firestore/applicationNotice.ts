@@ -10,9 +10,9 @@ import { staffUids } from '../../util/houseRoleStore';
  * Action:   creates a /notifications/{id} document per recipient, which
  *           triggers `notify` to send the push.
  *
- * Recipients are uids: the staff role records (owner, manager, peer leader —
- * the tiers whose admin claim lets them act on applications) plus the house's
- * superAdminId. house.adminIds is deliberately not read: it holds admin-record
+ * Recipients are uids: the owner and manager role records (the tiers the
+ * rules let read and decide applications; peer leaders may not, owner decision
+ * 2026-11-27) plus the house's superAdminId. house.adminIds is deliberately not read: it holds admin-record
  * ids from createAdminId(), not uids, so a notification addressed to one
  * reached nobody.
  */
@@ -31,7 +31,7 @@ export const notifyOperatorOnApplication = onDocumentCreated(
 
       const superAdminId: string = houseSnap.data()?.superAdminId ?? '';
       const recipientIds = [
-        ...new Set([...(await staffUids(houseId)), superAdminId].filter(Boolean)),
+        ...new Set([...(await staffUids(houseId, { peerLeaders: false })), superAdminId].filter(Boolean)),
       ];
       if (recipientIds.length === 0) return;
 

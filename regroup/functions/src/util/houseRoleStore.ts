@@ -94,8 +94,15 @@ export async function primaryOwnerUid(houseId: string): Promise<string | null> {
   return id ? id.slice(houseId.length + 1) : null;
 }
 
-/** The uids holding a staff tier (owner, manager, peer leader) on a house, from the records. */
-export async function staffUids(houseId: string): Promise<string[]> {
+/**
+ * The uids holding a staff tier (owner, manager, peer leader) on a house, from
+ * the records. `peerLeaders: false` leaves peer leaders out, for what only
+ * owners and managers may act on (resident applications).
+ */
+export async function staffUids(
+  houseId: string,
+  { peerLeaders = true }: { peerLeaders?: boolean } = {},
+): Promise<string[]> {
   const snap = await admin
     .firestore()
     .collection('house-roles')
@@ -104,7 +111,7 @@ export async function staffUids(houseId: string): Promise<string[]> {
   return snap.docs
     .filter((doc) => {
       const tier = parseTier(doc.data().tier);
-      return tier !== null && tier !== 'resident';
+      return tier !== null && tier !== 'resident' && (peerLeaders || tier !== 'peerLeader');
     })
     .map((doc) => doc.id.slice(houseId.length + 1));
 }
