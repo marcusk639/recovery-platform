@@ -65,7 +65,7 @@ type StoredUser = {
 const nonEmpty = (v: unknown): boolean => typeof v === 'string' && v !== '';
 
 /** Whether Reactivate could restart this stored plan: a tier still on sale. */
-const storedTierOnSale = (houseType: unknown, tier: unknown): boolean => {
+export const storedTierOnSale = (houseType: unknown, tier: unknown): boolean => {
   if (!nonEmpty(houseType) || !nonEmpty(tier)) return false;
   try {
     return isTierAvailableForSale(houseType as HouseType, tier as TierKey);
@@ -100,12 +100,12 @@ export function checkoutRefusal(
   if (user.isGuest === true || (user.isAdmin === true && user.isSuperAdmin !== true)) {
     return 'not-operator-account';
   }
-  const startedAt = meta.checkoutStartedAt;
-  if (typeof startedAt === 'number' && startedAt > 0 && now - startedAt < CHECKOUT_LOCK_MS) {
-    return 'checkout-in-progress';
-  }
+  if (lockHeld(meta.checkoutStartedAt, now)) return 'checkout-in-progress';
   return null;
 }
+
+const lockHeld = (startedAt: unknown, now: number): boolean =>
+  typeof startedAt === 'number' && startedAt > 0 && now - startedAt < CHECKOUT_LOCK_MS;
 
 export type CheckoutClaim = { uid: string; startedAt: number };
 
@@ -132,6 +132,36 @@ export async function claimCheckout(uid: string, now: number = Date.now()): Prom
         ? { 'subscriptionMetadata.checkoutStartedAt': now }
         : { subscriptionMetadata: { status: '', houses: {}, checkoutStartedAt: now } },
     );
+    return { uid, startedAt: now };
+  });
+}
+
+/**
+ * Reactivate's half of the lock. Restarting a canceled plan creates a new Stripe
+ * subscription too, so it takes the same lock as checkout: a Reactivate and a
+ * checkout, or two Reactivates, for one account can't both create one. The
+ * callable checks the plan itself (tier still for sale, sales switch); this
+ * re-reads the status in the transaction, so a plan restarted meanwhile is
+ * refused. A successful Reactivate clears the lock with the new record.
+ */
+export async function claimReactivation(
+  uid: string,
+  now: number = Date.now(),
+): Promise<CheckoutClaim> {
+  const ref = userCollection.doc(uid);
+  return ratsFirestore.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const meta = (snap.exists ? snap.data()?.subscriptionMetadata : null) ?? {};
+    let refusal: CheckoutRefusal | null = null;
+    if (meta.status !== 'canceled') refusal = 'plan-exists';
+    else if (lockHeld(meta.checkoutStartedAt, now)) refusal = 'checkout-in-progress';
+    if (refusal) {
+      logger.info('Reactivate refused', { userId: uid, reason: refusal });
+      throw new HttpsError('failed-precondition', CHECKOUT_REFUSAL_MESSAGES[refusal], {
+        reason: refusal,
+      });
+    }
+    tx.update(ref, { 'subscriptionMetadata.checkoutStartedAt': now });
     return { uid, startedAt: now };
   });
 }

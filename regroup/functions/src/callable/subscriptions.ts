@@ -51,7 +51,9 @@ import { grantPotentialSuperAdminClaim } from "../util/superAdminClaim";
 import { writeOperatorSubscription } from "../util/operatorSubscriptionWrite";
 import {
   claimCheckout,
+  claimReactivation,
   releaseCheckout,
+  storedTierOnSale,
   CHECKOUT_REFUSAL_MESSAGES,
   type CheckoutClaim,
 } from "../util/checkoutGuard";
@@ -497,7 +499,9 @@ export const reactivateOperatorSubscription = onCall(
       if (!isTierBillingEnabled()) {
         throw new HttpsError("failed-precondition", BILLING_OFF_MESSAGE);
       }
-      if (!storedMetadata.tier) {
+      // A tier no longer for sale (Oxford Network) is refused as at checkout,
+      // which is where the operator then picks a plan (checkoutGuard allows it).
+      if (!storedTierOnSale(storedMetadata.houseType, storedMetadata.tier)) {
         throw new HttpsError(
           "failed-precondition",
           "This plan is no longer offered. Choose a plan to subscribe again.",
@@ -506,11 +510,31 @@ export const reactivateOperatorSubscription = onCall(
       if (!(await isSalesOpen())) {
         throw new HttpsError("failed-precondition", SALES_CLOSED_MESSAGE);
       }
-      const freshMetadata = await reactivateSubscription(
-        storedMetadata.customerId,
-        storedMetadata,
-        data.user.id,
-      );
+      // The stored email, which the Stripe customer was created with; the
+      // lookup below lists that customer's subscriptions.
+      const email = firestoreUser.email || request.auth.token.email;
+      if (!email) {
+        throw new HttpsError(
+          "failed-precondition",
+          "An email address is required to restart a subscription",
+        );
+      }
+      // The checkout lock, then Stripe: no second subscription from a
+      // concurrent checkout or Reactivate, or one a failed record write left.
+      const claim = await claimReactivation(data.user.id);
+      await refuseUnrecordedSubscription(claim, email);
+      let freshMetadata: Awaited<ReturnType<typeof reactivateSubscription>>;
+      try {
+        freshMetadata = await reactivateSubscription(
+          storedMetadata.customerId,
+          storedMetadata,
+          data.user.id,
+        );
+      } catch (stripeError) {
+        // As at checkout: free the lock only when no subscription can exist.
+        if (failedBeforeSubscription(stripeError)) await releaseCheckout(claim);
+        throw stripeError;
+      }
       subscriptionMetadata = { ...freshMetadata, status: freshMetadata.status || "pending" };
       replacement = true;
     } else {
