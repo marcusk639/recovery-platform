@@ -16,6 +16,7 @@ import { color } from '../../styles/theme';
 import { useSubmitApplication } from '../../state/queries/applicationQueries';
 import { ProgramType } from '../../entities/Application';
 import { Routes } from '../../navigation/types';
+import type { ApplicationExistsError } from '../../services/applications';
 
 type Step = 'contact' | 'sobriety' | 'review';
 const STEPS: Step[] = ['contact', 'sobriety', 'review'];
@@ -81,7 +82,20 @@ export default function ApplyScreen() {
         houseName,
         applicationId,
       });
-    } catch {
+    } catch (error) {
+      // One application per house: show the one already made.
+      if (error instanceof Error && error.name === 'ApplicationExistsError') {
+        Alert.alert(
+          'Already applied',
+          "You've already applied to this house. Here is its status.",
+        );
+        navigation.replace(Routes.ApplicationStatus, {
+          houseId,
+          houseName,
+          applicationId: (error as ApplicationExistsError).applicationId,
+        });
+        return;
+      }
       Alert.alert('Error', 'Could not submit application. Please try again.');
     }
   };

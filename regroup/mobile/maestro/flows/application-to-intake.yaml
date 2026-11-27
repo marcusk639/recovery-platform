@@ -99,6 +99,20 @@ tags:
 - assertTrue:
     condition: ${output.count === 1}
     label: the application is stored once, under the house
+# Back later on the same device: the landing screen leads to it (Q2).
+- stopApp
+- launchApp:
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "check-application-button"
+    timeout: 30000
+- tapOn:
+    id: "check-application-button"
+- extendedWaitUntil:
+    visible: "Pending Review"
+    timeout: 30000
 # 2. The operator approves it and intake opens pre-filled.
 - runFlow:
     file: ../subflows/login.yaml

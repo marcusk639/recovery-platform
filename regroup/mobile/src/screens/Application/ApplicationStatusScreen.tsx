@@ -34,9 +34,10 @@ export default function ApplicationStatusScreen() {
   const route = useRoute<any>();
   const { houseId, houseName, applicationId } = route.params ?? {};
 
-  // Read the submitted application by its path when we have its id (ApplyScreen
-  // passes it). The collection-group list is the fallback only: no rule covers
-  // a collection-group read of applications, so it is refused.
+  // Read the application by its path when we have its id (ApplyScreen and the
+  // landing screen's "Check my application" pass it). Without one, find it in
+  // the list of my own applications (a collection-group read the rules allow
+  // only for the caller's applicantUid).
   const byId = useApplication(houseId ?? '', applicationId ?? '');
   const mine = useMyApplications(!applicationId);
   const thisApp = applicationId

@@ -18,8 +18,10 @@ jest.mock('@react-navigation/native', () => ({
 
 const mockSubmit = jest.fn();
 jest.mock('../../../services/applications', () => ({
+  ...jest.requireActual('../../../services/applications'),
   submitApplication: (...args: unknown[]) => mockSubmit(...args),
 }));
+const { ApplicationExistsError } = jest.requireActual('../../../services/applications');
 
 const renderScreen = () =>
   render(
@@ -75,6 +77,27 @@ describe('ApplyScreen', () => {
       ),
     );
     expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  // One application per house (owner, 2026-11-27): a second submit shows the
+  // first one's status instead.
+  it('shows the existing application when the applicant already applied here', async () => {
+    mockSubmit.mockRejectedValue(new ApplicationExistsError('house-1_anon-1'));
+    const utils = renderScreen();
+    fillAndReachReview(utils);
+    fireEvent.press(utils.getByTestId('btn-submit'));
+
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith(Routes.ApplicationStatus, {
+        houseId: 'house-1',
+        houseName: 'Hope House',
+        applicationId: 'house-1_anon-1',
+      }),
+    );
+    expect(Alert.alert).toHaveBeenCalledWith(
+      'Already applied',
+      "You've already applied to this house. Here is its status.",
+    );
   });
 
   it('refuses to submit without a name and email', () => {
