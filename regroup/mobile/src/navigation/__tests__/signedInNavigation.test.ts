@@ -113,7 +113,7 @@ describe('resetToSignedInRoute', () => {
     expect(resetTarget()).toEqual([Routes.Main, Routes.House]);
   });
 
-  it('resets once when the start route stuck', () => {
+  it('resets only once when the start route is still showing at the recheck', () => {
     resetToSignedInRoute(admin);
     jest.runAllTimers();
     expect(mockNavDispatch).toHaveBeenCalledTimes(1);

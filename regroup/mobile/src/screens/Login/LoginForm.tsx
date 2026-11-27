@@ -87,7 +87,7 @@ const LoginForm = withFormik<
         role: user?.isAdmin ? 'admin' : user?.isGuest ? 'guest' : 'unknown',
       });
 
-      // Use improved navigation service to get the correct route. An
+      // Reset the root to the user's start route (signedInNavigation.ts). An
       // invitation held from before sign-in opens the invitation screen
       // (SignUp shows a signed-in user Accept / Continue) for every account:
       // the invitation flow's NewAccount route is for an account sign-up just
