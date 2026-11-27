@@ -326,6 +326,19 @@ describe('acceptInvitationAsCurrentUser — failures', () => {
   });
 });
 
+describe('acceptInvitationAsCurrentUser — reload failed after the records were written', () => {
+  // The start route must follow the new membership, not the pre-accept user.
+  it('resets with the user plus the membership just written', async () => {
+    getUserFinishingSetup.mockRejectedValue(new Error('offline'));
+    const { w, accept } = setup(roleless, hydrated('guest'));
+    expect(await accept()).toEqual({ ok: true });
+    const created = (w.createGuest.mock.calls[0] as unknown[])[0] as { id: string };
+    expect(resetToStartRoute).toHaveBeenCalledWith(
+      expect.objectContaining({ uid: 'u-1', isGuest: true, houseId: 'h1', guestId: created.id }),
+    );
+  });
+});
+
 describe('leaveInvitation ("Continue to the app")', () => {
   it('clears the invitation and resets to the start route without redeeming', () => {
     const { store } = setup(roleless, hydrated('guest'));

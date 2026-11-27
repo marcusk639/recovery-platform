@@ -19,6 +19,8 @@ import { User } from '../entities/User';
 import { buildSelfCreateGuest } from '../screens/SignUp/selfCreateGuest';
 import { mapUserToAdmin } from '../util/admin';
 import { getAuthUser } from './users';
+import { getDoc, doc } from '@react-native-firebase/firestore';
+import { guestCollection } from './guest';
 
 export interface MembershipInvitation {
   type: string;
@@ -34,6 +36,23 @@ export interface MembershipWriters {
   createGuest: (guest: Guest) => Promise<unknown>;
   createAdmin: (admin: Admin) => Promise<unknown>;
   updateUser: (user: User, updates: Partial<User>) => Promise<unknown>;
+  /** Whether a resident record exists; consulted only before re-sending a create. */
+  guestExists?: (guestId: string) => Promise<boolean>;
+}
+
+/**
+ * Whether a resident record with this id exists. After the claims refresh the
+ * invitee can read its own house's records, and the rules refuse a read of a
+ * missing one (no resource), so permission-denied means "not there". Any other
+ * failure (offline) rethrows: guessing "not there" would re-send the create.
+ */
+export async function guestRecordExists(guestId: string): Promise<boolean> {
+  try {
+    return (await getDoc(doc(guestCollection, guestId))).exists();
+  } catch (error) {
+    if (isDefiniteRejection(error)) return false;
+    throw error;
+  }
 }
 
 /** The records for this invitation's role, or null for a role without any. */
@@ -72,11 +91,15 @@ export function buildInvitationMembership(
  * one (ids are random, and the rules allow no client lookup of one's own
  * record: an admins list query is refused). `create` is the in-flight or
  * settled create; it is stored BEFORE it is awaited, so a double tap shares
- * one create. Lost on an app restart: see SETUP_UNFINISHED's advice.
+ * one create. `failed` marks an ambiguous failure, after which a resident
+ * create is re-sent only if the record isn't there: createGuest also adds one
+ * to the house's currentCapacity. Forgotten once the write finishes, and on
+ * an app restart: see SETUP_UNFINISHED's advice.
  */
 interface Pending {
   membership: InvitationMembership;
   create: Promise<unknown> | null;
+  failed: boolean;
 }
 const pendingByKey = new Map<string, Pending>();
 
@@ -99,34 +122,51 @@ const isDefiniteRejection = (error: unknown): boolean =>
  * leaves only "record exists, user not linked" (never a user pointing at a
  * record that was not created). Single-flight per key. A create that failed
  * without a definite rules rejection (it may have reached the server) keeps
- * its record id, and the retry re-sends the create for that same id. Rejects
- * if either write fails.
+ * its record id, and the retry re-sends the create for that same id unless
+ * the record turns out to exist (guestExists). Rejects
+ * if either write fails. Resolves to the user updates of the record actually
+ * written (a reused one's, not the passed membership's).
  */
 export async function writeInvitationMembership(
   membership: InvitationMembership,
   user: Partial<User>,
   writers: MembershipWriters,
-): Promise<void> {
+): Promise<Partial<User>> {
   const key = retryKey(user, membership);
   let entry = pendingByKey.get(key);
   if (!entry) {
-    entry = { membership, create: null };
+    entry = { membership, create: null, failed: false };
     pendingByKey.set(key, entry);
   }
-  const chosen = entry.membership;
-  if (!entry.create) {
-    const started = Promise.resolve(
-      chosen.kind === 'guest' ? writers.createGuest(chosen.guest) : writers.createAdmin(chosen.admin),
-    );
-    entry.create = started;
+  const current = entry;
+  const chosen = current.membership;
+  if (!current.create) {
+    const started = createRecord(chosen, writers, current.failed);
+    current.create = started;
     started.catch((error) => {
       if (isDefiniteRejection(error)) pendingByKey.delete(key);
-      else if (pendingByKey.get(key)?.create === started) pendingByKey.get(key)!.create = null;
+      else if (current.create === started) {
+        current.create = null;
+        current.failed = true;
+      }
     });
   }
-  await entry.create;
+  await current.create;
   await writers.updateUser(user as User, chosen.updates);
-  pendingByKey.delete(key);
+  if (pendingByKey.get(key) === current) pendingByKey.delete(key);
+  return chosen.updates;
+}
+
+async function createRecord(
+  m: InvitationMembership,
+  writers: MembershipWriters,
+  afterAmbiguousFailure: boolean,
+): Promise<unknown> {
+  if (m.kind === 'admin') return writers.createAdmin(m.admin);
+  if (afterAmbiguousFailure && writers.guestExists && (await writers.guestExists(m.guest.id))) {
+    return undefined;
+  }
+  return writers.createGuest(m.guest);
 }
 
 /**

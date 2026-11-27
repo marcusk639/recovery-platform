@@ -8,6 +8,7 @@ import { e2eFlags } from '../environments/e2e-flags';
 import {
   analyticsImports,
   analyticsProviders,
+  analyticsUnlessAppLinkPage,
   NoopAngularFireAnalytics,
 } from './analytics-providers';
 import { environment as defaultEnvironment } from '../environments/environment';
@@ -239,9 +240,15 @@ describe('e2e environments', () => {
       expect(analyticsImports(stagingFlags)).toEqual([]);
     });
 
+    // They provide AngularFireAnalytics through analyticsUnlessAppLinkPage (the
+    // real service except on app-link pages, whose URL can carry a token).
     it('production and default builds keep the real AngularFireAnalyticsModule and no stub', () => {
       [productionEnvironment, defaultEnvironment].forEach((env) => {
-        expect(analyticsProviders(env)).toEqual([]);
+        const providers = analyticsProviders(env) as any[];
+        expect(providers.length).toBe(1);
+        expect(providers[0].provide).toBe(AngularFireAnalytics);
+        expect(providers[0].useFactory).toBe(analyticsUnlessAppLinkPage);
+        expect(providers[0].useClass).toBeUndefined();
         expect(analyticsImports(env)).toEqual([AngularFireAnalyticsModule]);
       });
     });

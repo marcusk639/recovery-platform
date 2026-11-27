@@ -14,6 +14,8 @@
  * Signed out or anonymous, it is dropped and the app stays where it is (the
  * landing screen): it is not held for after sign-in, because sign-in itself
  * resets navigation to the user's own start route (LoginForm, signup).
+ * An `auth/*` link opens only signed out or anonymous: signed in, the sign-up
+ * form would create a second account from the current user's doc.
  * Firebase Auth's currentUser is read, not the store: at cold start the store
  * has no user yet, while the native session is restored synchronously.
  *
@@ -39,6 +41,9 @@ export const isHandledElsewhere = (url: string): boolean => parseAppLink(url) !=
 
 const isMainRoute = (path: string): boolean =>
   /^app(\/|\?|#|$)/.test(stripLeadingSlashes(path));
+
+const isAuthRoute = (path: string): boolean =>
+  /^auth(\/|\?|#|$)/.test(stripLeadingSlashes(path));
 
 const isSignedIn = (): boolean => {
   const user = getAuth().currentUser;
@@ -88,6 +93,7 @@ export const linkingConfig: LinkingOptions<RootStackParamList> = {
 
   getStateFromPath: (path, options) => {
     if (isMainRoute(path) && !isSignedIn()) return undefined;
+    if (isAuthRoute(path) && isSignedIn()) return undefined;
     return defaultGetStateFromPath(path, options);
   },
 };
