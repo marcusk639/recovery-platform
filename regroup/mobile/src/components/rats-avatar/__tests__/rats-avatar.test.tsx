@@ -131,3 +131,36 @@ describe('stringToColour', () => {
     expect(stringToColour('Alice')).toBe(stringToColour('Alice'));
   });
 });
+
+describe('RatsAvatar image that fails to load', () => {
+  it('shows the initials when the image fails to load (e.g. a phone path saved by an older build)', () => {
+    const { getByTestId, queryByTestId } = render(
+      <RatsAvatar name="John Doe" testID="avatar" source={{ uri: 'file:///gone/IMG_1.jpg' }} />,
+    );
+    fireEvent(getByTestId('avatar'), 'error', { nativeEvent: { error: 'not found' } });
+    expect(queryByTestId('avatar')).toBeNull();
+    expect(getByTestId('avatar-placeholder')).toBeTruthy();
+  });
+
+  it('tries a new image again after an earlier one failed', () => {
+    const { getByTestId, rerender } = render(
+      <RatsAvatar name="John Doe" testID="avatar" source={{ uri: 'file:///gone/IMG_1.jpg' }} />,
+    );
+    fireEvent(getByTestId('avatar'), 'error', { nativeEvent: { error: 'not found' } });
+    rerender(
+      <RatsAvatar name="John Doe" testID="avatar" source={{ uri: 'https://mock-storage/users/u1/avatar' }} />,
+    );
+    expect(getByTestId('avatar').props.source).toEqual({ uri: 'https://mock-storage/users/u1/avatar' });
+  });
+
+  it("still calls the caller's onError", () => {
+    const onError = jest.fn();
+    const { getByTestId } = render(
+      <RatsAvatar name="John Doe" testID="avatar" onError={onError} source={{ uri: 'https://x/a.png' }} />,
+    );
+    fireEvent(getByTestId('avatar'), 'error', { nativeEvent: { error: 'x' } });
+    expect(onError).toHaveBeenCalledTimes(1);
+    // And still falls back: a caller's onError doesn't replace the fallback.
+    expect(getByTestId('avatar-placeholder')).toBeTruthy();
+  });
+});

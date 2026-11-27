@@ -1,0 +1,111 @@
+# A resident sets a profile photo, and sees it on the Profile tab after the
+# save and again after the app restarts. The photo uploads to users/{uid}/avatar
+# (storage.rules: the owner's own file) and the users and guests docs hold its
+# download URL. Before, the form saved the phone's file path, which no other
+# phone (and not this one after a reinstall) could show.
+# Persona: guest-a.
+# Before running: maestro/scripts/stage-picker-files.sh --platform <ios|android> --device <id>,
+# and re-seed (npm run maestro:seed): the flow expects no avatar yet.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/profile-avatar.yaml
+appId: ${APP_ID}
+tags:
+  - guest
+  - profile
+  - device
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- runScript:
+    file: ../scripts/maestro-js/profile-avatar.js
+    env:
+      USER_ID: e2e-guest-a
+      GUEST_ID: guest-a
+      RESET: "true"
+- assertTrue:
+    condition: ${!output.fileStored && !output.userHasUrl}
+    label: no avatar before the flow (re-seed first)
+- tapOn:
+    id: "profile-tab"
+- extendedWaitUntil:
+    visible:
+      id: "personal-avatar-placeholder"
+    timeout: 20000
+- tapOn: ".*My Profile.*"
+- extendedWaitUntil:
+    visible:
+      id: "save-profile-button"
+    timeout: 20000
+- tapOn:
+    text: "LIBRARY"
+# The system photo picker, with the photo stage-picker-files.sh added.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: "Photo, .*"
+          timeout: 20000
+      - tapOn:
+          text: "Photo, .*"
+          index: 0
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible: "Photo taken on.*"
+          timeout: 20000
+      - tapOn:
+          text: "Photo taken on.*"
+          index: 0
+- tapOn:
+    id: "save-profile-button"
+# Saved: the form closes (the upload and the save are done) back to the
+# Profile tab, which shows the photo.
+- extendedWaitUntil:
+    notVisible:
+      id: "save-profile-button"
+    timeout: 60000
+- extendedWaitUntil:
+    visible:
+      id: "personal-avatar"
+    timeout: 30000
+- assertNotVisible:
+    id: "personal-avatar-placeholder"
+- runScript:
+    file: ../scripts/maestro-js/profile-avatar.js
+    env:
+      USER_ID: e2e-guest-a
+      GUEST_ID: guest-a
+- assertTrue:
+    condition: ${output.fileStored}
+    label: the photo is in Storage at users/{uid}/avatar
+- assertTrue:
+    condition: ${output.userHasUrl && !output.userAvatarIsLocal}
+    label: the users doc holds its download URL, not a phone path
+- assertTrue:
+    condition: ${output.guestHasUrl}
+    label: the guests doc holds the same URL
+# After a restart the photo comes from the saved URL.
+- stopApp
+- launchApp:
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "profile-tab"
+    timeout: 60000
+- tapOn:
+    id: "profile-tab"
+- extendedWaitUntil:
+    visible:
+      id: "personal-avatar"
+    timeout: 30000
+- assertNotVisible:
+    id: "personal-avatar-placeholder"
+- runFlow:
+    file: ../subflows/logout.yaml

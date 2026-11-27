@@ -3,6 +3,7 @@ import React, { useEffect, useCallback, useMemo } from "react";
 // Removed: withNotifier, withLoadingModal, withFormModal, withPopover
 // Added: useModal, useNotification hooks
 import AvatarItem from "../../components/avatar-item";
+import { isRemoteImageUri } from "../Profile/profileAvatar";
 import { useModal, useNotification } from "../../context";
 import { Guest } from "../../entities/Guest";
 import { Guests } from "../../types";
@@ -382,7 +383,13 @@ const PersonalScreen: React.FC<PersonalProps> = ({ navigation }) => {
         subTextStyle={{ fontSize: fontSize.regular_medium }}
         name={fullName || " "}
         type={user && user.isAdmin ? "Admin" : "Guest"}
-        avatarUrl={_user?.avatar || ""}
+        // The account's own photo first. The profile form refreshes the
+        // guest/admin copies after it saves them, but if the user doc saved
+        // and a copy's save failed, the copy still holds the old photo.
+        avatarUrl={
+          isRemoteImageUri(user?.avatar) ? user.avatar : _user?.avatar || ""
+        }
+        testID="personal-avatar"
       />
     );
   };

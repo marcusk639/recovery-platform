@@ -187,6 +187,34 @@ describe('User avatars (users/{userId}/avatar)', () => {
     await assertSucceeds(uploadToPath(ctx, avatarPath, TINY_PNG, 'image/jpeg'));
   });
 
+  // The profile form writes every new photo to this one path.
+  test('ALLOW owner to replace an existing avatar', async () => {
+    const ctx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authUserOnly(USER_A_UID),
+    );
+    await uploadToPath(ctx, avatarPath, TINY_PNG, 'image/png');
+    await assertSucceeds(uploadToPath(ctx, avatarPath, TINY_PNG, 'image/jpeg'));
+  });
+
+  test('ALLOW owner to upload a HEIC avatar (an iPhone photo)', async () => {
+    const ctx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authUserOnly(USER_A_UID),
+    );
+    await assertSucceeds(uploadToPath(ctx, avatarPath, TINY_PNG, 'image/heic'));
+  });
+
+  test('DENY owner writing any other file under users/{uid}/', async () => {
+    const ctx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authUserOnly(USER_A_UID),
+    );
+    await assertFails(
+      uploadToPath(ctx, `users/${USER_A_UID}/avatar/extra.png`, TINY_PNG, 'image/png'),
+    );
+  });
+
   // S5 (REV-A13): read was any signed-in user, so free signup exposed every
   // face photo by uid. Others see the stored download URL instead.
   test('DENY another signed-in user reading someone else avatar', async () => {
