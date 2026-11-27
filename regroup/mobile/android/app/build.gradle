@@ -97,6 +97,8 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 39
         versionName "0.55"
+        // The App Links host (AndroidManifest.xml); regroup/app-links.json is the source.
+        manifestPlaceholders = [appLinkHost: 'regroup-app.com']
     }
 
     signingConfigs {
@@ -146,6 +148,8 @@ android {
         e2eStaging {
             initWith release
             applicationIdSuffix ".e2e.stg"
+            // Staging builds verify against the staging hosting site's assetlinks.json.
+            manifestPlaceholders = [appLinkHost: 'regroup-e2e.web.app']
             // Tells the three installed apps apart on a device.
             resValue "string", "app_name", "Regroup e2e stg"
             signingConfig signingConfigs.debug
