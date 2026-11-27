@@ -266,7 +266,10 @@ another account took it, the email finds the wrong account. Then apply with `--u
 **Expected result:** `{"outcome":"marked","uid":"<UID>",...}`. Re-run it (idempotent) after C3: until
 the new functions are live, a role change on the account made by the old functions drops the claim.
 Also confirm the account's password is `DemoUser1`, the one the app uses: the scheduled
-`restoreDemoAccount` puts that password back whenever it changes.
+`restoreDemoAccount` puts that password back whenever it changes. The mark records no password
+baseline, so the first restore after C3 (and after each re-run) resets the password to `DemoUser1`
+and signs App Review out once. Once marked, a re-run without `--uid` refuses if the demo email now
+belongs to a different account than the one recorded.
 
 #### C3. Functions
 

@@ -29,7 +29,12 @@ export function fakeAuth(initial: Record | null) {
     }),
     createUser: jest.fn(async (props: { uid: string; email: string }) => {
       calls.push('create');
-      state.user = { uid: props.uid, email: props.email, tokensValidAfterTime: 'created' };
+      state.user = {
+        uid: props.uid,
+        email: props.email,
+        tokensValidAfterTime: 'created',
+        providerData: [{ providerId: 'password' }],
+      };
     }),
     setCustomUserClaims: jest.fn(async (_uid: string, claims: object | null) => {
       calls.push('claims');
@@ -39,7 +44,12 @@ export function fakeAuth(initial: Record | null) {
       calls.push('update');
       const u = state.user!;
       if (props.email) u.email = props.email;
-      if (props.password) u.tokensValidAfterTime = 'after-restore';
+      if (props.password) {
+        u.tokensValidAfterTime = 'after-restore';
+        if (!(u.providerData ?? []).some((p) => p.providerId === 'password')) {
+          u.providerData = [...(u.providerData ?? []), { providerId: 'password' }];
+        }
+      }
       if (props.phoneNumber === null) delete u.phoneNumber;
       if (props.multiFactor) u.multiFactor = { enrolledFactors: [] };
       if (props.providersToUnlink) {

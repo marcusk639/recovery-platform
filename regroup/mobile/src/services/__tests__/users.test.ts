@@ -668,6 +668,16 @@ describe("users service", () => {
       expect(getMockAuth().sendPasswordResetEmail).not.toHaveBeenCalled();
     });
 
+    it("refuses the demo account however the input is padded before sanitizing", async () => {
+      // sanitizeString strips <, > and surrounding spaces before the reset is sent.
+      for (const input of ["demo_user@appdemo.net>", " demo_user@appdemo.net "]) {
+        await expect(sendForgotPasswordEmail(input)).rejects.toMatchObject({
+          code: "auth/demo-account",
+        });
+      }
+      expect(getMockAuth().sendPasswordResetEmail).not.toHaveBeenCalled();
+    });
+
     it("propagates auth errors", async () => {
       getMockAuth().sendPasswordResetEmail.mockRejectedValue(
         new Error("User not found")
