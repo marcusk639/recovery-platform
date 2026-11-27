@@ -26,6 +26,7 @@
     "migrate:house-roles:dry-run": "npm run build && node lib/scripts/backfillHouseRoles.js",
     "migrate:house-roles:apply": "npm run build && node lib/scripts/backfillHouseRoles.js --apply",
     "roles:promote-manager": "npm run build && node lib/scripts/promoteManager.js",
+    "demo:mark-account": "npm run build && node lib/scripts/markDemoAccount.js",
     "migrate:balance-cents:apply": "npm run build && node lib/scripts/migrateBalanceToCents.js --apply",
     "backfill:week-summaries:dry-run": "npm run build && node lib/scripts/backfillWeekSummaries.js",
     "backfill:week-summaries:apply": "npm run build && node lib/scripts/backfillWeekSummaries.js --apply",

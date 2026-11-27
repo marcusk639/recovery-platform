@@ -52,6 +52,7 @@ jest.mock("../../util/logging", () => ({
 
 jest.mock("../../util/user", () => ({
   getFirebaseUserFromUserCredential: jest.fn((credential: any) => credential),
+  isDemo: jest.requireActual("../../util/user").isDemo,
 }));
 
 // ─── Imports (after mocks) ───────────────────────────────────────────────────
@@ -658,6 +659,13 @@ describe("users service", () => {
       expect(getMockAuth().sendPasswordResetEmail).toHaveBeenCalledWith(
         "reset@example.com"
       );
+    });
+
+    it("refuses a reset for the shared demo account (S5), in any case", async () => {
+      await expect(
+        sendForgotPasswordEmail("Demo_User@AppDemo.net")
+      ).rejects.toMatchObject({ code: "auth/demo-account" });
+      expect(getMockAuth().sendPasswordResetEmail).not.toHaveBeenCalled();
     });
 
     it("propagates auth errors", async () => {

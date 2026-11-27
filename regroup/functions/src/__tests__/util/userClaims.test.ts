@@ -81,10 +81,13 @@ describe('the only claims writer', () => {
       return entry.name.endsWith('.ts') ? [full] : [];
     });
 
-  it('no source file but util/userClaims.ts calls setCustomUserClaims', () => {
+  // util/demoAccountState.ts takes an injected Auth client (the owner script
+  // and the scheduled restore) and stamps the same marker itself.
+  it('no source file but util/userClaims.ts (and the demo restore) calls setCustomUserClaims', () => {
     const callers = sources(srcRoot)
       .filter((file) => /\.setCustomUserClaims\s*\(/.test(fs.readFileSync(file, 'utf8')))
-      .map((file) => path.relative(srcRoot, file));
-    expect(callers).toEqual([path.join('util', 'userClaims.ts')]);
+      .map((file) => path.relative(srcRoot, file))
+      .sort();
+    expect(callers).toEqual([path.join('util', 'demoAccountState.ts'), path.join('util', 'userClaims.ts')]);
   });
 });

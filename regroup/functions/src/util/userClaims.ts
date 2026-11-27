@@ -1,6 +1,7 @@
 /**
  * The only writer of custom claims (a test fails on any other
- * `setCustomUserClaims` call in src/).
+ * `setCustomUserClaims` call in src/, bar util/demoAccountState.ts, which
+ * stamps the same marker).
  *
  * An ID token keeps the claims it was minted with for up to an hour, and the
  * rules read the token. So after every claims write this stamps

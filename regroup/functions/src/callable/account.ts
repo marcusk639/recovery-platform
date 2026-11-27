@@ -3,7 +3,7 @@ import { logger } from 'firebase-functions';
 import { STRIPE_SECRET_KEY } from '../config';
 import { runAccountDeletion } from '../accountDeletion';
 import { BillingNotVerifiedError } from '../api/stripeDeletion';
-import { DEMO_ACCOUNT_EMAIL } from '../util/demoAccount';
+import { isDemoAccount } from '../util/demoAccount';
 
 const MAX_AUTH_AGE_SECONDS = 300;
 
@@ -38,8 +38,7 @@ export const deleteAccount = onCall({ secrets: [STRIPE_SECRET_KEY] }, async (req
     throw new HttpsError('failed-precondition', 'Please sign in again to delete your account');
   }
 
-  const email = typeof token.email === 'string' ? token.email.toLowerCase() : undefined;
-  if (email === DEMO_ACCOUNT_EMAIL) {
+  if (isDemoAccount(request.auth)) {
     throw new HttpsError('permission-denied', "The demo account can't be deleted.");
   }
 

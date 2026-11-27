@@ -13,5 +13,8 @@ export const getAuthenticationErrorMessage = (code: string): string => {
   if (code === "auth/too-many-requests") {
     return "error.too.many.requests";
   }
+  if (code === "auth/demo-account") {
+    return "error.demo.account";
+  }
   return "error.generic";
 };

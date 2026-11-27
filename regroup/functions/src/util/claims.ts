@@ -40,6 +40,8 @@ function parseCurrentClaims(
     potentialSuperAdmin: typeof raw.potentialSuperAdmin === 'boolean'
       ? raw.potentialSuperAdmin
       : undefined,
+    // The demo account's marker (util/demoAccount.ts) survives every rewrite.
+    ...(raw.demo === true ? { demo: true as const } : {}),
   };
 }
 

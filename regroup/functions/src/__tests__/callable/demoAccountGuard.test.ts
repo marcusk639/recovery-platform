@@ -72,6 +72,7 @@ const REFUSED_ELSEWHERE = ['deleteAccount'];
 const ALLOWED = [
   'complianceExport',
   'findMeetings',
+  'getAppConfig',
   'getDocumentLink',
   'getPaymentMethod',
   'getStripeAccountStatus',
@@ -95,9 +96,9 @@ const exportsByModule = modules.map((file) => ({
   ].map((m) => m[1]),
 }));
 
-const demoAuth = (email = 'demo_user@appdemo.net') => ({
+const demoAuth = (email = 'demo_user@appdemo.net', extra: object = {}) => ({
   uid: 'demo-uid',
-  token: { email, auth_time: Math.floor(Date.now() / 1000) },
+  token: { email, auth_time: Math.floor(Date.now() / 1000), ...extra },
 });
 
 type Handler = (request: unknown) => Promise<unknown>;
@@ -132,6 +133,15 @@ describe.each(REFUSED)('%s', (name) => {
     expect(mockState.calls).toEqual([]);
   });
 
+  it('still refuses the demo account after its email was changed (the demo claim)', async () => {
+    const handler = handlerFor(name);
+    mockState.armed = true;
+    await expect(
+      handler({ auth: demoAuth('attacker@example.com', { demo: true }), data: {} }),
+    ).rejects.toMatchObject({ code: 'permission-denied', message: DEMO_REFUSED_MESSAGE });
+    expect(mockState.calls).toEqual([]);
+  });
+
   it('does not refuse other accounts as the demo account', async () => {
     const handler = handlerFor(name);
     const outcome = await Promise.race([
@@ -145,15 +155,24 @@ describe.each(REFUSED)('%s', (name) => {
   });
 });
 
-it('deleteAccount refuses the demo account', async () => {
+it('deleteAccount refuses the demo account, by email or by claim', async () => {
   await expect(handlerFor('deleteAccount')({ auth: demoAuth(), data: {} })).rejects.toMatchObject({
     code: 'permission-denied',
   });
+  await expect(
+    handlerFor('deleteAccount')({ auth: demoAuth('attacker@example.com', { demo: true }), data: {} }),
+  ).rejects.toMatchObject({ code: 'permission-denied' });
 });
 
 describe('isDemoAccount', () => {
   it('matches the demo email in any case', () => {
     expect(isDemoAccount({ token: { email: 'DEMO_USER@appdemo.net' } })).toBe(true);
+  });
+
+  it('matches the server-set demo claim whatever the email', () => {
+    expect(isDemoAccount({ token: { demo: true, email: 'attacker@example.com' } })).toBe(true);
+    expect(isDemoAccount({ token: { demo: true } })).toBe(true);
+    expect(isDemoAccount({ token: { demo: 'true', email: 'a@example.com' } })).toBe(false);
   });
 
   it('is false with no auth, no email or a non-string email', () => {
