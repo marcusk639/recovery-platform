@@ -90,6 +90,8 @@ describe.each([
     mockAccess = 'no';
     const { getByTestId, getByText, queryByText } = render(<Screen />);
     expect(mockUseHouseApplications).not.toHaveBeenCalledWith('house-1', true);
+    // Disabled, not left to the default (enabled), which would make the refused read.
+    expect(mockUseHouseApplications).toHaveBeenLastCalledWith('house-1', false);
     expect(getByTestId('applications-no-access')).toBeTruthy();
     expect(getByText(APPLICATIONS_NO_ACCESS_MESSAGE)).toBeTruthy();
     expect(queryByText('Alice Applicant')).toBeNull();
@@ -99,6 +101,8 @@ describe.each([
     mockAccess = 'error';
     const { getByTestId, getByText, queryByText } = render(<Screen />);
     expect(mockUseHouseApplications).not.toHaveBeenCalledWith('house-1', true);
+    // Disabled, not left to the default (enabled), which would make the refused read.
+    expect(mockUseHouseApplications).toHaveBeenLastCalledWith('house-1', false);
     expect(getByText(APPLICATIONS_ACCESS_ERROR_MESSAGE)).toBeTruthy();
     expect(queryByText(APPLICATIONS_NO_ACCESS_MESSAGE)).toBeNull();
     fireEvent.press(getByTestId('applications-access-retry'));
@@ -109,6 +113,8 @@ describe.each([
     mockAccess = 'checking';
     const { getByTestId, queryByText } = render(<Screen />);
     expect(mockUseHouseApplications).not.toHaveBeenCalledWith('house-1', true);
+    // Disabled, not left to the default (enabled), which would make the refused read.
+    expect(mockUseHouseApplications).toHaveBeenLastCalledWith('house-1', false);
     expect(getByTestId('loading-indicator')).toBeTruthy();
     expect(queryByText('Alice Applicant')).toBeNull();
   });

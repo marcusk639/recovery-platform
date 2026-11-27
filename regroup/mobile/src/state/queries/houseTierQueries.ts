@@ -78,9 +78,12 @@ export type ApplicationsAccess = 'yes' | 'no' | 'checking' | 'error';
 
 /**
  * The same check for the application screens, which wait for the answer:
- * 'checking' while the tier loads, 'error' when it could not be read (the
- * screen offers a retry rather than telling a manager they may not), 'no'
- * once it is known to be a peer leader's or missing.
+ * 'checking' while the tier loads (a retry included: with no tiers read yet,
+ * a refetch puts the query back to pending), 'error' when it could not be
+ * read (the screen offers a retry rather than telling a manager they may
+ * not), 'no' once it is known to be a peer leader's or missing. A failed
+ * refetch keeps the tiers already read (react-query keeps data on error), so
+ * a manager already on the list is not sent to the retry.
  */
 export const useApplicationsAccess = (
   houseId: string,
@@ -91,6 +94,6 @@ export const useApplicationsAccess = (
   };
   if (!houseId) return { access: 'no', retry };
   if (status === 'pending') return { access: 'checking', retry };
-  if (status === 'error') return { access: 'error', retry };
+  if (status === 'error' && !data) return { access: 'error', retry };
   return { access: RENT_MONEY_TIERS.has(data?.[houseId] ?? '') ? 'yes' : 'no', retry };
 };

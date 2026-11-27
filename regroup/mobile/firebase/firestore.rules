@@ -505,8 +505,8 @@ service cloud.firestore {
     
     // An applicant's own applications, across houses: the landing screen's
     // "Check my application" (owner, 2026-11-27). Only a query filtered on the
-    // caller's own applicantUid passes; staff list a house's applications
-    // through the houses/{houseId}/applications rule below.
+    // caller's own applicantUid passes; a house's owners and managers list its
+    // applications through the houses/{houseId}/applications rule below.
     match /{path=**}/applications/{appId} {
       allow read: if signedIn() && resource.data.applicantUid == request.auth.uid;
     }

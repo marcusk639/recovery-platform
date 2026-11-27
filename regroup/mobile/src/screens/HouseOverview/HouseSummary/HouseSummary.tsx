@@ -130,7 +130,9 @@ const HouseSummary: React.FC<Props> = ({ navigation }) => {
   // Only owners and managers may read applications (owner decision
   // 2026-11-27): a resident's or a peer leader's query is refused (#197), so
   // neither makes it, and the Applications card is theirs only.
-  const mayReviewApplications = useMayReviewApplications(house?.id ?? '');
+  const mayReviewApplications = useMayReviewApplications(
+    isHouseStaff ? (house?.id ?? '') : '',
+  );
   const { data: appList } = useHouseApplications(
     house?.id || '',
     isHouseStaff && mayReviewApplications,

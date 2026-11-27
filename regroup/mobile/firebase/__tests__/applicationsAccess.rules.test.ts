@@ -16,7 +16,17 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from '@firebase/rules-unit-testing';
-import { collection, doc, getDoc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
+import {
+  collection,
+  collectionGroup,
+  doc,
+  getDoc,
+  getDocs,
+  query,
+  setDoc,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -52,8 +62,13 @@ const STAFF: Record<string, { record: Record<string, unknown>; claims: Record<st
     coOwner: { record: { houseId: H, tier: 'owner' }, claims: { superAdmin: { [H]: true }, admin: { [H]: true } } },
     manager: { record: { houseId: H, tier: 'manager' }, claims: { admin: { [H]: true } } },
     peerLeader: { record: { houseId: H, tier: 'peerLeader' }, claims: { admin: { [H]: true } } },
-    // An admin claim with no role record: the rules rank it 0.
+    // An admin claim with no role record: the rules rank it 1, from the claim
+    // alone, the same as a peer leader.
     noRecordAdmin: { record: {}, claims: { admin: { [H]: true } } },
+    // An owner from before role records: the superAdmin claim alone ranks 3.
+    legacyOwner: { record: {}, claims: { superAdmin: { [H]: true } } },
+    // A co-owner holding the superAdmin claim but no admin claim.
+    superAdminOnlyCoOwner: { record: { houseId: H, tier: 'owner' }, claims: { superAdmin: { [H]: true } } },
   };
 
 beforeEach(async () => {
@@ -78,7 +93,7 @@ beforeEach(async () => {
 const as = (uid: string) => testEnv.authenticatedContext(uid, STAFF[uid].claims).firestore();
 
 describe('applications — owners and managers only', () => {
-  describe.each(['primaryOwner', 'coOwner', 'manager'])('%s', (uid) => {
+  describe.each(['primaryOwner', 'coOwner', 'manager', 'legacyOwner', 'superAdminOnlyCoOwner'])('%s', (uid) => {
     it('may read an application', async () => {
       await assertSucceeds(getDoc(doc(as(uid), APP_PATH)));
     });
@@ -116,6 +131,25 @@ describe('applications — owners and managers only', () => {
     });
     const db = testEnv.authenticatedContext('mgr2', { admin: { other: true } }).firestore();
     await assertFails(getDoc(doc(db, APP_PATH)));
+  });
+
+  // The admin claim passes here, so only the tier check refuses: a manager record
+  // counts in its own house only.
+  it("a manager of another house who is also on this house's staff claim may not read or decide", async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `house-roles/other_mgr3`), { houseId: 'other', tier: 'manager' });
+    });
+    const db = testEnv.authenticatedContext('mgr3', { admin: { [H]: true, other: true } }).firestore();
+    await assertFails(getDoc(doc(db, APP_PATH)));
+    await assertFails(updateDoc(doc(db, APP_PATH), { status: 'approved' }));
+  });
+
+  // The collection-group rule ("Check my application") is a second way to the same
+  // documents: it must stay the applicant's own only.
+  it('a peer leader may not reach the applications through a collection-group query', async () => {
+    const db = as('peerLeader');
+    await assertFails(getDocs(query(collectionGroup(db, 'applications'), where('houseId', '==', H))));
+    await assertFails(getDocs(query(collectionGroup(db, 'applications'), where('applicantUid', '==', APPLICANT))));
   });
 });
 
