@@ -14,9 +14,7 @@ tags:
 ---
 - runFlow: ../subflows/guard-e2e-app.yaml
 # Signs in through the login form with the Demo link's credentials. The Demo
-# link itself (landing-demo-link) signs in but leaves the app on the landing
-# screen in the E2EEmulator build (found 2026-11-27, reported with S5), so it
-# is not used here.
+# link itself (landing-demo-link) has its own flow, landing-demo-link.yaml.
 - runFlow:
     file: ../subflows/login.yaml
     env:

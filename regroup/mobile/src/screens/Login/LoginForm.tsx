@@ -12,10 +12,8 @@ import { Routes, AuthScreenNavigationProp } from '../../navigation/types';
 import { Alert } from 'react-native';
 import type { User as FirebaseUser } from '@react-native-firebase/auth';
 import { getAnalytics, logEvent } from '@react-native-firebase/analytics';
-import improvedNavigationService from '../../navigation/improved-navigation-service';
-import { CommonActions } from '@react-navigation/native';
-import { navigationRef } from '../../navigation/service';
 import { logException } from '../../util/logging';
+import { resetToSignedInRoute } from '../../navigation/signedInNavigation';
 
 const loginSchema = yup.object().shape({
   email: yup
@@ -94,66 +92,10 @@ const LoginForm = withFormik<
       // (SignUp shows a signed-in user Accept / Continue) for every account:
       // the invitation flow's NewAccount route is for an account sign-up just
       // created, and it clears the invitation without offering it.
-      const navigationConfig = (props as any).invitation
-        ? { initialRoute: Routes.PriorAuth, authInitialRoute: Routes.Signup, initialMainRoute: undefined }
-        : improvedNavigationService.getInitialNavigation(user);
-
-      // Navigate after login - use setTimeout to ensure Redux state is updated
-      setTimeout(() => {
-        if (navigationRef.current) {
-          if (navigationConfig.initialRoute === Routes.Setup) {
-            // Reset to Setup stack
-            navigationRef.current.dispatch(
-              CommonActions.reset({
-                index: 0,
-                routes: [{ name: Routes.Setup }],
-              }),
-            );
-          } else if (navigationConfig.initialRoute === Routes.Main) {
-            // Reset to Main stack with nested tab route
-            const mainRoute =
-              navigationConfig.initialMainRoute ||
-              (user?.isGuest ? Routes.Guest : Routes.House);
-            navigationRef.current.dispatch(
-              CommonActions.reset({
-                index: 0,
-                routes: [
-                  {
-                    name: Routes.Main,
-                    state: {
-                      routes: [{ name: mainRoute }],
-                      index: 0,
-                    },
-                  },
-                ],
-              }),
-            );
-          } else if (
-            navigationConfig.initialRoute === Routes.PriorAuth &&
-            navigationConfig.authInitialRoute
-          ) {
-            navigationRef.current.dispatch(
-              CommonActions.reset({
-                index: 0,
-                routes: [
-                  {
-                    name: Routes.PriorAuth,
-                    state: {
-                      routes: [{ name: navigationConfig.authInitialRoute }],
-                      index: 0,
-                    },
-                  },
-                ],
-              }),
-            );
-          }
-        } else {
-          logException(
-            new Error('LoginForm: navigationRef.current is null on signin'),
-          );
-        }
-        setSubmitting(false);
-      }, 300);
+      resetToSignedInRoute(user, {
+        hasInvitation: !!(props as any).invitation,
+        onDone: () => setSubmitting(false),
+      });
     } catch (error) {
       logException(error);
       setSubmitting(false);

@@ -127,10 +127,11 @@ jest.mock("../../../util/platform", () => ({
 }));
 
 // ─── Demo-login regression mocks ──────────────────────────────────────────────
-// login is mocked to a plain-action creator so dispatching it doesn't invoke
-// the real async thunk (which would hit Firebase auth). navigateToMain is
-// mocked so we can assert the demo flow reaches it, rather than the regular
-// Login screen.
+// login is mocked to a thunk whose dispatch returns { unwrap }, like the real
+// async thunk's, without hitting Firebase auth (mockDemoLogin decides the
+// outcome). resetToSignedInRoute is mocked so we can assert the demo flow
+// resets the root navigator, rather than opening the regular Login screen.
+const mockDemoLogin = jest.fn();
 jest.mock("../../../state/slices/userSlice", () => {
   const actual = jest.requireActual("../../../state/slices/userSlice");
   return {
@@ -141,9 +142,8 @@ jest.mock("../../../state/slices/userSlice", () => {
     // instead of `actual.default`, breaking every default-import consumer.
     __esModule: true,
     ...actual,
-    login: jest.fn((credentials: any) => ({
-      type: "user/login/mocked",
-      payload: credentials,
+    login: jest.fn((credentials: any) => () => ({
+      unwrap: () => mockDemoLogin(credentials),
     })),
   };
 });
@@ -151,6 +151,10 @@ jest.mock("../../../state/slices/userSlice", () => {
 jest.mock("../../../navigation/authNavigation", () => ({
   navigateAuthStackRoute: jest.fn(),
   navigateToMain: jest.fn(),
+}));
+
+jest.mock("../../../navigation/signedInNavigation", () => ({
+  resetToSignedInRoute: jest.fn(),
 }));
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
@@ -312,13 +316,23 @@ describe("InitialLanding", () => {
     // even though a fully-built demo-login flow (showDemo, using the seeded
     // demo_user@appdemo.net account) already existed in the same file and was
     // simply never wired to this link.
-    it('pressing "Use the demo" logs in as the demo user and navigates to Main, not the regular Login screen', async () => {
+    // 2026-11-27 (E2EEmulator iOS): the Demo link signed in but the app stayed
+    // on the landing screen. The sign-in changes App.tsx's navigationKey,
+    // which remounts the root navigator on the landing screen, and the demo
+    // then navigated with this screen's `navigation`, which belonged to the
+    // navigator that was gone. It must reset the root, as LoginForm does.
+    it('pressing "Use the demo" logs in as the demo user and resets the root to its start route, not the regular Login screen', async () => {
       const { login } = require("../../../state/slices/userSlice");
       const { navigateToMain } = require("../../../navigation/authNavigation");
+      const { resetToSignedInRoute } = require("../../../navigation/signedInNavigation");
+      const demoUser = { id: "e2e-demo-user", isAdmin: true };
+      mockDemoLogin.mockResolvedValue({ user: demoUser });
       const mockNavigate = jest.fn();
+      const mockDispatch = jest.fn();
       const { useNavigation } = require("@react-navigation/native");
       useNavigation.mockReturnValue({
         navigate: mockNavigate,
+        dispatch: mockDispatch,
         goBack: jest.fn(),
         canGoBack: jest.fn(() => false),
       });
@@ -333,8 +347,29 @@ describe("InitialLanding", () => {
         email: "demo_user@appdemo.net",
         password: "DemoUser1",
       });
-      expect(navigateToMain).toHaveBeenCalled();
+      expect(resetToSignedInRoute).toHaveBeenCalledWith(demoUser, { hasInvitation: false });
+      // Not with the screen's own navigation, which the sign-in unmounts.
+      expect(navigateToMain).not.toHaveBeenCalled();
+      expect(mockDispatch).not.toHaveBeenCalled();
       expect(mockNavigate).not.toHaveBeenCalledWith("login");
+    });
+
+    it('says so, and stays on the landing screen, when the demo sign-in fails', async () => {
+      const { resetToSignedInRoute } = require("../../../navigation/signedInNavigation");
+      const { Alert } = require("react-native");
+      const alert = jest.spyOn(Alert, "alert").mockImplementation(() => {});
+      mockDemoLogin.mockRejectedValue(new Error("auth/network-request-failed"));
+
+      const { getByTestId } = renderScreen();
+
+      await act(async () => {
+        fireEvent.press(getByTestId("landing-demo-link"));
+      });
+
+      expect(resetToSignedInRoute).not.toHaveBeenCalled();
+      expect(alert).toHaveBeenCalledWith("Couldn't open the demo. Please try again.");
+      expect(getByTestId("landing-demo-link")).toBeTruthy();
+      alert.mockRestore();
     });
   });
 });
