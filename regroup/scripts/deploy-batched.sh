@@ -56,6 +56,7 @@ ALL_FUNCTIONS=(
   reportBug submitFeedback
   onGuestWrite onHouseDeleted setHouseSubscriptionStatusOnCreate
   onActivityWritten onGuestLinkedRestamp onHouseRentSettingsWrite
+  onUserAdminProfileSync
   updateDisputes warmWebsite officerTermReminder weeklyTransfers
   overdueRentNotification scheduledRentCollection rentCharges
 )

@@ -249,7 +249,7 @@ TypeScript interfaces in `src/entities/` define Firestore document shapes. Key e
 
 ## 3. Backend: Firebase Cloud Functions
 
-Cloud Functions live in `regroup/functions/` in this monorepo (the old standalone `regroup-functions` repository is archived in `regroup/_legacy/regroup-functions/`). `src/index.ts` re-exports 62 deployed functions: callables, Firestore triggers, scheduled jobs, HTTP handlers and two Stripe webhooks. `regroup/FUNCTION_AUDIT.md` is the generated inventory (source file, path or schedule, bound secrets), and `regroup/scripts/deploy-batched.sh` `ALL_FUNCTIONS` lists the same names (a test keeps it equal to the exports). The web app's SSR function is a separate codebase; see §3.7.
+Cloud Functions live in `regroup/functions/` in this monorepo (the old standalone `regroup-functions` repository is archived in `regroup/_legacy/regroup-functions/`). `src/index.ts` re-exports 63 deployed functions: callables, Firestore triggers, scheduled jobs, HTTP handlers and two Stripe webhooks. `regroup/FUNCTION_AUDIT.md` is the generated inventory (source file, path or schedule, bound secrets), and `regroup/scripts/deploy-batched.sh` `ALL_FUNCTIONS` lists the same names (a test keeps it equal to the exports). The web app's SSR function is a separate codebase; see §3.7.
 
 ### 3.1 Callable Functions (httpsCallable)
 
@@ -335,6 +335,7 @@ These execute automatically when documents are created, updated, or deleted:
 | `onActivityWritten`                  | `/activities/{id}`                  | onWrite  | Recomputes week-summaries; stamps `residentUid`; dispute notifications, live dispute list, decision log and archive                 |
 | `sendContactEmail`                   | `/contact/{id}`                     | onCreate | Emails support team                                                                                                                 |
 | `sendSubscriptionUpdateEmail`        | `/users/{id}`                       | onUpdate | Emails on subscription status change                                                                                                |
+| `onUserAdminProfileSync`             | `/users/{id}`                       | onUpdate | Copies the user's current name and phone onto every `admins` record with that `userId` when they change                             |
 | `reportBug`                          | `/bugs/{id}`                        | onCreate | Emails dev team                                                                                                                     |
 | `submitFeedback`                     | `/feedback/{id}`                    | onCreate | Emails product team                                                                                                                 |
 
