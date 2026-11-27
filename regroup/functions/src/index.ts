@@ -13,6 +13,8 @@ export * from './callable/meetings';
 // management: connectStripeAccount, disconnectStripeAccount, getStripeAccountStatus)
 export * from './callable/payments';
 export * from './callable/resolveFailedPayment';
+// What turning rent charging on would charge each resident (managers and above).
+export * from './callable/previewRentCharges';
 
 // Callable functions — subscriptions (operator billing, sendConfirmationEmail)
 export * from './callable/subscriptions';

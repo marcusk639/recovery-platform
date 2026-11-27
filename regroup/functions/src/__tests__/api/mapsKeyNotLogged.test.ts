@@ -26,6 +26,10 @@ jest.mock('../../api/firestore', () => ({
   app: {},
 }));
 jest.mock('../../api/recoveryApi', () => ({ fetchDirectoryMeetings: jest.fn() }));
+// The per-account limit has its own suite (callable/meetingsRateLimit.test.ts).
+jest.mock('../../util/rateLimit', () => ({
+  enforceAccountRateLimit: jest.fn().mockResolvedValue(undefined),
+}));
 
 import { geocode, partialGeocode, reverseGeocode } from '../../api/api';
 import { userIsAtMeeting } from '../../callable/meetings';

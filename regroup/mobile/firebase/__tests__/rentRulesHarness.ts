@@ -69,6 +69,12 @@ export function useRentRulesEnv(projectId: string) {
         guestUserId: RESIDENT,
         amountCents: 12500,
       });
+      await setDoc(doc(db, 'rentCharges/gPeer_2026-11-18'), {
+        guestId: 'gPeer',
+        houseId: HOUSE,
+        guestUserId: PEER,
+        amountCents: 12500,
+      });
       await setDoc(doc(db, 'rentCharges/gOther_2026-11-18'), {
         guestId: 'gOther',
         houseId: HOUSE,

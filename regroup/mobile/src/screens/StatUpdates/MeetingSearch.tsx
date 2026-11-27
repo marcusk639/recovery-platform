@@ -56,6 +56,7 @@ const MeetingSearch: React.FC<Props> = ({ navigation }) => {
     userAsGuest,
     searchingForMeetings,
     searchFailed,
+    searchErrorMessage,
     checkingIn,
     checkInSuccessful,
     checkInError,
@@ -120,7 +121,7 @@ const MeetingSearch: React.FC<Props> = ({ navigation }) => {
             icon="exclamation-triangle"
             buttonTitle="TRY AGAIN"
             onPress={executeSearch}
-            message="Couldn't load meetings. Please try again."
+            message={searchErrorMessage}
           />
         )}
         {!searchingForMeetings && !searchFailed && noMeetingsFound() && (

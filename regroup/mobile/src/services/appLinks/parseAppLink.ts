@@ -7,7 +7,7 @@
  * Accepted forms (launch P5 Task 3):
  *   regroup-app://?type=invitation&token=T     (also com.rats.dev://, one release)
  *   regroup-app://invite?token=T
- *   https://<web origin>/invite?token=T         (extra params such as utm_* ignored)
+ *   https://<web origin>/invite#token=T         (query params such as utm_* ignored)
  *   regroup-app://?type=invitation&house=…&email=…   (legacy params)
  *   regroup-app://checkout-return?result=R
  *   regroup-app://app/checkout-return?result=R
@@ -15,6 +15,9 @@
  *   https://<web origin>/app/checkout-return?result=R
  *
  * The https origin is the one appLinkPrefixes() accepts, and nothing else.
+ * An https invitation carries its token in the fragment, which a browser never
+ * sends, so the token stays out of the web request logs; a token in the https
+ * query is refused. The custom schemes never reach a server and keep the query.
  *
  * URLs are split by a local regex rather than `new URL()`: React Native's URL
  * (Libraries/Blob/URL.js) is regex-based, only reads host and path for http(s)
@@ -34,7 +37,7 @@ const CHECKOUT_RESULTS: readonly string[] = ['success', 'canceled', 'portal'];
 // Server tokens are base64url (functions/src/util/tokens.ts); allow the other
 // unreserved URL characters too, nothing that needs encoding.
 const TOKEN = /^[A-Za-z0-9._~-]{1,256}$/;
-const URL_PARTS = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(?:\?([^#]*))?(?:#.*)?$/i;
+const URL_PARTS = /^([a-z][a-z0-9+.-]*):\/\/([^/?#]*)([^?#]*)(?:\?([^#]*))?(?:#(.*))?$/i;
 
 type Query = Map<string, string[]>;
 
@@ -123,6 +126,7 @@ interface AppTarget {
   custom: boolean;
   route: string;
   rawQuery: string;
+  rawFragment: string;
 }
 
 /** The route and raw query of a URL addressed to the app (a custom scheme or the web origin). */
@@ -130,7 +134,7 @@ const appTarget = (url: string): AppTarget | null => {
   if (typeof url !== 'string') return null;
   const parts = URL_PARTS.exec(url.trim());
   if (!parts) return null;
-  const [, rawScheme, authority, path, rawQuery = ''] = parts;
+  const [, rawScheme, authority, path, rawQuery = '', rawFragment = ''] = parts;
   const scheme = rawScheme.toLowerCase();
   const custom = CUSTOM_SCHEMES.includes(scheme);
 
@@ -143,7 +147,7 @@ const appTarget = (url: string): AppTarget | null => {
     if (!origin || `${scheme}://${authority.toLowerCase()}` !== origin) return null;
     route = path;
   }
-  return { custom, route: route.replace(/^\/+|\/+$/g, ''), rawQuery };
+  return { custom, route: route.replace(/^\/+|\/+$/g, ''), rawQuery, rawFragment };
 };
 
 /**
@@ -161,7 +165,7 @@ export function claimsInvitation(url: string): boolean {
 export function parseAppLink(url: string): AppLink | null {
   const target = appTarget(url);
   if (!target) return null;
-  const { custom, route, rawQuery } = target;
+  const { custom, route, rawQuery, rawFragment } = target;
 
   const query = parseQuery(rawQuery);
   if (!query) return null;
@@ -169,8 +173,11 @@ export function parseAppLink(url: string): AppLink | null {
   switch (route) {
     case '':
       return custom ? typedInvitation(query) : null;
-    case 'invite':
-      return tokenInvitation(query);
+    case 'invite': {
+      if (custom) return tokenInvitation(query);
+      const fragment = parseQuery(rawFragment);
+      return fragment ? tokenInvitation(fragment) : null;
+    }
     case 'checkout-return':
       return checkoutReturn(query);
     // Also on https: app-links.json claims /app/*, so the OS opens it here.

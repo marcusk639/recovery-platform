@@ -10,6 +10,27 @@ import { fetchDirectoryMeetings } from '../api/recoveryApi';
 import { MeetingSearchCriteria, RatsMeeting } from '../entities/Meeting';
 import { DirectoryProvider } from '../entities/DirectoryMeeting';
 import { GOOGLE_MAPS_API_KEY, RECOVERY_PLATFORM_API_KEY } from '../config';
+import { AccountRateLimit, enforceAccountRateLimit } from '../util/rateLimit';
+
+// ── Per-account limits ─────────────────────────────────────────────────────────
+// Both callables spend money on a call (recovery-api's directory, Google Maps
+// geocoding) and any signed-in account can call them, free signups included.
+// Every authenticated call counts, before the input is parsed.
+const HOUR_MS = 60 * 60 * 1000;
+export const MEETING_RATE_LIMITS: Record<'findMeetings' | 'userIsAtMeeting', AccountRateLimit> = {
+  findMeetings: {
+    bucket: 'findMeetings',
+    max: 60,
+    windowMs: HOUR_MS,
+    message: "You've searched for meetings many times in the last hour.",
+  },
+  userIsAtMeeting: {
+    bucket: 'userIsAtMeeting',
+    max: 60,
+    windowMs: HOUR_MS,
+    message: "You've checked into meetings many times in the last hour.",
+  },
+};
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
 /** Without this the directory searches only 5 km. Raise it once phones are tested with long lists. */
@@ -93,6 +114,7 @@ function filterByName(meetings: RatsMeeting[], criteria?: MeetingSearchCriteria)
 // Do not add enforceHouseEntitlement here.
 export const findMeetings = onCall({ secrets: [RECOVERY_PLATFORM_API_KEY] }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
+  await enforceAccountRateLimit(request.auth.uid, MEETING_RATE_LIMITS.findMeetings);
   const data = parseInput<MeetingSearchInput>(findMeetingsSchema, request.data);
   const start = Date.now();
   const { location, day, type } = data.filters;
@@ -172,6 +194,7 @@ export interface MeetingVerificationInput {
 // Do not add enforceHouseEntitlement here.
 export const userIsAtMeeting = onCall({ secrets: [GOOGLE_MAPS_API_KEY] }, async (request) => {
   if (!request.auth) throw new HttpsError('unauthenticated', 'Login required');
+  await enforceAccountRateLimit(request.auth.uid, MEETING_RATE_LIMITS.userIsAtMeeting);
   const data = parseInput<MeetingVerificationInput>(userIsAtMeetingSchema, request.data);
   // 200 metres (~1/8 mile). getDistance uses haversine-distance, which
   // returns metres. The previous comment claimed "quarter of a mile", which

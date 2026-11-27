@@ -61,6 +61,11 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
     navigation,
   } = props;
   const effectiveSelectedHouse = selectedHouse;
+  // Rent is set here only in the operator's first-time wizard. In House Settings
+  // the Rent screen is its one writer: it previews the charges before saving
+  // (rent spec §4.1, §5), and HouseSettings leaves rent out of a Details save.
+  const rentLocked = !!forSettings;
+  const oxford = effectiveSelectedHouse?.houseType === "oxford";
 
   const [height, setHeight] = useState(ANDROID ? normalize(95) : 0);
   const [focused, setFocused] = useState("");
@@ -248,22 +253,46 @@ const HouseSetupFormView: React.FC<HouseSetupFormViewProps> = (props) => {
           }}
           uri={values.imageUrl}
         />
-        {/* {renderField('rentFrequency', 'weekly/monthly/both', RatsTextInput, false, 'Rent Frequency', 'string', labelColor)}
-        {renderField('depositsAndFees', 'deposits/fees', RatsTextInput, false, 'Deposits/Fees', 'string', labelColor)} */}
-        <Field
-          name="monthlyRent"
-          component={RatsNumericInput}
-          minimumValue={0}
-          maximumValue={50000}
-          label="Monthly Rent"
-        />
-        <Field
-          name="weeklyRent"
-          component={RatsNumericInput}
-          minimumValue={0}
-          maximumValue={50000}
-          label="Weekly Rent"
-        />
+        {rentLocked ? null : (
+          <>
+            {/* Rent spec §4.1: how rent is charged. 'both' is Off (charging off).
+                Prices are DOLLARS, within the rules' limits ($2,500 a week, $10,000
+                a month). Oxford houses pay the equal expense share, so only Off. */}
+            <Field
+              component={RatsRadioButtonGroup}
+              name="rentFrequency"
+              label="Charge rent"
+              labelDisabled={false}
+              formHorizontal={true}
+              labelHorizontal={true}
+              wrapStyle={{ marginHorizontal: 0, marginRight: normalize(15) }}
+              selectedButtonColor={color.black}
+              radioButtons={[
+                ...(oxford
+                  ? []
+                  : [
+                      { label: "Weekly", value: "weekly", testID: "house-rent-weekly" },
+                      { label: "Monthly", value: "monthly", testID: "house-rent-monthly" },
+                    ]),
+                { label: "Off", value: "both", testID: "house-rent-off" },
+              ]}
+            />
+            <Field
+              name="monthlyRent"
+              component={RatsNumericInput}
+              minimumValue={0}
+              maximumValue={10000}
+              label="Monthly Rent"
+            />
+            <Field
+              name="weeklyRent"
+              component={RatsNumericInput}
+              minimumValue={0}
+              maximumValue={2500}
+              label="Weekly Rent"
+            />
+          </>
+        )}
         <Field
           name="depositsAndFees"
           component={RatsNumericInput}

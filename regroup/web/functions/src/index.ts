@@ -87,8 +87,9 @@ function getShell(): string {
   return cachedShell;
 }
 
-// An invitation link's query carries its token (/invite?token=…), so logs
-// get the path only.
+// App links carry state in the URL. An invitation's token is in the fragment
+// (/invite#token=…), which never reaches the server, but older invitation
+// links had it in the query, so logs get the path only.
 const pathOnly = (url: string): string => url.split(/[?#]/)[0];
 
 /**

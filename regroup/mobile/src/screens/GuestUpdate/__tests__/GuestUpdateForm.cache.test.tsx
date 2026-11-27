@@ -40,7 +40,7 @@ jest.mock('../../../hooks/useSelectedGuest', () => {
   };
 });
 jest.mock('../../../state/queries/houseTierQueries', () => ({
-  useMayEditRentMoney: () => true,
+  useMayEditGuestMoney: () => true,
 }));
 jest.mock('../../../util/logging', () => ({ logException: jest.fn(), logDebug: jest.fn() }));
 
