@@ -244,36 +244,3 @@ export async function importGuests(
   }
   return result;
 }
-
-export async function importGuestsFromRows(
-  houseId: string,
-  rows: GuestImportRow[],
-): Promise<number> {
-  if (!houseId) throw new Error('houseId is required');
-  if (rows.length === 0) return 0;
-
-  let imported = 0;
-  // The rules require createdBy to be the caller. It is how the server
-  // tells a staff-made record from a self-made one when it links records
-  // for the same person.
-  const createdBy = auth.currentUser?.uid;
-
-  try {
-    for (let start = 0; start < rows.length; start += BATCH_LIMIT) {
-      const batch = writeBatch(firestore);
-      const slice = rows.slice(start, start + BATCH_LIMIT);
-      for (const row of slice) {
-        const docRef = doc(guestCollection, createGuestId());
-        batch.set(docRef, importedGuest(row, docRef.id, houseId, createdBy));
-      }
-      await batch.commit();
-      imported += slice.length;
-    }
-    return imported;
-  } catch (error) {
-    logException(error);
-    throw new Error(
-      'Guest import failed. Please check your CSV and try again.',
-    );
-  }
-}
