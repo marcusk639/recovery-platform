@@ -56,6 +56,22 @@ it('writes, removes and leaves alone on --apply', async () => {
   expect(mem.writes.filter((w) => w.path === 'house-listings/same')).toHaveLength(0);
 });
 
+// Owner decision 2026-11-27: a past-due house is listed only while its guest
+// grace runs, in the backfill as in the trigger.
+it('lists a past-due house whose grace runs and drops one whose grace ended', async () => {
+  const running = new Date(Date.now() + 86400000).toISOString();
+  mem.seed('houses/running', listed({ subscriptionStatus: 'past_due', guestGraceEndsAt: running }));
+  mem.seed(
+    'houses/ended',
+    listed({ subscriptionStatus: 'past_due', guestGraceEndsAt: '2020-01-01T00:00:00Z' }),
+  );
+  mem.seed('house-listings/ended', { id: 'ended', name: 'A House' });
+  await run(memDb, true);
+  expect(mem.get('house-listings/running')).toMatchObject({ id: 'running' });
+  expect(mem.get('house-listings/running')).not.toHaveProperty('guestGraceEndsAt');
+  expect(mem.get('house-listings/ended')).toBeUndefined();
+});
+
 it('reads only the fields a listing is made from', async () => {
   seedAll();
   await run(memDb, false);

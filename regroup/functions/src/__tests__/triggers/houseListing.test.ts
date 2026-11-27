@@ -106,14 +106,30 @@ it('converges on a retry: a second run of the same event changes nothing', async
 });
 
 // Owner decision 2026-11-27: a live house is listed, a past-due one too
-// (its grace period), and a house that isn't live is not.
+// while its guest grace runs, and a house that isn't live is not.
+const graceRunning = { guestGraceEndsAt: new Date(Date.now() + 86400000).toISOString() };
 for (const status of ['active', 'trialing', 'past_due']) {
   it(`lists a house whose subscription is ${status}`, async () => {
-    mem.seed(`houses/${H}`, house({ subscriptionStatus: status }));
+    mem.seed(
+      `houses/${H}`,
+      house({ subscriptionStatus: status, ...(status === 'past_due' ? graceRunning : {}) }),
+    );
     await run(event);
     expect(listing()).toMatchObject({ id: H });
   });
 }
+
+it('lists a past-due house again when it becomes active (the trigger re-lists it)', async () => {
+  mem.seed(
+    `houses/${H}`,
+    house({ subscriptionStatus: 'past_due', guestGraceEndsAt: '2020-01-01T00:00:00Z' }),
+  );
+  await run(event);
+  expect(listing()).toBeUndefined();
+  mem.seed(`houses/${H}`, house({ subscriptionStatus: 'active' }));
+  await run(event);
+  expect(listing()).toMatchObject({ id: H });
+});
 
 for (const status of ['canceled', 'unpaid', 'incomplete', 'incomplete_expired', 'paused', '']) {
   it(`lists no house whose subscription is ${status || 'missing'}`, async () => {
