@@ -8,7 +8,7 @@ jest.mock('../../util/email', () => ({
 
 import { sendOneInviteEmail, InviteEmailType } from '../../util/inviteEmails';
 
-const LINK = 'https://regroup-app.com/invite?token=abc%20123';
+const LINK = 'https://regroup-app.com/invite#token=abc%20123';
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -30,6 +30,13 @@ describe('sendOneInviteEmail', () => {
       expect(body).not.toContain('/redirect');
       expect(body).not.toContain('regroup-app://');
     }
+  });
+
+  // The token is in the link; a click-tracking redirect would carry it
+  // through SendGrid.
+  it.each(roles)('sends with click tracking off (%s)', async (role) => {
+    await sendOneInviteEmail({ toEmail: 'a@rats-e2e.com', inviteLink: LINK, role });
+    expect(mockSendEmail.mock.calls[0][0].clickTracking).toBe(false);
   });
 
   it('uses guest wording for guests and manage wording for staff roles', async () => {
