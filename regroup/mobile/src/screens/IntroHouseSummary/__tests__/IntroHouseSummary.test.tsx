@@ -253,6 +253,7 @@ function makeAdmin(id: string, overrides: any = {}) {
 function buildStore({
   selectedHouse = null as any,
   houseAdmins = {} as any,
+  anonymous = false,
 } = {}) {
   mockUseSelectedHouse.mockReturnValue({
     house: selectedHouse,
@@ -275,7 +276,7 @@ function buildStore({
     },
     preloadedState: {
       user: {
-        user: { uid: "user-1", id: "user-1" },
+        user: { uid: "user-1", id: "user-1", isAnonymous: anonymous },
         loading: false,
         error: null,
         loggedIn: true,
@@ -306,7 +307,7 @@ const mockNavigation: any = {
 };
 
 function renderScreen(
-  storeOptions: { selectedHouse?: any; houseAdmins?: any } = {}
+  storeOptions: { selectedHouse?: any; houseAdmins?: any; anonymous?: boolean } = {}
 ) {
   const store = buildStore(storeOptions);
   return render(
@@ -435,6 +436,34 @@ describe("IntroHouseSummary", () => {
 
   // ─── Administrators section ───────────────────────────────────────────────────
   describe("administrators section", () => {
+    // Owner decision 2026-11-27: a signed-out visitor (the anonymous session)
+    // sees no ADMINISTRATORS section; admins' records aren't public anyway.
+    it("hides the section from a signed-out visitor", () => {
+      const houseAdmins = {
+        "admin-1": makeAdmin("admin-1", { firstName: "Alice", lastName: "Walker" }),
+      };
+      const { queryByText } = renderScreen({
+        selectedHouse: makeHouse(),
+        houseAdmins,
+        anonymous: true,
+      });
+      expect(queryByText("ADMINISTRATORS")).toBeNull();
+      expect(queryByText("Alice Walker")).toBeNull();
+    });
+
+    it("shows the section to a signed-in member", () => {
+      const houseAdmins = {
+        "admin-1": makeAdmin("admin-1", { firstName: "Alice", lastName: "Walker" }),
+      };
+      const { getByText } = renderScreen({
+        selectedHouse: makeHouse(),
+        houseAdmins,
+        anonymous: false,
+      });
+      expect(getByText("ADMINISTRATORS")).toBeTruthy();
+      expect(getByText("Alice Walker")).toBeTruthy();
+    });
+
     it("shows the ADMINISTRATORS heading", () => {
       const { getByText } = renderScreen({ selectedHouse: makeHouse() });
       expect(getByText("ADMINISTRATORS")).toBeTruthy();

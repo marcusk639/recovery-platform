@@ -69,6 +69,9 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
   const { houseId } = useSelectedHouse();
   const { data: house } = useHouseListing(houseId);
   const admins = useAppSelector((state) => state.admin.houseAdmins);
+  // A signed-out visitor (the anonymous session) sees no ADMINISTRATORS
+  // section (owner, 2026-11-27): admins' records aren't public.
+  const signedOut = useAppSelector((state) => !!state.user.user?.isAnonymous);
 
   // D1 = option (a) (P5 Task 16): a prospective resident applies on the
   // anonymous session the app already holds. Self-signup stays on the landing
@@ -493,14 +496,18 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
       {renderCost(house)}
       {renderLocation(house)}
       {renderHouseSummary(house)}
-      <View style={{ ...CARD_STYLE, marginBottom: 1 }}>
-        <RatsText
-          translate={false}
-          text="ADMINISTRATORS"
-          style={{ fontFamily: fontFamily.bold }}
-        />
-      </View>
-      {renderCollapsibles()}
+      {!signedOut && (
+        <>
+          <View style={{ ...CARD_STYLE, marginBottom: 1 }}>
+            <RatsText
+              translate={false}
+              text="ADMINISTRATORS"
+              style={{ fontFamily: fontFamily.bold }}
+            />
+          </View>
+          {renderCollapsibles()}
+        </>
+      )}
     </RatsScrollView>
   );
 };

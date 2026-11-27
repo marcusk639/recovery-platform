@@ -71,3 +71,13 @@ tags:
 - assertVisible: ".*OPENINGS.*"
 - assertNotVisible: ".*100 Test St.*"
 - assertNotVisible: ".*HOUSE HEALTH.*"
+# A signed-out visitor sees no ADMINISTRATORS section (owner, 2026-11-27).
+# It sat at the bottom of the summary: scroll there first.
+- swipe:
+    start: "50%, 70%"
+    end: "50%, 30%"
+- swipe:
+    start: "50%, 70%"
+    end: "50%, 30%"
+- waitForAnimationToEnd
+- assertNotVisible: ".*ADMINISTRATORS.*"
