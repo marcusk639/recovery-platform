@@ -661,4 +661,17 @@ describe("submitNewMeeting", () => {
     );
     expect(p.navigation.navigate).toHaveBeenCalled();
   });
+
+  // The list's check-in would be refused too until the hour resets.
+  it("says when to try again when the hourly limit refused the check-in", async () => {
+    const limit =
+      "You've checked into meetings many times in the last hour. Please try again in 9 minutes.";
+    const error = Object.assign(new Error(limit), { code: "resource-exhausted" });
+    const p = props({ checkIntoMeeting: jest.fn(() => Promise.reject(error)) });
+
+    await submitNewMeeting(values, p);
+
+    expect(alert).toHaveBeenCalledWith(`Meeting added, but check-in failed. ${limit}`);
+    expect(p.navigation.navigate).toHaveBeenCalled();
+  });
 });

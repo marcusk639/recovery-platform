@@ -740,6 +740,13 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // Per-account call counters for the paid 12-step meeting callables
+    // (functions util/rateLimit.ts). Server-only: a client that could reset
+    // its own counter would have no limit.
+    match /rateLimits/{limitId} {
+      allow read, write: if false;
+    }
+
     // Each resident's chargedThrough / chargeFrom. Server-only: a client that
     // wrote an older chargedThrough back would be charged those days again.
     match /rentAccounts/{guestId} {

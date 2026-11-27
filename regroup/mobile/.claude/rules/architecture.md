@@ -87,6 +87,7 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 | `invitations.ts`                | Invitation callables: create, peek, redeem                 |
 | `issues.ts`                     | House maintenance issue CRUD                              |
 | `meeting.ts`                    | Search, check-in (calls Cloud Functions)                  |
+| `meetingErrors.ts`              | Messages for the meeting callables' refusals (hourly limit) |
 | `message.tsx`                   | DM conversations, house chat messages                     |
 | `notifications.tsx`             | Fetch, mark read, FCM token registration                  |
 | `notifications/rentReminder.ts` | Rent reminder as a react-native-notify-kit trigger        |
