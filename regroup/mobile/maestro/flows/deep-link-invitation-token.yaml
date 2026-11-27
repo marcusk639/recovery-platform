@@ -1,0 +1,34 @@
+# Deep link: an invitation link in the server-issued token form
+# (regroup-app://?type=invitation&token=…, what createInvitation emails), opened
+# with the app cold and signed out, reaches signup with the invitation shown
+# (testID invitation-info) and the invited email filled in by peekInvitation.
+# Needs the seeded invitation e2e-invite-token-1 (maestro/scripts/seed/index.js).
+# Baseline for launch P5: every link that works today must keep working.
+# Run: maestro/scripts/run-flows.sh deep-link-invitation-token
+appId: ${APP_ID}
+tags:
+  - links
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- launchApp:
+    clearState: true
+    arguments:
+      IS_E2E_TEST: "1"
+- extendedWaitUntil:
+    visible:
+      id: "initial-landing-screen"
+    timeout: 30000
+# Cold: stop the app so the link starts it.
+- stopApp
+- runFlow:
+    file: ../subflows/open-link.yaml
+    env:
+      LINK: "regroup-app://?type=invitation&token=e2e-invite-token-1"
+# The app routes an invitation link straight to signup, with the invitation
+# shown and the invited email filled in.
+- extendedWaitUntil:
+    visible:
+      id: "invitation-info"
+    timeout: 30000
+- assertVisible:
+    text: "e2e-invitee@rats-e2e.com"

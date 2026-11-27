@@ -158,6 +158,35 @@ async function main() {
 
   await db.doc(`houses/${d.HOUSE}/applications/test-app-1`).set(d.application(now));
 
+  // An unredeemed guest invitation with a known token, for the token-form deep
+  // link flows (deep-link-invitation-token*.yaml). The doc id is the token
+  // itself (functions/src/callable/invitations.ts), so nothing is hashed.
+  await db.doc('invitations/e2e-invite-token-1').set({
+    token: 'e2e-invite-token-1',
+    inviterUid: manager.uid,
+    houseId: d.HOUSE,
+    role: 'guest',
+    invitedEmail: 'e2e-invitee@rats-e2e.com',
+    expiresAt: d.iso(now + 7 * 24 * 60 * 60 * 1000),
+    createdAt: d.iso(now),
+  });
+
+  // Two unredeemed manager invitations to resident B's own email, for the
+  // signed-in cold-start flow (deep-link-invitation-accept.yaml): one is
+  // accepted as that account, the other is left with "Continue to the app".
+  // A manager invitation needs no resident slot and is allowed to a resident.
+  for (const token of ['e2e-invite-token-accept', 'e2e-invite-token-continue']) {
+    await db.doc(`invitations/${token}`).set({
+      token,
+      inviterUid: manager.uid,
+      houseId: d.HOUSE,
+      role: 'admin',
+      invitedEmail: guestB.email,
+      expiresAt: d.iso(now + 7 * 24 * 60 * 60 * 1000),
+      createdAt: d.iso(now),
+    });
+  }
+
   // 6. After the dispute-mirror trigger runs, pin the entry the operator flow looks for.
   await sleep(4000);
   await db.doc(`house-disputes/${d.HOUSE}`).set({

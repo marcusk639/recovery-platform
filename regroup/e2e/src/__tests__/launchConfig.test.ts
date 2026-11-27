@@ -199,6 +199,24 @@ describe('production return origins', () => {
   });
 });
 
+// Invitation emails link to WEB_BASE_URL/invite; the app opens only its own
+// web origin, so each env's value is that env's web origin (CONNECT_BASE_URL's).
+describe('WEB_BASE_URL', () => {
+  it.each(['production', 'e2e-staging', 'e2e-emulator'] as const)('is the %s web origin', (env) => {
+    const vars = functionsEnvFor(env);
+    expect(vars.WEB_BASE_URL).toBe(new URL(vars.CONNECT_BASE_URL).origin);
+  });
+  it('matches the production default in functions/src/callable/invitations.ts', () => {
+    const source = fs.readFileSync(
+      path.join(__dirname, '..', '..', '..', 'functions', 'src', 'callable', 'invitations.ts'),
+      'utf8',
+    );
+    const m = /const DEFAULT_WEB_BASE_URL = (["'])([^"']+)\1/.exec(source);
+    expect(m).not.toBeNull();
+    expect(functionsEnvFor('production').WEB_BASE_URL).toBe(m![2]);
+  });
+});
+
 describe('writePaymentSuiteEnvFile', () => {
   it("writes the payment suite's own env file and leaves the manual emulators' alone", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pay-env-'));

@@ -1,4 +1,5 @@
 import { routes } from './app-routing.module';
+import { AppLinkLandingComponent } from './components/app-link-landing/app-link-landing.component';
 
 // Launch item M6: the purchased site template's demo pages (lorem ipsum, sample
 // reviews, a placeholder FAQ) must not be served as Regroup pages.
@@ -26,6 +27,14 @@ describe('app routes', () => {
       expect(route?.redirectTo).withContext(path).toBe('');
       expect(route?.pathMatch).withContext(path).toBe('full');
     }
+  });
+
+  // The paths regroup/app-links.json claims for the app (launch P5 Task 6).
+  it('serves the app-link landing page for /invite, /checkout-return and /app/**', () => {
+    const at = (path: string) => routes.find((r) => r.path === path);
+    expect(at('invite')?.component).toBe(AppLinkLandingComponent);
+    expect(at('checkout-return')?.component).toBe(AppLinkLandingComponent);
+    expect(at('app')?.children?.find((c) => c.path === '**')?.component).toBe(AppLinkLandingComponent);
   });
 
   it('keeps the catch-all last', () => {

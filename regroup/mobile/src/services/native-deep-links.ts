@@ -1,14 +1,13 @@
 import { Linking } from 'react-native';
 import { Invitation, InvitationType } from '../entities/Invite';
 import { logException } from '../util/logging';
+import { claimsInvitation, parseAppLink } from './appLinks/parseAppLink';
+import { invitationFromAppLink } from './appLinks/invitationFromAppLink';
 
-const ratsDomain = 'regroup-app.com';
-const rootLink = `https://${ratsDomain}`;
 const customScheme = 'regroup-app://';
 const iosPackageName = 'com.rats.dev';
-const androidPackageName = 'com.regroup.app';
 
-export type LinkType = 'invitation'; // emailConfirmation removed
+export type LinkType = 'invitation' | 'checkout-return'; // emailConfirmation removed
 
 export interface NativeDeepLink {
   url: string;
@@ -91,9 +90,7 @@ export const getInitialLink = async (): Promise<NativeDeepLink | null> => {
     const initialUrl = await Linking.getInitialURL();
 
     if (initialUrl) {
-      const isValid = isValidDeepLink(initialUrl);
-
-      if (isValid) {
+      if (reachesApp(initialUrl)) {
         return { url: resolveDeepLinkUrl(initialUrl) };
       }
     }
@@ -110,7 +107,7 @@ export const getInitialLink = async (): Promise<NativeDeepLink | null> => {
  */
 export const onLink = (listener: (link: NativeDeepLink) => void): (() => void) => {
   const handleUrl = (event: { url: string }) => {
-    if (isValidDeepLink(event.url)) {
+    if (reachesApp(event.url)) {
       listener({ url: resolveDeepLinkUrl(event.url) });
     }
   };
@@ -123,92 +120,41 @@ export const onLink = (listener: (link: NativeDeepLink) => void): (() => void) =
 };
 
 /**
- * Creates an invitation object from a deep link
+ * Creates an invitation object from a deep link (token or legacy params form).
+ * Throws when the link is not an invitation parseAppLink accepts.
  */
 export const createInvitationFromLink = (link: NativeDeepLink): Invitation => {
-  try {
-    const query = parseLinkQuery(resolveDeepLinkUrl(link.url));
-
-    if (query.type !== 'invitation') {
-      throw new Error('Invalid deep link: not an invitation link');
-    }
-
-    // New format: opaque token only. SignUpForm calls peekInvitation +
-    // redeemInvitation to fill in metadata + grant claims.
-    if (query.token) {
-      return {
-        id: '',
-        type: 'guest', // placeholder — overwritten by peekInvitation
-        houseId: '',
-        inviterId: '',
-        ownerId: '',
-        email: '',
-        initialPhase: '',
-        expirationDate: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        token: query.token,
-      };
-    }
-
-    // Legacy format — kept until Phase F removes it.
-    if (!query.house || !query.email) {
-      logException(new Error('createInvitationFromLink — missing required parameters'));
-      throw new Error('Invalid deep link: missing required parameters');
-    }
-
-    const invitation: Invitation = {
-      id: '',
-      type: query.invitationType as InvitationType,
-      houseId: query.house as string,
-      inviterId: (query.inviter as string) || '',
-      ownerId: (query.owner as string) || '',
-      email: query.email as string,
-      initialPhase: query.initialPhase ? (query.initialPhase as string).replace(/\+/g, ' ') : '',
-      expirationDate: new Date(new Date().getTime() + 7 * 24 * 60 * 60 * 1000),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
-    return invitation;
-  } catch (error) {
-    logException(error);
-    throw new Error('Failed to parse invitation link');
+  const parsed = parseAppLink(resolveDeepLinkUrl(link.url));
+  if (parsed?.kind === 'invitation' || parsed?.kind === 'invitation-legacy') {
+    return invitationFromAppLink(parsed);
   }
+  logException(new Error('createInvitationFromLink — not an invitation link'));
+  throw new Error('Failed to parse invitation link');
 };
 
-// Email confirmation parsing removed - no longer needed
-
 /**
- * Determines the type of link from a deep link URL
+ * Determines the type of link from a deep link URL (a thin wrapper over
+ * parseAppLink, so `type` is read wherever it sits in the query).
  */
-export const getLinkType = (link: NativeDeepLink): LinkType | null =>
-  parseLinkQuery(resolveDeepLinkUrl(link.url)).type === 'invitation' ? 'invitation' : null;
-
-/**
- * Checks if a URL is a valid deep link for this app
- */
-export const isValidDeepLink = (urlString: string): boolean => {
-  try {
-    const parsedUrl = new URL(urlString);
-
-    // Check for custom scheme
-    if (parsedUrl.protocol === 'regroup-app:') {
-      return true;
-    }
-
-    // Check for bundle ID scheme (for debug builds)
-    if (parsedUrl.protocol === 'com.rats.dev:') {
-      return true;
-    }
-
-    // Check for HTTPS with exact domain match (for fallback/universal links)
-    if (parsedUrl.protocol === 'https:' && parsedUrl.host === ratsDomain) {
-      return true;
-    }
-
-    return false;
-  } catch (error) {
-    logException(error);
-    return false;
-  }
+export const getLinkType = (link: NativeDeepLink): LinkType | null => {
+  const url = resolveDeepLinkUrl(link.url);
+  const parsed = parseAppLink(url);
+  if (parsed) return parsed.kind === 'checkout-return' ? 'checkout-return' : 'invitation';
+  // An invitation whose params parseAppLink refuses is still an invitation, so
+  // the caller reports it as a broken invite rather than ignoring it.
+  return parseLinkQuery(url).type === 'invitation' ? 'invitation' : null;
 };
+
+/**
+ * A link Splash receives: one it handles, or an invitation that doesn't parse,
+ * which Splash reports as broken instead of opening the app silently.
+ */
+const reachesApp = (urlString: string): boolean =>
+  isValidDeepLink(urlString) || claimsInvitation(resolveDeepLinkUrl(urlString));
+
+/**
+ * Checks if a URL is a link this app handles outside navigation (an
+ * invitation or a checkout hand-back), on an accepted scheme or web origin.
+ */
+export const isValidDeepLink = (urlString: string): boolean =>
+  parseAppLink(resolveDeepLinkUrl(urlString)) !== null;
