@@ -1,8 +1,9 @@
-import { onCall } from 'firebase-functions/v2/https';
+import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { STRIPE_SECRET_KEY, SUBSCRIPTION_TIERS, HouseType, TierKey } from '../config';
 import { stripe, TRIAL_PERIOD_DAYS } from '../api/stripe';
 import { isSalesOpen } from '../util/salesSwitch';
+import { isEmulatorFaultOn } from '../util/emulatorFaults';
 import {
   getTier,
   resolveTierPriceId,
@@ -140,6 +141,11 @@ async function buildCatalog(): Promise<CatalogPrices> {
 export const getTierCatalog = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (): Promise<TierCatalogResponse> => {
+    // e2e only (BILL-008): a flow makes the catalog unreachable. A no-op that
+    // reads nothing outside the Functions emulator running demo-regroup-e2e.
+    if (await isEmulatorFaultOn('tierCatalogUnavailable')) {
+      throw new HttpsError('unavailable', 'The tier catalog is unavailable.');
+    }
     const now = Date.now();
     if (!cache || cache.expiresAt <= now) {
       cache = { data: await buildCatalog(), expiresAt: now + CACHE_TTL_MS };
