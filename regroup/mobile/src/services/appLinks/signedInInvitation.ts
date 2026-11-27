@@ -139,10 +139,11 @@ export async function acceptInvitationAsCurrentUser(
   // write them. A second redeem by this account grants nothing and succeeds
   // (functions/src/callable/invitations.ts), and writeInvitationMembership
   // reuses a record a failed attempt already created (same app session).
+  let written: Partial<User> = {};
   try {
     await refreshInvitationClaims(claimsDelayMs);
     const membership = buildInvitationMembership(user ?? {}, role);
-    if (membership) await writeInvitationMembership(membership, user ?? {}, writers);
+    if (membership) written = await writeInvitationMembership(membership, user ?? {}, writers);
   } catch (error) {
     logException(error, 'acceptInvitationAsCurrentUser: membership write failed');
     return { ok: false, message: SETUP_UNFINISHED };
@@ -155,6 +156,7 @@ export async function acceptInvitationAsCurrentUser(
   } catch (error) {
     logException(error, 'acceptInvitationAsCurrentUser: reload after accept failed');
   }
-  leaveInvitation(dispatch, reloaded ?? user);
+  // Without the reload, route by the user plus the records just written.
+  leaveInvitation(dispatch, reloaded ?? { ...user, ...written });
   return { ok: true };
 }

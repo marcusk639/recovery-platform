@@ -107,6 +107,32 @@ describe('SignedInInvitation', () => {
     expect(queryByTestId('accept-invitation-error')).toBeNull();
   });
 
+  // Two taps before the button re-renders as disabled must not run two
+  // accepts: the second could write a second membership record.
+  it('a double tap accepts once', async () => {
+    let finish: (v: unknown) => void = () => {};
+    accept.mockImplementation(() => new Promise((resolve) => (finish = resolve)));
+    const { getByTestId } = renderWith(tokenInvitation);
+    await act(async () => {
+      fireEvent.press(getByTestId('accept-invitation-button'));
+      fireEvent.press(getByTestId('accept-invitation-button'));
+    });
+    expect(accept).toHaveBeenCalledTimes(1);
+    await act(async () => finish({ ok: true }));
+  });
+
+  it('can accept again after a refusal', async () => {
+    accept.mockResolvedValue({ ok: false, message: 'Try again.' });
+    const { getByTestId } = renderWith(tokenInvitation);
+    await act(async () => {
+      fireEvent.press(getByTestId('accept-invitation-button'));
+    });
+    await act(async () => {
+      fireEvent.press(getByTestId('accept-invitation-button'));
+    });
+    expect(accept).toHaveBeenCalledTimes(2);
+  });
+
   it("shows the server's refusal and keeps both actions", async () => {
     accept.mockResolvedValue({
       ok: false,

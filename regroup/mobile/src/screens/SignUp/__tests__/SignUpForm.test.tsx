@@ -69,10 +69,13 @@ import React from "react";
 import { render, act } from "@testing-library/react-native";
 import SignUpFormWrapper from "../SignUpForm";
 import { Routes } from "../../../navigation/types";
+import { resetInvitationMembershipRetryState } from "../../../services/invitationMembership";
 
 describe("SignUpFormWrapper", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // The membership writer remembers finished writes per account for the session.
+    resetInvitationMembershipRetryState();
     mockInvitation = null;
     mockRedeemInvitation.mockResolvedValue(undefined);
     mockCreateGuest.mockResolvedValue(undefined);

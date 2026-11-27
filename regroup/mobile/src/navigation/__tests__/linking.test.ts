@@ -137,10 +137,13 @@ describe('linkingConfig allowlist', () => {
     expect(get('?type=invitation&token=t1', linkingConfig.config)).toBeUndefined();
     // parseAppLink is the one parser: an invitation query on the signup route
     // is not an invitation link, so the route opens and no invitation is made.
+    // (Signed out: auth/* links open only for a signed-out or anonymous user.)
+    signInAs(null);
     expect(
       get('auth/signup?type=invitation&house=h1', linkingConfig.config)?.routes[0].state
         ?.routes[0].name,
     ).toBe(Routes.Signup);
+    signInAs({ uid: 'u1', isAnonymous: false });
     expect(get('app/checkout-return?type=checkout-return', linkingConfig.config)).toBeUndefined();
     expect(get('app/checkout-return?result=success', linkingConfig.config)).toBeUndefined();
     expect(get('app/house', linkingConfig.config)?.routes[0].name).toBe(Routes.Main);
@@ -267,6 +270,34 @@ describe('app/* links need a signed-in user', () => {
   it('still opens the auth routes signed out', () => {
     expect(get('auth/login')?.routes[0].state?.routes[0].name).toBe(Routes.Login);
     expect(get('auth/signup')?.routes[0].state?.routes[0].name).toBe(Routes.Signup);
+  });
+});
+
+// Sign-up and login are for a signed-out (or anonymous) user. Signed in, the
+// sign-up form would create a second account from the current user's doc.
+describe('auth/* links need a signed-out or anonymous user', () => {
+  const get = (p: string) => linkingConfig.getStateFromPath!(p, linkingConfig.config);
+
+  it.each(['auth', 'auth/login', 'auth/signup', 'auth/signup/tok123', '/auth/signup', 'auth?x=1'])(
+    'declines %s for a signed-in user',
+    (p) => {
+      signInAs({ uid: 'u1', isAnonymous: false });
+      expect(get(p)).toBeUndefined();
+    },
+  );
+
+  it('opens them for an anonymous user', () => {
+    signInAs({ uid: 'anon', isAnonymous: true });
+    expect(get('auth/signup')?.routes[0].state?.routes[0].name).toBe(Routes.Signup);
+    expect(get('auth/login')?.routes[0].state?.routes[0].name).toBe(Routes.Login);
+  });
+
+  it('does not decline a path that only starts with auth', () => {
+    signInAs({ uid: 'u1', isAnonymous: false });
+    expect(get('authors')).toBeUndefined();
+    expect(linkingConfig.getStateFromPath!('app/house', linkingConfig.config)?.routes[0].name).toBe(
+      Routes.Main,
+    );
   });
 });
 

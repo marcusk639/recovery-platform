@@ -33,6 +33,7 @@ import {
   buildInvitationMembership,
   refreshInvitationClaims,
   writeInvitationMembership,
+  guestRecordExists,
 } from "../../services/invitationMembership";
 
 export interface SignUpFormProps {
@@ -148,6 +149,7 @@ const SignUpForm = withFormik<SignUpFormProps, SignUpFormValues>({
           createGuest,
           createAdmin,
           updateUser,
+          guestExists: guestRecordExists,
         });
         setSubmitting(false);
         props.navigation.navigate(Routes.NewAccount);
