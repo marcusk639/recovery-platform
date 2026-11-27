@@ -2,9 +2,10 @@
 # decision 2026-11-27). A peer leader of the house sees no Applications card on
 # the House tab, and the rules refuse their reads of the house's applications;
 # the owner still reads them (operator-applications.yaml covers deciding one).
-# Persona: a peer leader of test-house-123, added by
-# maestro/scripts/maestro-js/seed-peer-leader.js (the seed has none), and the
-# seeded manager, who owns the house.
+# Persona: guest-b, a resident of test-house-123 made its peer leader by
+# maestro/scripts/maestro-js/seed-peer-leader.js (the seed has no peer
+# leader; a peer leader is a resident with the admin claim, as
+# promoteGuestsToAdmin leaves one), and the seeded manager, who owns the house.
 # Run: maestro test -e APP_ID=com.rats.dev.e2e.emu -e E2E_TEST_PASSWORD=... maestro/flows/peer-leader-applications.yaml
 appId: ${APP_ID}
 tags:
@@ -16,13 +17,12 @@ tags:
     file: ../scripts/maestro-js/seed-peer-leader.js
     env:
       HOUSE_ID: test-house-123
-      EMAIL: test-peer-leader@rats-e2e.com
-      PASSWORD: ${E2E_TEST_PASSWORD}
+      UID: e2e-guest-b
 # The rules: the peer leader is refused, the owner is not.
 - runScript:
     file: ../scripts/maestro-js/applications-read-as.js
     env:
-      EMAIL: test-peer-leader@rats-e2e.com
+      EMAIL: test-guest-b@rats-e2e.com
       PASSWORD: ${E2E_TEST_PASSWORD}
       HOUSE_ID: test-house-123
       APP_ID: test-app-1
@@ -43,8 +43,11 @@ tags:
 - runFlow:
     file: ../subflows/login.yaml
     env:
-      EMAIL: test-peer-leader@rats-e2e.com
+      EMAIL: test-guest-b@rats-e2e.com
       PASSWORD: ${E2E_TEST_PASSWORD}
+# A resident lands on the Guest tab; the staff cards are on the House tab.
+- tapOn:
+    id: "house-tab"
 - extendedWaitUntil:
     visible:
       id: "main-app-screen"
