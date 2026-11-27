@@ -53,6 +53,7 @@ import {
   claimCheckout,
   claimReactivation,
   releaseCheckout,
+  restoreReversedCheckout,
   storedTierOnSale,
   CHECKOUT_REFUSAL_MESSAGES,
   type CheckoutClaim,
@@ -174,12 +175,14 @@ const CHECKOUT_ORPHANED_MESSAGE =
 
 /**
  * Stripe created the subscription but the records that tie it to the operator
- * weren't written. The web deletes a new account on any error, so leaving the
- * subscription would bill, after the trial, an account that no longer exists
- * (or, for an existing account, one whose record doesn't show the plan).
+ * weren't all written. The web deletes a new account on any error, so leaving
+ * the subscription would bill, after the trial, an account that no longer
+ * exists (or, for an existing account, one the webhooks can't find it through).
  * Cancel it now through closeOperatorBilling, which acts only on a subscription
- * Stripe ties to this uid. If that fails too, the subscription is still live:
- * log its ids at ERROR for support and say so.
+ * Stripe ties to this uid, then put back the user record the checkout replaced
+ * so the retry the message asks for isn't refused as plan-exists. If
+ * closeOperatorBilling fails, the subscription may still be live: log its ids
+ * at ERROR for support, say so, and leave the record and lock showing it.
  */
 async function reverseUnrecordedCheckout(
   userId: string,
@@ -206,7 +209,7 @@ async function reverseUnrecordedCheckout(
   }
   // Cancelled, so nothing bills: the operator may retry at once, as the
   // message says. (A live orphan above keeps the lock until it expires.)
-  await releaseCheckout(claim);
+  await restoreReversedCheckout(claim, subscriptionId);
   throw new HttpsError("internal", CHECKOUT_REVERSED_MESSAGE);
 }
 

@@ -107,7 +107,13 @@ export function checkoutRefusal(
 const lockHeld = (startedAt: unknown, now: number): boolean =>
   typeof startedAt === 'number' && startedAt > 0 && now - startedAt < CHECKOUT_LOCK_MS;
 
-export type CheckoutClaim = { uid: string; startedAt: number };
+/** The record a checkout found, which a reversed checkout puts back. */
+type RecordBeforeCheckout = {
+  subscriptionMetadata: Record<string, unknown> | null;
+  potentialSuperAdmin: boolean;
+};
+
+export type CheckoutClaim = { uid: string; startedAt: number; before?: RecordBeforeCheckout };
 
 /**
  * Checks the stored user and, if checkout may go ahead, takes the lock. Throws
@@ -125,14 +131,19 @@ export async function claimCheckout(uid: string, now: number = Date.now()): Prom
         reason: refusal,
       });
     }
+    const stored = snap.data()?.subscriptionMetadata;
     // A doc with no metadata yet gets a whole one, so no partial map lacks houses.
     tx.update(
       ref,
-      snap.data()?.subscriptionMetadata
+      stored
         ? { 'subscriptionMetadata.checkoutStartedAt': now }
         : { subscriptionMetadata: { status: '', houses: {}, checkoutStartedAt: now } },
     );
-    return { uid, startedAt: now };
+    const before = {
+      subscriptionMetadata: stored ? { ...stored } : null,
+      potentialSuperAdmin: snap.data()?.potentialSuperAdmin === true,
+    };
+    return { uid, startedAt: now, before };
   });
 }
 
@@ -182,6 +193,47 @@ export async function releaseCheckout(claim: CheckoutClaim): Promise<void> {
   } catch (error) {
     logger.warn('Checkout lock not released; it expires on its own', {
       userId: claim.uid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
+
+/**
+ * After a reversed checkout (its subscription cancelled in Stripe), puts back
+ * the record the checkout replaced, so the operator can retry as they are told.
+ * writeOperatorSubscription may already have written the cancelled plan; left
+ * there, every retry is refused as plan-exists, and the subscription.deleted
+ * webhook can't repair it: it finds a subscription only through its
+ * subscriptions doc, which was never written. Only a record that still names
+ * the cancelled subscription is restored (the stored houses map is kept: it is
+ * the property-cap count); otherwise this frees the lock as releaseCheckout
+ * does. Never throws: the reversal's own error is the one to report.
+ */
+export async function restoreReversedCheckout(
+  claim: CheckoutClaim,
+  subscriptionId: string,
+): Promise<void> {
+  const ref = userCollection.doc(claim.uid);
+  try {
+    await ratsFirestore.runTransaction(async (tx) => {
+      const meta = (await tx.get(ref)).data()?.subscriptionMetadata;
+      if (claim.before && meta?.subscriptionId === subscriptionId) {
+        tx.update(ref, {
+          subscriptionMetadata: {
+            ...(claim.before.subscriptionMetadata ?? { status: '' }),
+            houses: meta.houses ?? {},
+            checkoutStartedAt: 0,
+          },
+          potentialSuperAdmin: claim.before.potentialSuperAdmin,
+        });
+      } else if (meta?.checkoutStartedAt === claim.startedAt) {
+        tx.update(ref, { 'subscriptionMetadata.checkoutStartedAt': 0 });
+      }
+    });
+  } catch (error) {
+    logger.error('Reversed checkout left its record in place: restore it by hand', {
+      userId: claim.uid,
+      subscriptionId,
       error: error instanceof Error ? error.message : String(error),
     });
   }

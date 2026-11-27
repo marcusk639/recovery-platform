@@ -212,7 +212,13 @@ export const reactivateSubscription = async (
   if (subscriptionMetadata.tier) {
     const houseType = subscriptionMetadata.houseType as HouseType;
     const tier = subscriptionMetadata.tier as TierKey;
-    const price = resolveTierPriceId(houseType, tier);
+    let price: string;
+    try {
+      price = resolveTierPriceId(houseType, tier);
+    } catch (error) {
+      // Before Stripe is called, so the callable may free the checkout lock.
+      throw markedBeforeSubscription(error);
+    }
     const subscription = await stripe.subscriptions.create(
       {
         customer: customerId,
