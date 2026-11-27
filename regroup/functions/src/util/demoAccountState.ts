@@ -8,11 +8,13 @@
  * - `markDemoAccount` (owner script `npm run demo:mark-account`) sets the
  *   `demo: true` claim the guards read and records the account in the
  *   server-only `config/demoAccount` doc (uid, tokensValidAfter and the claims
- *   to recreate it with). The deploys refuse to run until it has
+ *   to recreate it with; no password baseline, so the first restore resets
+ *   the password). The deploys refuse to run until it has
  *   (`regroup/scripts/preflight-demo-account.js`).
  * - `restoreDemoAccount` (scheduled, `scheduled/demoAccountRestore.ts`):
  *   recreates a deleted account at the same uid; otherwise puts back the email
- *   and password, unlinks every provider but the password, clears a phone
+ *   and password (and the password provider, if unlinked), unlinks every
+ *   provider but the password, clears a phone
  *   number and second factors, signs every session out, and re-adds a missing
  *   claim. A password change shows as a new `tokensValidAfterTime`, which Auth
  *   bumps on every password change. Nothing is written while it is intact.
@@ -85,11 +87,23 @@ async function ensureClaim(db: Db, auth: DemoAuth, user: DemoUserRecord): Promis
   return true;
 }
 
-async function record(db: Db, auth: DemoAuth, uid: string, claims: unknown): Promise<void> {
-  const fresh = await auth.getUser(uid);
+/**
+ * Records the account for the restore. `baseline: false` (the mark) records no
+ * password baseline: the password was public and unguarded before the mark, so
+ * it may already have been changed, and the first restore then resets it and
+ * records the baseline itself.
+ */
+async function record(
+  db: Db,
+  auth: DemoAuth,
+  uid: string,
+  claims: unknown,
+  { baseline = true }: { baseline?: boolean } = {},
+): Promise<void> {
+  const fresh = baseline ? await auth.getUser(uid) : undefined;
   await configRef(db).set({
     uid,
-    tokensValidAfter: fresh.tokensValidAfterTime ?? null,
+    tokensValidAfter: fresh?.tokensValidAfterTime ?? null,
     claims: claims ?? {},
   });
 }
@@ -101,7 +115,11 @@ export type MarkResult =
 /**
  * By --uid, or by the demo email. Run the dry run first and check the uid: if
  * someone changed the demo email and another account took it, the email finds
- * that account.
+ * that account. So once config/demoAccount names an account, the email may
+ * only find that same one (the re-run after the functions deploy); marking a
+ * different account needs an explicit --uid. Lookup errors other than a
+ * missing account (credentials, project, network) are thrown, not reported as
+ * a missing account.
  */
 export async function markDemoAccount(
   db: Db,
@@ -111,13 +129,27 @@ export async function markDemoAccount(
   let user: DemoUserRecord;
   try {
     user = opts.uid ? await auth.getUser(opts.uid) : await auth.getUserByEmail(DEMO_ACCOUNT_EMAIL);
-  } catch {
+  } catch (error) {
+    if (authCode(error) !== 'auth/user-not-found') throw error;
     return { outcome: 'refused', reason: 'no such account (pass --uid if its email was changed)' };
+  }
+  const recordedUid = (await configRef(db).get()).data()?.uid;
+  if (!opts.uid && typeof recordedUid === 'string' && recordedUid && recordedUid !== user.uid) {
+    return {
+      outcome: 'refused',
+      reason: `the demo email now belongs to ${user.uid}, not the marked account ${recordedUid} (pass --uid to change it)`,
+    };
   }
   const claimAdded = user.customClaims?.[DEMO_CLAIM] !== true;
   if (!opts.apply) return { outcome: 'would-mark', uid: user.uid, claimAdded };
   await ensureClaim(db, auth, user);
-  await record(db, auth, user.uid, { ...(user.customClaims ?? {}), [DEMO_CLAIM]: true });
+  await record(
+    db,
+    auth,
+    user.uid,
+    { ...(user.customClaims ?? {}), [DEMO_CLAIM]: true },
+    { baseline: false },
+  );
   return { outcome: 'marked', uid: user.uid, claimAdded };
 }
 
@@ -148,6 +180,8 @@ async function withDemoEmailFree(auth: DemoAuth, uid: string, write: () => Promi
 interface Changes {
   emailChanged: boolean;
   passwordChanged: boolean;
+  /** The password provider was unlinked; setting the password puts it back. */
+  passwordMissing: boolean;
   /** Providers other than the password, which the restore unlinks. */
   providersUnlinked: string[];
   phoneCleared: boolean;
@@ -158,6 +192,7 @@ function changesOf(user: DemoUserRecord, tokensValidAfter: unknown): Changes {
   return {
     emailChanged: (user.email ?? '').toLowerCase() !== DEMO_ACCOUNT_EMAIL,
     passwordChanged: (user.tokensValidAfterTime ?? null) !== (tokensValidAfter ?? null),
+    passwordMissing: !(user.providerData ?? []).some((p) => p.providerId === 'password'),
     // Phone goes through phoneNumber: null (the SDK refuses unlinking it both ways).
     providersUnlinked: (user.providerData ?? [])
       .map((p) => p.providerId)
@@ -170,6 +205,7 @@ function changesOf(user: DemoUserRecord, tokensValidAfter: unknown): Changes {
 const tampered = (c: Changes) =>
   c.emailChanged ||
   c.passwordChanged ||
+  c.passwordMissing ||
   c.providersUnlinked.length > 0 ||
   c.phoneCleared ||
   c.mfaCleared;
