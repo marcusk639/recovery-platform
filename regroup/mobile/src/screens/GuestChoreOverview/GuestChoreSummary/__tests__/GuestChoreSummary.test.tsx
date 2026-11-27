@@ -525,6 +525,7 @@ describe("GuestChoreSummary", () => {
             }),
           })
         );
+        expect(alertSpy).toHaveBeenCalledWith("Done", "Chore marked as complete!");
       });
 
       alertSpy.mockRestore();

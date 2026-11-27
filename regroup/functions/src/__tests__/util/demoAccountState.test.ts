@@ -217,21 +217,17 @@ describe('restoreDemoAccount', () => {
   });
 
   it('puts back an unlinked password provider (App Review signs in with the password)', async () => {
-    const { auth, state } = fakeAuth({
-      ...DEMO,
-      providerData: [{ providerId: 'google.com' }],
-      customClaims: { demo: true },
-    });
+    // Nothing else changed: the missing provider alone triggers the restore.
+    const { auth, state } = fakeAuth({ ...DEMO, providerData: [], customClaims: { demo: true } });
     const { db } = configured();
     await expect(restoreDemoAccount(db, auth)).resolves.toMatchObject({
       outcome: 'restored',
       passwordMissing: true,
-      providersUnlinked: ['google.com'],
+      emailChanged: false,
+      passwordChanged: false,
+      providersUnlinked: [],
     });
-    expect(auth.updateUser).toHaveBeenCalledWith('demo1', {
-      ...SIGN_IN,
-      providersToUnlink: ['google.com'],
-    });
+    expect(auth.updateUser).toHaveBeenCalledWith('demo1', SIGN_IN);
     expect(state.user!.providerData).toEqual([{ providerId: 'password' }]);
     expect(auth.revokeRefreshTokens).toHaveBeenCalledWith('demo1');
   });
