@@ -537,6 +537,23 @@ describe('HouseSearchScreen', () => {
       await waitFor(() => expect(getByText(/San Francisco/)).toBeTruthy());
     });
 
+    // EMU-009: the first search ran with the filters from before the
+    // position arrived (a stale closure), so it had no location and found
+    // nothing, wherever the visitor was.
+    it("searches around the device's position when the screen opens", async () => {
+      const permModule = require('../../../util/permissions');
+      permModule.checkAndRequestLocationPermissions.mockResolvedValueOnce(true);
+      mockSearchForHouses.mockResolvedValue({});
+      renderScreen();
+      await waitFor(() =>
+        expect(mockSearchForHouses).toHaveBeenCalledWith({
+          filters: expect.objectContaining({
+            location: expect.objectContaining({ lat: 37.7749, lng: -122.4194 }),
+          }),
+        }),
+      );
+    });
+
     // EMU-009: search shows the public listing, which has no street address.
     it('never shows a street address, even if one came back', async () => {
       const permModule = require('../../../util/permissions');

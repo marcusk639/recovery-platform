@@ -455,13 +455,16 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
       if (permission) {
         getCurrentPosition(
           position => {
+            const { latitude, longitude } = position.coords;
             setCoords(
-              {
-                latitude: position.coords.latitude,
-                longitude: position.coords.longitude,
-              },
+              { latitude, longitude },
               () => {
-                searchForHouses(null, filters);
+                // Search with the new position: `filters` here is from before
+                // setCoords, so it has no location yet (EMU-009).
+                searchForHouses(null, {
+                  ...filters,
+                  location: { ...filters.location, lat: latitude, lng: longitude },
+                });
               },
               true,
             );
