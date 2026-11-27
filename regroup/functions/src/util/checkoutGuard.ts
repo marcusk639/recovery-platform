@@ -1,6 +1,8 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { logger } from 'firebase-functions';
 import { ratsFirestore, userCollection } from '../api/firestore';
+import type { HouseType, TierKey } from '../config';
+import { isTierAvailableForSale } from './tierPricing';
 
 /**
  * createOperatorSubscription's guard against billing an account twice (launch
@@ -12,7 +14,8 @@ import { ratsFirestore, userCollection } from '../api/firestore';
  * - any live or restartable subscription is refused: Stripe would bill both;
  * - a canceled tier plan is refused too: Reactivate restarts it, and a new
  *   checkout would hand a lapsed operator a second free trial;
- * - a canceled legacy (tier-less) plan is allowed: Reactivate refuses those;
+ * - a canceled plan Reactivate can't restart (legacy tier-less, or a tier no
+ *   longer for sale) and an incomplete_expired one are allowed: no other route;
  * - a resident or staff account is refused: the app routes it by that role, so
  *   it could never use the plan it paid for.
  *
@@ -24,7 +27,12 @@ import { ratsFirestore, userCollection } from '../api/firestore';
  */
 
 export type CheckoutRefusal =
-  'plan-exists' | 'plan-ended' | 'not-operator-account' | 'no-account' | 'checkout-in-progress';
+  | 'plan-exists'
+  | 'plan-ended'
+  | 'not-operator-account'
+  | 'no-account'
+  | 'checkout-in-progress'
+  | 'unrecorded-subscription';
 
 export const CHECKOUT_REFUSAL_MESSAGES: Record<CheckoutRefusal, string> = {
   'plan-exists': 'You already have a plan. Manage it from your account page.',
@@ -34,6 +42,8 @@ export const CHECKOUT_REFUSAL_MESSAGES: Record<CheckoutRefusal, string> = {
   'no-account': 'We could not find your account. Please sign in again, or contact support.',
   'checkout-in-progress':
     'A checkout for this account is already in progress. Wait a minute, then check your account page before trying again.',
+  'unrecorded-subscription':
+    "We found a subscription for this account that isn't set up yet. Please contact support before trying again, so you aren't billed twice.",
 };
 
 /** Longer than the callable's 60s timeout, so a live checkout always holds it. */
@@ -47,11 +57,22 @@ type StoredUser = {
     status?: unknown;
     subscriptionId?: unknown;
     tier?: unknown;
+    houseType?: unknown;
     checkoutStartedAt?: unknown;
   } | null;
 };
 
 const nonEmpty = (v: unknown): boolean => typeof v === 'string' && v !== '';
+
+/** Whether Reactivate could restart this stored plan: a tier still on sale. */
+const storedTierOnSale = (houseType: unknown, tier: unknown): boolean => {
+  if (!nonEmpty(houseType) || !nonEmpty(tier)) return false;
+  try {
+    return isTierAvailableForSale(houseType as HouseType, tier as TierKey);
+  } catch {
+    return false; // a tier no longer defined
+  }
+};
 
 /** Why this stored user may not start a new subscription now, or null. */
 export function checkoutRefusal(
@@ -62,7 +83,13 @@ export function checkoutRefusal(
   const meta = user.subscriptionMetadata ?? {};
   const status = typeof meta.status === 'string' ? meta.status : '';
   if (status === 'canceled') {
-    if (nonEmpty(meta.tier)) return 'plan-ended';
+    // Reactivate restarts a canceled tier plan with no new trial. When it can't
+    // (a legacy plan with no tier, or a tier no longer for sale), checkout is
+    // the way back: refusing would leave no route to a plan.
+    if (nonEmpty(meta.tier) && storedTierOnSale(meta.houseType, meta.tier)) return 'plan-ended';
+  } else if (status === 'incomplete_expired') {
+    // Terminal in Stripe and never started (a trial subscription starts as
+    // trialing), so no trial was used, nothing bills, and Reactivate refuses it.
   } else if (status !== '' || nonEmpty(meta.subscriptionId)) {
     // Any other recorded status (active, trialing, cancelling, past_due, unpaid,
     // incomplete, pending, paused, ...) or a stored subscription id: a Stripe
@@ -98,7 +125,13 @@ export async function claimCheckout(uid: string, now: number = Date.now()): Prom
         reason: refusal,
       });
     }
-    tx.update(ref, { 'subscriptionMetadata.checkoutStartedAt': now });
+    // A doc with no metadata yet gets a whole one, so no partial map lacks houses.
+    tx.update(
+      ref,
+      snap.data()?.subscriptionMetadata
+        ? { 'subscriptionMetadata.checkoutStartedAt': now }
+        : { subscriptionMetadata: { status: '', houses: {}, checkoutStartedAt: now } },
+    );
     return { uid, startedAt: now };
   });
 }

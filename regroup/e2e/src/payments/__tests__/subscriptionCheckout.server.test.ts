@@ -159,3 +159,21 @@ test('SUB-012: two plans submitted concurrently make one subscription', async ()
   );
   expect(await subscriptionsOf(op.email)).toHaveLength(1);
 });
+
+// Review fix: a subscription Stripe holds for the operator that the record doesn't show (its
+// record write and its cancel both failed) is found by its userId metadata and refused.
+test('SUB-013: a live subscription the record does not show refuses checkout', async () => {
+  const op = await seedOperator({ status: '' });
+  const customer = await stripe.customers.create({ email: op.email });
+  await stripe.subscriptions.create({
+    customer: customer.id,
+    items: [{ price: prices.STRIPE_PRICE_TRAD_STARTER }],
+    trial_period_days: 7,
+    metadata: { userId: op.uid, houseType: 'traditional', tier: 'starter', billingInterval: 'month' },
+  });
+  // Found at once through the operator's email (a list call), not the lagging search.
+  const res = await callAs(op.uid, 'createOperatorSubscription', checkout(op, 'traditional', 'professional'));
+  expect(res).toMatchObject({ errorCode: 'failed-precondition', errorMessage: expect.stringMatching(/contact support/) });
+  expect(await subscriptionsOf(op.email)).toHaveLength(1);
+});
+

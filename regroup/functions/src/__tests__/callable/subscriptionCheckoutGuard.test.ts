@@ -32,13 +32,20 @@ jest.mock('firebase-admin', () => ({
 }));
 
 const mockInitializeTierCustomer = jest.fn();
+// No subscription in Stripe that the record doesn't show (subscriptionCheckoutStripe.test.ts).
+const mockFindLive = jest.fn();
 jest.mock('../../api/stripe', () => ({
   initializeTierCustomer: (...a: unknown[]) => mockInitializeTierCustomer(...a),
+  findLiveSubscriptionForUser: (...a: unknown[]) => mockFindLive(...a),
+  failedBeforeSubscription: (e: { beforeSubscription?: boolean } | null) => !!e?.beforeSubscription,
 }));
 
 // One stored user doc, read and written through the guard's transaction.
 let mockStored: Record<string, any> | undefined;
 const mockTxUpdate = jest.fn((_ref: unknown, data: Record<string, unknown>) => {
+  if (mockStored && 'subscriptionMetadata' in data) {
+    mockStored.subscriptionMetadata = data.subscriptionMetadata;
+  }
   if (mockStored && 'subscriptionMetadata.checkoutStartedAt' in data) {
     mockStored.subscriptionMetadata = {
       ...mockStored.subscriptionMetadata,
@@ -112,6 +119,7 @@ const refusedWith = async (reason: string) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFindLive.mockResolvedValue(null);
   mockStored = undefined;
   process.env.TIER_BILLING_ENABLED = 'true';
   process.env.STRIPE_PRICE_TRAD_STARTER = 'price_starter';
@@ -138,7 +146,6 @@ describe('createOperatorSubscription refuses an account that already has a plan'
     'incomplete',
     'pending',
     'paused',
-    'incomplete_expired',
   ])('refuses status %s with a subscription, before Stripe', async (status) => {
     storeUser({ status, subscriptionId: 'sub_live', customerId: 'cus_live', tier: 'starter' });
     await refusedWith('plan-exists');
@@ -155,7 +162,7 @@ describe('createOperatorSubscription refuses an account that already has a plan'
   });
 
   it('refuses a canceled tier plan, pointing to Reactivate, so signup is no second trial', async () => {
-    storeUser({ status: 'canceled', subscriptionId: 'sub_old', tier: 'starter' });
+    storeUser({ status: 'canceled', subscriptionId: 'sub_old', tier: 'starter', houseType: 'traditional' });
     await refusedWith('plan-ended');
   });
 
@@ -198,6 +205,18 @@ describe('createOperatorSubscription allows an account with no live plan', () =>
     );
   });
 
+  it('checks out an incomplete_expired plan: never started, no trial used, Reactivate refuses it', async () => {
+    storeUser({ status: 'incomplete_expired', subscriptionId: 'sub_x', tier: 'starter', houseType: 'traditional' });
+    await checkout();
+    expect(mockInitializeTierCustomer).toHaveBeenCalledTimes(1);
+  });
+
+  it('checks out a canceled plan whose tier is no longer for sale (Oxford Network)', async () => {
+    storeUser({ status: 'canceled', subscriptionId: 'sub_x', tier: 'network', houseType: 'oxford' });
+    await checkout();
+    expect(mockInitializeTierCustomer).toHaveBeenCalledTimes(1);
+  });
+
   it('checks out a canceled legacy plan with no tier, which Reactivate refuses', async () => {
     storeUser({ status: 'canceled', subscriptionId: 'sub_legacy', customerId: 'cus_legacy' });
     await checkout();
@@ -212,7 +231,10 @@ describe('createOperatorSubscription allows an account with no live plan', () =>
 
   it('locks before Stripe and frees the lock when Stripe fails, so a retry runs at once', async () => {
     storeUser(NEVER_SUBSCRIBED);
-    mockInitializeTierCustomer.mockRejectedValueOnce(new Error('card_declined'));
+    // Thrown before any subscription could exist (api/stripe marks these).
+    mockInitializeTierCustomer.mockRejectedValueOnce(
+      Object.assign(new Error('card_declined'), { beforeSubscription: true }),
+    );
     await expect(checkout()).rejects.toThrow('card_declined');
     expect(mockStored?.subscriptionMetadata.checkoutStartedAt).toBe(0);
 

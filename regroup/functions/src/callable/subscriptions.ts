@@ -30,6 +30,8 @@ import {
   reactivateSubscription,
   uncancelSubscription,
   applyBundleDiscountToSubscription,
+  failedBeforeSubscription,
+  findLiveSubscriptionForUser,
 } from "../api/stripe";
 import {
   createStripeClient,
@@ -47,7 +49,12 @@ import {
 } from "../util/subscriptionHouses";
 import { grantPotentialSuperAdminClaim } from "../util/superAdminClaim";
 import { writeOperatorSubscription } from "../util/operatorSubscriptionWrite";
-import { claimCheckout, releaseCheckout } from "../util/checkoutGuard";
+import {
+  claimCheckout,
+  releaseCheckout,
+  CHECKOUT_REFUSAL_MESSAGES,
+  type CheckoutClaim,
+} from "../util/checkoutGuard";
 import {
   getHouse,
   getUser,
@@ -177,6 +184,7 @@ async function reverseUnrecordedCheckout(
   subscriptionId: string,
   customerId: string,
   writeError: unknown,
+  claim: CheckoutClaim,
 ): Promise<never> {
   logger.error("Checkout records not written after Stripe; cancelling the subscription", {
     userId,
@@ -194,7 +202,41 @@ async function reverseUnrecordedCheckout(
     });
     throw new HttpsError("internal", CHECKOUT_ORPHANED_MESSAGE);
   }
+  // Cancelled, so nothing bills: the operator may retry at once, as the
+  // message says. (A live orphan above keeps the lock until it expires.)
+  await releaseCheckout(claim);
   throw new HttpsError("internal", CHECKOUT_REVERSED_MESSAGE);
+}
+
+/**
+ * The stored record is the first check (claimCheckout). This is the second: a
+ * subscription Stripe holds for this operator that the record doesn't show (a
+ * checkout whose record write failed and whose cancel failed too). Refused, so
+ * a retry, another plan or the next day's idempotency key can't add a second.
+ */
+async function refuseUnrecordedSubscription(claim: CheckoutClaim, email: string): Promise<void> {
+  let live: Awaited<ReturnType<typeof findLiveSubscriptionForUser>>;
+  try {
+    live = await findLiveSubscriptionForUser(claim.uid, email);
+  } catch (error) {
+    await releaseCheckout(claim);
+    logger.error("Checkout could not check Stripe for an existing subscription", {
+      userId: claim.uid,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new HttpsError("unavailable", "We couldn't start checkout. Please try again in a minute.");
+  }
+  if (!live) return;
+  await releaseCheckout(claim);
+  logger.error("Checkout refused: Stripe has a live subscription the record doesn't show", {
+    userId: claim.uid,
+    subscriptionId: live.id,
+  });
+  throw new HttpsError(
+    "failed-precondition",
+    CHECKOUT_REFUSAL_MESSAGES["unrecorded-subscription"],
+    { reason: "unrecorded-subscription" },
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -270,6 +312,7 @@ export const createOperatorSubscription = onCall(
     // an account with a live or restartable plan (a second subscription would
     // bill twice), and locks out a concurrent checkout. See util/checkoutGuard.
     const claim = await claimCheckout(data.user.id);
+    await refuseUnrecordedSubscription(claim, data.user.email);
 
     logger.info("Creating subscription for user", {
       userId: data.user.id,
@@ -292,9 +335,12 @@ export const createOperatorSubscription = onCall(
           data.billingInterval ?? "month",
         );
       } catch (stripeError) {
-        // No subscription was recorded (a declined card, say): free the lock
-        // so the operator can retry at once.
-        await releaseCheckout(claim);
+        // Before any subscription could exist (a declined card, say), free the
+        // lock so the operator can retry at once. After the create call an
+        // error is ambiguous (a timeout can follow a subscription Stripe made),
+        // so the lock stays until it expires, and the Stripe search above
+        // refuses the next checkout if that subscription is live.
+        if (failedBeforeSubscription(stripeError)) await releaseCheckout(claim);
         throw stripeError;
       }
       logger.info("Tier subscription created", {
@@ -337,6 +383,7 @@ export const createOperatorSubscription = onCall(
           tierMetadata.subscriptionId,
           tierMetadata.customerId,
           writeError,
+          claim,
         );
       }
       await sendEmail({

@@ -54,6 +54,10 @@ const mockApplyBundleDiscountToSubscription = jest
 jest.mock("../../api/stripe", () => ({
   initializeCustomer: mockInitializeCustomer,
   initializeTierCustomer: mockInitializeTierCustomer,
+  // Checkout's Stripe-side checks: no unrecorded subscription here
+  // (covered in subscriptionCheckoutStripe.test.ts).
+  findLiveSubscriptionForUser: async () => null,
+  failedBeforeSubscription: () => false,
   updateSubscriptionItem: mockUpdateSubscriptionItem,
   getSubscriptionItem: mockGetSubscriptionItem,
   updateSubscriptionMetadata: mockUpdateSubscriptionMetadata,
