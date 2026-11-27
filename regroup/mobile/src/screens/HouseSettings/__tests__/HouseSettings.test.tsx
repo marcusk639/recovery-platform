@@ -431,10 +431,11 @@ describe('HouseSettings', () => {
       mockRole = { 'house-1': 'admin' };
       try {
         const store = buildStore();
-        const { queryByText, getByText } = renderScreen(store);
+        const { queryByText } = renderScreen(store);
         expect(queryByText('Payment Dashboard')).toBeNull();
         expect(queryByText('Payments')).toBeNull();
-        expect(getByText('Reports')).toBeTruthy();
+        // AdminReport refuses a peer leader (portal spec §5, owner 2026-11-09).
+        expect(queryByText('Reports')).toBeNull();
       } finally {
         mockRole = ownerRole;
         mockMayViewHouseMoney = true;
@@ -493,38 +494,52 @@ describe('HouseSettings', () => {
       }
     });
 
-    // P5 Tasks 17 and 18: entry points for two screens nothing opened.
-    it('renders the CSV import entry next to Guests', () => {
-      const store = buildStore();
-      const { getByText } = renderScreen(store);
-      expect(getByText('Import residents from CSV')).toBeTruthy();
-    });
-
-    // Owner decision 2026-11-27: bulk-adding residents is for owners and
-    // managers, not peer leaders.
-    it('hides the CSV import entry from a peer leader', () => {
-      mockMayViewHouseMoney = false;
+    // A manager holds the same admin claim as a peer leader; the tier tells
+    // them apart (mockMayViewHouseMoney).
+    it('shows the CSV import entry to a manager', () => {
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
       try {
         const store = buildStore();
-        const { queryByText } = renderScreen(store);
-        expect(queryByText('Import residents from CSV')).toBeNull();
+        const { getByText } = renderScreen(store);
+        expect(getByText('Import residents from CSV')).toBeTruthy();
       } finally {
-        mockMayViewHouseMoney = true;
+        mockRole = ownerRole;
       }
     });
 
-    it('renders the Balances entry for owners and managers', () => {
-      const store = buildStore();
-      const { getByText } = renderScreen(store);
-      expect(getByText('Balances')).toBeTruthy();
+    it('shows the Balances entry to a manager', () => {
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { getByText } = renderScreen(store);
+        expect(getByText('Balances')).toBeTruthy();
+      } finally {
+        mockRole = ownerRole;
+      }
     });
 
-    it('hides the Balances entry from a peer leader, who may not see house money', () => {
+    // Reports is registered at manager rank (guardedScreens.ts), so its entry
+    // shows only where the screen would open.
+    it('shows Reports to a manager', () => {
+      const ownerRole = mockRole;
+      mockRole = { 'house-1': 'admin' };
+      try {
+        const store = buildStore();
+        const { getByText } = renderScreen(store);
+        expect(getByText('Reports')).toBeTruthy();
+      } finally {
+        mockRole = ownerRole;
+      }
+    });
+
+    it('hides Reports from a peer leader, whom AdminReport refuses', () => {
       mockMayViewHouseMoney = false;
       try {
         const store = buildStore();
         const { queryByText } = renderScreen(store);
-        expect(queryByText('Balances')).toBeNull();
+        expect(queryByText('Reports')).toBeNull();
       } finally {
         mockMayViewHouseMoney = true;
       }

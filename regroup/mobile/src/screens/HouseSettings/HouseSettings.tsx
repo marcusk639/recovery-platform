@@ -277,15 +277,18 @@ const HouseSettings: React.FC<Props> = (props) => {
               iconName: 'balance-scale',
               color: color.medium_grey,
             },
+            // Peer leaders get no Reports (portal spec §5, owner 2026-11-09);
+            // AdminReport is registered at manager rank.
+            reports: {
+              action: () => navigation.navigate(Routes.AdminReport),
+              label: 'Reports',
+              description:
+                'View occupancy, compliance trends, and discharge summary',
+              iconName: 'chart-line',
+              color: color.medium_grey,
+            },
           }
         : {}),
-      reports: {
-        action: () => navigation.navigate(Routes.AdminReport),
-        label: 'Reports',
-        description: 'View occupancy, compliance trends, and discharge summary',
-        iconName: 'chart-line',
-        color: color.medium_grey,
-      },
       shiftLog: {
         action: () =>
           navigation.navigate(Routes.StaffNotes, {
