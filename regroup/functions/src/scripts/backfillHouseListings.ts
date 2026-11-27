@@ -32,7 +32,9 @@ export interface Counts {
 export async function run(database: FirebaseFirestore.Firestore, apply: boolean): Promise<Counts> {
   console.log(`Mode: ${apply ? 'LIVE (writes)' : 'DRY RUN (no writes)'} — house listings`);
   const [houses, listings] = await Promise.all([
-    // Only the listing's source fields: never load residents' data.
+    // Only the listing's source fields. `rooms` is one of them (the listing counts
+    // rooms and beds), so room maps with resident ids are read in memory; nothing
+    // else about residents is, and none of it is logged.
     database
       .collection('houses')
       .select(...LISTING_SOURCE_FIELDS)

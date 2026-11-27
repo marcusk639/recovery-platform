@@ -182,6 +182,15 @@ describe('toHouseListing', () => {
     expect(listing).toMatchObject({ phoneNumber: '512-555-0100', depositsAndFees: '$200 deposit' });
   });
 
+  it('keeps a numeric deposits and fees amount, and drops a non-finite one', () => {
+    expect(toHouseListing('h1', house({ depositsAndFees: 500 }))?.depositsAndFees).toBe(500);
+    expect(toHouseListing('h1', house({ depositsAndFees: 0 }))?.depositsAndFees).toBe(0);
+    expect(toHouseListing('h1', house({ depositsAndFees: NaN }))).not.toHaveProperty('depositsAndFees');
+    expect(toHouseListing('h1', house({ depositsAndFees: { a: 1 } }))).not.toHaveProperty(
+      'depositsAndFees',
+    );
+  });
+
   it('never reports negative open beds', () => {
     expect(toHouseListing('h1', house({ currentCapacity: 12 }))?.openBeds).toBe(0);
   });
