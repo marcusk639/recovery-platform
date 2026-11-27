@@ -56,8 +56,10 @@ interface HouseSearchProps {
 }
 
 const styles = StyleSheet.create({
+  // flex: 1, not flexGrow: 1: the results area must stop at the screen's
+  // bottom, or the list grows to fit every card and never scrolls.
   container: {
-    flexGrow: 1,
+    flex: 1,
     justifyContent: 'flex-start',
     alignItems: 'center',
     backgroundColor: color.light_grey,
@@ -497,7 +499,7 @@ const HouseSearchScreen: React.FC<HouseSearchProps> = props => {
       style={{ flex: 1, backgroundColor: color.light_grey }}
       testID="house-search-screen">
       {renderSearchView()}
-      <View style={styles.container}>
+      <View style={styles.container} testID="house-search-results">
         {locationDenied && (
           <View
             testID="location-denied-banner"

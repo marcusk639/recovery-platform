@@ -566,6 +566,21 @@ describe('HouseSearchScreen', () => {
 
     // Android draws edge to edge: without the bottom inset the last card's
     // VIEW DETAILS button sits under the navigation bar, where nobody can tap it.
+    // The results area grew to fit every card (flexGrow alone), so the list
+    // was taller than the screen and never scrolled: houses past the first
+    // screenful could not be reached.
+    it('bounds the results area so the list scrolls', async () => {
+      const permModule = require('../../../util/permissions');
+      permModule.checkAndRequestLocationPermissions.mockResolvedValueOnce(true);
+      mockSearchForHouses.mockResolvedValue({ [BASE_HOUSE.id]: BASE_HOUSE });
+      const { getByText, getByTestId } = renderScreen();
+      await waitFor(() => expect(getByText('Sunrise Recovery')).toBeTruthy());
+      const { StyleSheet } = require('react-native');
+      expect(StyleSheet.flatten(getByTestId('house-search-results').props.style)).toEqual(
+        expect.objectContaining({ flex: 1 }),
+      );
+    });
+
     it('keeps the last card clear of the bottom safe-area inset', async () => {
       const SafeArea = require('react-native-safe-area-context');
       const insetSpy = jest
