@@ -77,8 +77,10 @@ jest.mock('../../util/operatorSubscriptionWrite', () => ({
     mockWriteOperatorSubscription(uid, meta),
 }));
 const mockCloseOperatorBilling = jest.fn();
+const mockSubscriptionEnded = jest.fn();
 jest.mock('../../api/stripeDeletion', () => ({
   closeOperatorBilling: (...a: unknown[]) => mockCloseOperatorBilling(...a),
+  subscriptionEnded: (...a: unknown[]) => mockSubscriptionEnded(...a),
 }));
 jest.mock('../../util/email', () => ({ sendEmail: jest.fn(), regroupEmail: 'x@y.z' }));
 jest.mock('../../util/operatorHouses', () => ({ setOperatorHousesStatus: jest.fn() }));
@@ -123,6 +125,7 @@ beforeEach(() => {
     status: 'trialing',
   });
   mockCloseOperatorBilling.mockResolvedValue(undefined);
+  mockSubscriptionEnded.mockResolvedValue(false);
   mockUpsertSubscriptionDoc.mockRejectedValueOnce(new Error('firestore unavailable'));
 });
 afterEach(() => {
@@ -202,5 +205,65 @@ describe('a reversed checkout leaves the account able to retry', () => {
 
     expect(mockStored!.subscriptionMetadata.subscriptionId).toBe('sub_new');
     expect(mockStored!.potentialSuperAdmin).toBe(true);
+  });
+
+  // closeOperatorBilling cancels, then deletes the customer. If only the delete
+  // failed (or the cancel's response was lost), nothing bills: Stripe says so.
+  it('treats a cancel that errored as done when Stripe shows the subscription ended', async () => {
+    storeUser({ status: '', subscriptionId: '', houses: {} });
+    mockCloseOperatorBilling.mockRejectedValueOnce(new Error('customer delete failed'));
+    mockSubscriptionEnded.mockResolvedValueOnce(true);
+    await expect(checkout()).rejects.toMatchObject({ code: 'internal', message: REVERSED });
+
+    expect(mockSubscriptionEnded).toHaveBeenCalledWith('sub_new');
+    expect(mockStored!.subscriptionMetadata).toMatchObject({
+      subscriptionId: '',
+      checkoutStartedAt: 0,
+    });
+    await checkout();
+    expect(mockInitializeTierCustomer).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the record when Stripe cannot say whether the subscription ended', async () => {
+    storeUser({ status: '', subscriptionId: '', houses: {} });
+    mockCloseOperatorBilling.mockRejectedValueOnce(new Error('stripe down'));
+    mockSubscriptionEnded.mockRejectedValueOnce(new Error('stripe down'));
+    await expect(checkout()).rejects.toMatchObject({ message: ORPHANED });
+    expect(mockStored!.subscriptionMetadata.subscriptionId).toBe('sub_new');
+  });
+
+  // The 60s timeout doesn't stop the callable's code: a slow checkout can
+  // resume after its lock expired and a retry took it over. Keyed per attempt,
+  // both would create a subscription, so the attempt checks its lock last.
+  it('stops before Stripe creates the subscription once a retry has taken over its lock', async () => {
+    storeUser({ status: '', subscriptionId: '', houses: {} });
+    mockUpsertSubscriptionDoc.mockReset(); // never reached: no queued failure to leak
+    mockInitializeTierCustomer.mockImplementationOnce(async (...args: unknown[]) => {
+      mockStored!.subscriptionMetadata.checkoutStartedAt = 1_700_000_999_000;
+      await (args[6] as { beforeCreate: () => Promise<void> }).beforeCreate();
+      return { customerId: 'cus_new', subscriptionId: 'sub_new', status: 'trialing' };
+    });
+    await expect(checkout()).rejects.toMatchObject({ code: 'aborted' });
+    expect(mockWriteOperatorSubscription).not.toHaveBeenCalled();
+    expect(mockStored!.subscriptionMetadata.checkoutStartedAt).toBe(1_700_000_999_000);
+  });
+
+  // The reversal deleted the customer. Keyed by day, the retry got that deleted
+  // customer back from Stripe (or a key-reuse error with a new card) until the
+  // next UTC day. Each attempt is keyed by its own checkout lock instead.
+  it('starts the retry as a new Stripe attempt, keyed by its own checkout lock', async () => {
+    storeUser({ status: '', subscriptionId: '', houses: {} });
+    let clock = 1_700_000_000_000;
+    const now = jest.spyOn(Date, 'now').mockImplementation(() => (clock += 1_000));
+    try {
+      await expect(checkout()).rejects.toMatchObject({ message: REVERSED });
+      await checkout();
+    } finally {
+      now.mockRestore();
+    }
+    const [first, retry] = mockInitializeTierCustomer.mock.calls.map((args) => args[6]?.key);
+    expect(typeof first).toBe('string');
+    expect(typeof retry).toBe('string');
+    expect(retry).not.toBe(first);
   });
 });

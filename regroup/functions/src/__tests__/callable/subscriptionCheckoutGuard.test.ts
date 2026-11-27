@@ -87,7 +87,11 @@ jest.mock('../../util/superAdminClaim', () => ({
 }));
 
 import { createOperatorSubscription } from '../../callable/subscriptions';
-import { CHECKOUT_REFUSAL_MESSAGES, releaseCheckout } from '../../util/checkoutGuard';
+import {
+  assertCheckoutHeld,
+  CHECKOUT_REFUSAL_MESSAGES,
+  releaseCheckout,
+} from '../../util/checkoutGuard';
 
 const NEVER_SUBSCRIBED = { status: '', subscriptionId: '', customerId: '', houses: {} };
 const checkout = (clientMeta: object = NEVER_SUBSCRIBED) =>
@@ -265,5 +269,29 @@ describe("releaseCheckout", () => {
     expect(mockStored?.subscriptionMetadata.checkoutStartedAt).toBe(222);
     await releaseCheckout({ uid: "user-1", startedAt: 222 });
     expect(mockStored?.subscriptionMetadata.checkoutStartedAt).toBe(0);
+  });
+});
+
+// Run just before Stripe creates the subscription. Past the callable's 60s
+// timeout the client already has its error, so the attempt stops: a passing
+// check then leaves a minute before anyone can take the 2-minute lock over.
+describe("assertCheckoutHeld", () => {
+  const claim = { uid: "user-1", startedAt: 111_000 };
+
+  it("passes while this checkout holds its lock, within the callable's timeout", async () => {
+    storeUser({ ...NEVER_SUBSCRIBED, checkoutStartedAt: 111_000 });
+    await expect(assertCheckoutHeld(claim, 111_000 + 59_000)).resolves.toBeUndefined();
+  });
+
+  it("refuses once a later checkout has taken the lock", async () => {
+    storeUser({ ...NEVER_SUBSCRIBED, checkoutStartedAt: 222_000 });
+    await expect(assertCheckoutHeld(claim, 112_000)).rejects.toMatchObject({ code: "aborted" });
+  });
+
+  it("refuses past the callable's timeout, though the lock is still its own", async () => {
+    storeUser({ ...NEVER_SUBSCRIBED, checkoutStartedAt: 111_000 });
+    await expect(assertCheckoutHeld(claim, 111_000 + 60_000)).rejects.toMatchObject({
+      code: "aborted",
+    });
   });
 });

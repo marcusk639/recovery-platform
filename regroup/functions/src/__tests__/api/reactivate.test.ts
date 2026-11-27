@@ -77,6 +77,60 @@ describe("reactivateSubscription", () => {
     expect(fresh.status).toBe("incomplete");
   });
 
+  // Reactivate used to look up the monthly price whatever the stored plan was,
+  // so an annual plan came back monthly.
+  it("restarts an annual plan on the annual price, and records it as annual", async () => {
+    process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_std";
+    process.env.STRIPE_PRICE_OXFORD_STANDARD_ANNUAL = "price_oxford_std_year";
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_5",
+      status: "active",
+      trial_end: null,
+      billing_cycle_anchor: 1893456000,
+      items: { data: [{ id: "si_5", plan: { id: "price_oxford_std_year" } }] },
+    });
+    const meta = Object.assign(new OperatorSubscription(), {
+      tier: "standard",
+      houseType: "oxford",
+      billingInterval: "year",
+      customerId: "cus_5",
+      houses: {},
+    });
+
+    const fresh = await reactivateSubscription("cus_5", meta, "uid_5");
+
+    expect(mockSubscriptionsCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ items: [{ price: "price_oxford_std_year", quantity: 1 }] }),
+      expect.anything(),
+    );
+    expect(fresh.billingInterval).toBe("year");
+    delete process.env.STRIPE_PRICE_OXFORD_STANDARD_ANNUAL;
+  });
+
+  it("keys each restart by its attempt, so a later restart isn't handed the earlier one", async () => {
+    process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_std";
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_6",
+      status: "active",
+      trial_end: null,
+      billing_cycle_anchor: 1893456000,
+      items: { data: [{ id: "si_6", plan: { id: "price_oxford_std" } }] },
+    });
+    const meta = () =>
+      Object.assign(new OperatorSubscription(), {
+        tier: "standard",
+        houseType: "oxford",
+        customerId: "cus_6",
+        houses: {},
+      });
+
+    await reactivateSubscription("cus_6", meta(), "uid_6", { key: "1700000000000", beforeCreate: async () => undefined });
+    await reactivateSubscription("cus_6", meta(), "uid_6", { key: "1700000060000", beforeCreate: async () => undefined });
+
+    const [first, second] = mockSubscriptionsCreate.mock.calls.map((c) => c[1].idempotencyKey);
+    expect(second).not.toBe(first);
+  });
+
   // The callable frees the checkout lock only for errors marked as happening
   // before any subscription could exist; nothing else proves there is none.
   describe("which errors it marks as before any subscription", () => {
@@ -94,6 +148,20 @@ describe("reactivateSubscription", () => {
         (e: unknown) => e,
       );
       expect(error).toBeInstanceOf(Error);
+      expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
+      expect(failedBeforeSubscription(error)).toBe(true);
+    });
+
+    it("marks a refusal from the attempt check: Stripe is never called", async () => {
+      process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_std";
+      const refusal = new Error("checkout lock lost");
+      const error = await reactivateSubscription("cus_4", tierMeta(), "uid_4", {
+        key: "1700000000000",
+        beforeCreate: async () => {
+          throw refusal;
+        },
+      }).catch((e: unknown) => e);
+      expect(error).toBe(refusal);
       expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
       expect(failedBeforeSubscription(error)).toBe(true);
     });

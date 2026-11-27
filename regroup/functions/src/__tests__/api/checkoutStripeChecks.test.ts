@@ -76,6 +76,26 @@ describe('initializeTierCustomer marks errors from before the subscription', () 
     expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
   });
 
+  // The callable's check that the attempt still holds its checkout lock runs
+  // last, just before the create: a refusal there means no subscription.
+  it('a refusal from the attempt check is marked, and the subscription is never created', async () => {
+    const refusal = new Error('checkout lock lost');
+    const error = await caught(
+      initializeTierCustomer('op@test.com', 'pm_1', 'traditional', 'starter', 'uid_1', 'month', {
+        key: '1700000000000',
+        beforeCreate: async () => {
+          throw refusal;
+        },
+      }),
+    );
+    expect(error).toBe(refusal);
+    expect(failedBeforeSubscription(error)).toBe(true);
+    expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
+    // No subscription will be made, so the customer (with the card) it just
+    // created is deleted: no record names it.
+    expect(mockCustomersDel).toHaveBeenCalledWith('cus_1');
+  });
+
   it('a failed or timed-out subscription create is NOT marked: Stripe may have made it', async () => {
     mockSubscriptionsCreate.mockRejectedValue(new Error('Request timed out'));
     const error = await caught(checkout());
@@ -135,6 +155,18 @@ describe('findLiveSubscriptionForUser', () => {
     });
     mockSubscriptionsSearch.mockResolvedValue({ data: [sub('sub_a', 'canceled')] });
     await expect(find()).resolves.toBeNull();
+  });
+
+  // Reactivate creates on the stored customer, whose email may not be the one
+  // the account stores now; the search that would find it can lag.
+  it('lists the stored customer too, without waiting on the search', async () => {
+    mockSubscriptionsList.mockImplementation(async ({ customer }: { customer: string }) => ({
+      data: customer === 'cus_stored' ? [sub('sub_r', 'active')] : [],
+    }));
+    await expect(
+      findLiveSubscriptionForUser('uid_1', 'op@test.com', 'cus_stored'),
+    ).resolves.toMatchObject({ id: 'sub_r' });
+    expect(mockSubscriptionsSearch).not.toHaveBeenCalled();
   });
 
   it('refuses an id that could change the search query', async () => {

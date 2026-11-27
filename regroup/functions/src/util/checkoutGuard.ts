@@ -198,6 +198,34 @@ export async function releaseCheckout(claim: CheckoutClaim): Promise<void> {
   }
 }
 
+/** The callables' timeout: the v2 default, as no options override it. */
+export const CALLABLE_TIMEOUT_MS = 60 * 1000;
+
+/**
+ * Throws unless this checkout still holds its lock and is within the callable's
+ * timeout; run just before Stripe creates the subscription. The timeout doesn't
+ * stop the callable's code, so a slow checkout can resume after its lock
+ * expired and a retry took it over. Each attempt has its own Stripe keys, so
+ * without this both would create a subscription. Past the timeout the client
+ * already has its error, so the attempt stops either way, and a passing check
+ * leaves a minute before anyone can take the lock over.
+ */
+export async function assertCheckoutHeld(
+  claim: CheckoutClaim,
+  now: number = Date.now(),
+): Promise<void> {
+  const ref = userCollection.doc(claim.uid);
+  const held = await ratsFirestore.runTransaction(
+    async (tx) =>
+      (await tx.get(ref)).data()?.subscriptionMetadata?.checkoutStartedAt === claim.startedAt,
+  );
+  if (held && now - claim.startedAt < CALLABLE_TIMEOUT_MS) return;
+  logger.warn('Checkout outlived its lock; stopped before Stripe created a subscription', {
+    userId: claim.uid,
+  });
+  throw new HttpsError('aborted', CHECKOUT_REFUSAL_MESSAGES['checkout-in-progress']);
+}
+
 /**
  * After a reversed checkout (its subscription cancelled in Stripe), puts back
  * the record the checkout replaced, so the operator can retry as they are told.

@@ -4,7 +4,11 @@ import { STRIPE_API_VERSION } from "../util/stripeApiVersion";
 import OperatorSubscription from "../entities/OperatorSubscription";
 import { User } from "../entities/User";
 import { HouseType, TierKey } from "../config";
-import { resolveTierPriceId, BillingInterval } from "../util/tierPricing";
+import {
+  resolveTierPriceId,
+  BillingInterval,
+  storedBillingInterval,
+} from "../util/tierPricing";
 import { assertPaymentMethodUsable } from "./cardValidation";
 import { periodEndSeconds } from "../util/subscriptionPeriod";
 
@@ -62,6 +66,21 @@ export const OXFORD_PRICE_ID = process.env.STRIPE_OXFORD_PRICE_ID!; // Regroup O
  * convention rent collection already uses (`${guestId}-${houseId}-${dayKey}`).
  */
 const idempotencyDay = (): string => new Date().toISOString().slice(0, 10);
+
+/**
+ * One checkout or Reactivate attempt: its idempotency key, and a check run just
+ * before Stripe creates the subscription. The callable keys it by its checkout
+ * lock's time and checks it still holds that lock, so an attempt that outlived
+ * its lock (a timed-out request whose code resumed) can't create a subscription
+ * beside the retry that took the lock over. A key per attempt, not per day: a
+ * declined card or a reversed checkout deletes the customer, and a day key
+ * handed the retry that deleted customer until the next UTC day.
+ */
+export type StripeAttempt = { key: string; beforeCreate: () => Promise<void> };
+const dayAttempt = (): StripeAttempt => ({
+  key: idempotencyDay(),
+  beforeCreate: async () => undefined,
+});
 
 /**
  * Keys must not contain PII — they are echoed in logs and in Stripe's own
@@ -201,20 +220,26 @@ export const reactivateSubscription = async (
   customerId: string,
   subscriptionMetadata: OperatorSubscription,
   userId?: string,
+  // Keyed by day, a restart after the replacement was cancelled the same day
+  // got the cancelled subscription back from Stripe. See StripeAttempt.
+  attempt: StripeAttempt = dayAttempt(),
 ): Promise<OperatorSubscription> => {
   // This function creates a subscription unconditionally, so an unkeyed retry is
   // the most direct way to double-bill an operator. Keyed on the customer rather
   // than the old subscription id, which differs between the branches below.
-  const reactivateKey = `reactivate-${userId ?? customerId}-${idempotencyDay()}`;
+  const reactivateKey = `reactivate-${userId ?? customerId}-${attempt.key}`;
   // Tier model: recreate a single flat-fee line item from the stored tier, and
   // record the single subscriptionItemId. Legacy two-item subscriptions keep the
   // house+guest createItemsFromMetadata path unchanged below.
   if (subscriptionMetadata.tier) {
     const houseType = subscriptionMetadata.houseType as HouseType;
     const tier = subscriptionMetadata.tier as TierKey;
+    // The plan restarts on the interval it was on: an annual plan stays annual.
+    const billingInterval = storedBillingInterval(subscriptionMetadata.billingInterval);
     let price: string;
     try {
-      price = resolveTierPriceId(houseType, tier);
+      price = resolveTierPriceId(houseType, tier, billingInterval);
+      await attempt.beforeCreate();
     } catch (error) {
       // Before Stripe is called, so the callable may free the checkout lock.
       throw markedBeforeSubscription(error);
@@ -230,6 +255,7 @@ export const reactivateSubscription = async (
     const freshMetadata = new OperatorSubscription();
     freshMetadata.houseType = houseType;
     freshMetadata.tier = tier;
+    freshMetadata.billingInterval = billingInterval;
     freshMetadata.maxResidents = subscriptionMetadata.maxResidents;
     freshMetadata.maxProperties = subscriptionMetadata.maxProperties;
     freshMetadata.houses = subscriptionMetadata.houses ?? {};
@@ -466,6 +492,9 @@ const ENDED_STATUSES = new Set(["canceled", "incomplete_expired"]);
 export const findLiveSubscriptionForUser = async (
   userId: string,
   email: string,
+  // Reactivate's stored customer, which it creates the replacement on: the
+  // email it was made with may not be the account's now.
+  knownCustomerId?: string,
 ): Promise<Stripe.Subscription | null> => {
   if (!/^[A-Za-z0-9_-]+$/.test(userId)) {
     throw new Error("findLiveSubscriptionForUser: unexpected user id");
@@ -473,8 +502,10 @@ export const findLiveSubscriptionForUser = async (
   const isLive = (sub: Stripe.Subscription) =>
     sub.metadata?.userId === userId && !ENDED_STATUSES.has(sub.status);
   const customers = await stripe.customers.list({ email, limit: 20 });
-  for (const customer of customers.data) {
-    const subs = await stripe.subscriptions.list({ customer: customer.id, status: "all", limit: 20 });
+  const customerIds = new Set(customers.data.map((c) => c.id));
+  if (knownCustomerId) customerIds.add(knownCustomerId);
+  for (const customer of customerIds) {
+    const subs = await stripe.subscriptions.list({ customer, status: "all", limit: 20 });
     const live = subs.data.find(isLive);
     if (live) return live;
   }
@@ -497,20 +528,36 @@ export const initializeTierCustomer = async (
   tier: TierKey,
   userId: string,
   billingInterval: BillingInterval = "month",
+  attempt: StripeAttempt = dayAttempt(),
 ) => {
-  // Without these keys a retry or double-submit creates a SECOND real customer
-  // and subscription; Firestore keeps whichever finishes last, orphaning the
-  // other to bill forever with nothing pointing at it.
-  const day = idempotencyDay();
+  // Without these keys a retry inside the attempt (Stripe's own network
+  // retries) creates a SECOND real customer and subscription; Firestore keeps
+  // whichever finishes last, orphaning the other to bill forever with nothing
+  // pointing at it. A second attempt is refused by the checkout lock, and one
+  // whose subscription went unrecorded by findLiveSubscriptionForUser.
   let customer: Awaited<ReturnType<typeof createCustomer>>;
   try {
     customer = await createCustomer(
       email,
       paymentMethod,
-      `cust-${userId}-${day}`,
+      `cust-${userId}-${attempt.key}`,
     );
     // Same guard as the legacy path: validate before the subscription exists.
     await assertPaymentMethodUsable(stripe, customer.id, paymentMethod);
+    try {
+      await attempt.beforeCreate();
+    } catch (refusal) {
+      // No subscription will be made, and no record names this customer:
+      // delete it, with the card, rather than leave it in Stripe.
+      await stripe.customers.del(customer.id).catch((delError: unknown) =>
+        logger.error("Checkout stopped before its subscription; delete its customer by hand", {
+          userId,
+          customerId: customer.id,
+          error: delError instanceof Error ? delError.message : String(delError),
+        }),
+      );
+      throw refusal;
+    }
   } catch (error) {
     throw markedBeforeSubscription(error);
   }
@@ -524,7 +571,7 @@ export const initializeTierCustomer = async (
     billingInterval,
     // Tier and interval are part of the key: changing plan is a new operation,
     // not a retry of the old one.
-    `tiersub-${userId}-${houseType}-${tier}-${billingInterval}-${day}`,
+    `tiersub-${userId}-${houseType}-${tier}-${billingInterval}-${attempt.key}`,
   );
   const item = subscription.items.data[0];
   const periodEnd = periodEndSeconds(subscription, item.id);
