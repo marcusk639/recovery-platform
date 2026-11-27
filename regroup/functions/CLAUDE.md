@@ -35,6 +35,7 @@ npm run migrate:balance-cents:dry-run   # / :apply
 npm run backfill:week-summaries:dry-run -- --from YYYY-MM-DD --to YYYY-MM-DD [--house <id>]   # / :apply
 npm run backfill:dispute-identity:dry-run [-- --house <id>]   # then :apply — stamp/re-stamp residentUid, log older decisions (reopen needs them), seed house-disputes. Combined #141/#145 deploy order (regroup/CLAUDE.md): #145 step 0 and backfills → functions (build first) → the MERGED ruleset immediately after → this, at least 10 minutes later, with `-- --verify-stamps` (cutoff = run start; re-derives pre-rules stamps; flags differing ones on disputed activities, exit 3) → #145's remaining steps → app
 npm run report:ghost-guests     # Read-only: guest docs with no house claim (ids only); needs both emulator hosts to rehearse
+npm run backfill:house-listings:dry-run   # then :apply — write house-listings for existing houses (after the functions deploy)
 ```
 
 Jest config is the `jest` key in `package.json` (no `jest.config.js`). Firestore rules tests live in `../mobile/firebase/__tests__/`, not here.
@@ -84,6 +85,7 @@ src/
                     guestRestamp.ts         onGuestLinkedRestamp (activities' residentUid, charges' guestUserId)
                     guestWrite.ts           onGuestWrite
                     houseRentSettings.ts    onHouseRentSettingsWrite
+                    houseListing.ts         onHouseListingSync (house-listings, the public listing)
                     houseTombstone.ts       onHouseDeleted
   activities/       Week-summary recompute (syncWeekSummary) + pure week/time-zone math
   admins/           profileSync: copies users/{uid} name and phone onto the user's admins records
@@ -258,6 +260,8 @@ The legacy `STRIPE_HOUSE_PRICE_ID` / `STRIPE_GUEST_PRICE_ID` / `STRIPE_OXFORD_PR
 ### Firestore gotchas
 
 **House owner fields.** `createHouses` stores the operator's uid in `ownerId` and `superAdminId`; `adminIds`/`superAdminIds` hold admin-record ids from `createAdminId()`, not uids. Find an operator's houses by `ownerId`: `adminIds array-contains uid` matches only legacy houses (#222). For the same reason, never address a notification to an `adminIds` entry: `notifyOperatorOnApplication` resolves staff uids from the role records (`staffUids` in `util/houseRoleStore.ts`) plus `superAdminId`.
+
+**House listings are the public face of a house.** `house-listings/{houseId}` (EMU-009, owner 2026-11-27) is the only house data a signed-out visitor may read: the app's house search and the summary a prospective resident applies from. `onHouseListingSync` (`triggers/firestore/houseListing.ts`, retried) writes it from the current house doc on every house write, through `toHouseListing` (`houses/houseListing.ts`): a fixed allowlist of public fields, typed, with counts for rooms, beds and phases, and the geohash cut to six characters. Never the street, coordinates, rooms or beds (they name residents), health, the house code, staff or owner ids, or subscription and Stripe fields. Listed only when the house isn't a demo house, has a name and location, and its `subscriptionStatus` is `active`, `trialing` or `past_due` (its grace period; owner 2026-11-27); otherwise the listing is deleted. The house phone is public on purpose (owner, 2026-11-27). An unchanged listing isn't rewritten. After the first deploy, run `backfill:house-listings` for houses that exist already. Adding a field to the listing is a privacy decision: check it against that list.
 
 **admins records copy the user's name and phone.** `onUserAdminProfileSync` (`triggers/firestore/adminProfileSync.ts`, retried, `util/eventAge` cutoff) copies `firstName`, `lastName` and `phoneNumber` from `users/{uid}` onto every `admins` record with that `userId` (ids are `createAdminId()` auto-ids, so find them by `userId`; a user may have none or several) whenever one of the three changes. Each record is a transaction that re-reads the CURRENT user doc (`admins/profileSync.ts`), so out-of-order and redelivered events converge; a field the user doc doesn't hold as a string is left alone. The app's `EditUserInfoForm` still copies its fields (avatar, date of birth, phone and others) to the admins record, but only once that record has loaded; for name and phone the trigger is the backstop. The other fields have no server copy. Only `users` updates trigger it: an admins record created later takes its name from its creator (`createHouses` copies the user's), and its phone only from the next change.
 

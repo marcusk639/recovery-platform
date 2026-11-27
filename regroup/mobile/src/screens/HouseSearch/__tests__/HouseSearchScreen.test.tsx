@@ -190,8 +190,9 @@ jest.mock('../HouseSearchFilterForm', () => ({
 
 const mockSearchForHouses = jest.fn();
 
-jest.mock('../../../services/house', () => ({
-  searchForHouses: (...args: any[]) => mockSearchForHouses(...args),
+// House search reads the public listings (EMU-009).
+jest.mock('../../../services/houseListings', () => ({
+  searchHouseListings: (...args: any[]) => mockSearchForHouses(...args),
 }));
 
 // ─── React imports (after mocks) ──────────────────────────────────────────────
@@ -534,6 +535,68 @@ describe('HouseSearchScreen', () => {
       mockSearchForHouses.mockResolvedValue({ [BASE_HOUSE.id]: BASE_HOUSE });
       const { getByText } = renderScreen();
       await waitFor(() => expect(getByText(/San Francisco/)).toBeTruthy());
+    });
+
+    // EMU-009: the first search ran with the filters from before the
+    // position arrived (a stale closure), so it had no location and found
+    // nothing, wherever the visitor was.
+    it("searches around the device's position when the screen opens", async () => {
+      const permModule = require('../../../util/permissions');
+      permModule.checkAndRequestLocationPermissions.mockResolvedValueOnce(true);
+      mockSearchForHouses.mockResolvedValue({});
+      renderScreen();
+      await waitFor(() =>
+        expect(mockSearchForHouses).toHaveBeenCalledWith({
+          filters: expect.objectContaining({
+            location: expect.objectContaining({ lat: 37.7749, lng: -122.4194 }),
+          }),
+        }),
+      );
+    });
+
+    // EMU-009: search shows the public listing, which has no street address.
+    it('never shows a street address, even if one came back', async () => {
+      const permModule = require('../../../util/permissions');
+      permModule.checkAndRequestLocationPermissions.mockResolvedValueOnce(true);
+      mockSearchForHouses.mockResolvedValue({ [BASE_HOUSE.id]: BASE_HOUSE });
+      const { getByText, queryByText } = renderScreen();
+      await waitFor(() => expect(getByText(/San Francisco/)).toBeTruthy());
+      expect(queryByText('100 Main St')).toBeNull();
+    });
+
+    // Android draws edge to edge: without the bottom inset the last card's
+    // VIEW DETAILS button sits under the navigation bar, where nobody can tap it.
+    // The results area grew to fit every card (flexGrow alone), so the list
+    // was taller than the screen and never scrolled: houses past the first
+    // screenful could not be reached.
+    it('bounds the results area so the list scrolls', async () => {
+      const permModule = require('../../../util/permissions');
+      permModule.checkAndRequestLocationPermissions.mockResolvedValueOnce(true);
+      mockSearchForHouses.mockResolvedValue({ [BASE_HOUSE.id]: BASE_HOUSE });
+      const { getByText, getByTestId } = renderScreen();
+      await waitFor(() => expect(getByText('Sunrise Recovery')).toBeTruthy());
+      const { StyleSheet } = require('react-native');
+      expect(StyleSheet.flatten(getByTestId('house-search-results').props.style)).toEqual(
+        expect.objectContaining({ flex: 1 }),
+      );
+    });
+
+    it('keeps the last card clear of the bottom safe-area inset', async () => {
+      const SafeArea = require('react-native-safe-area-context');
+      const insetSpy = jest
+        .spyOn(SafeArea, 'useSafeAreaInsets')
+        .mockReturnValue({ top: 0, right: 0, bottom: 48, left: 0 });
+      const permModule = require('../../../util/permissions');
+      permModule.checkAndRequestLocationPermissions.mockResolvedValueOnce(true);
+      mockSearchForHouses.mockResolvedValue({ [BASE_HOUSE.id]: BASE_HOUSE });
+      const { getByText, UNSAFE_getByType } = renderScreen();
+      await waitFor(() => expect(getByText('Sunrise Recovery')).toBeTruthy());
+      const { FlatList, StyleSheet } = require('react-native');
+      const list = UNSAFE_getByType(FlatList);
+      expect(StyleSheet.flatten(list.props.contentContainerStyle)).toEqual(
+        expect.objectContaining({ paddingBottom: 48 }),
+      );
+      insetSpy.mockRestore();
     });
   });
 

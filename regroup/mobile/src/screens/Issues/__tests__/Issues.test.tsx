@@ -58,7 +58,6 @@ jest.mock('../../../services/issues', () => ({
 jest.mock('../../../services/house', () => ({
   getHouse: jest.fn(),
   getHouses: jest.fn(),
-  searchForHouses: jest.fn(),
   createHouse: jest.fn(),
   updateHouse: jest.fn(),
   createHouseId: jest.fn(() => 'mock-house-id'),

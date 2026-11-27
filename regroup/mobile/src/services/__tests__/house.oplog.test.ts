@@ -29,7 +29,6 @@ import {
   getHouse,
   getHouses,
   getNearbyHouses,
-  searchForHouses,
   updateHouse,
   updateHouseAdmins,
   updateHouseAwaitingVerification,
@@ -104,7 +103,7 @@ describe('updateHouseAdmins', () => {
   });
 });
 
-describe('getNearbyHouses / searchForHouses', () => {
+describe('getNearbyHouses', () => {
   const range = getGeohashRange(30, -90, 25);
   const constraints = [
     ['where', 'geohash', '>=', range.lower],
@@ -121,15 +120,6 @@ describe('getNearbyHouses / searchForHouses', () => {
     const houses = await getNearbyHouses(30, -90, 25);
 
     expect(Object.keys(houses).sort()).toEqual(['h1', 'h2']);
-    expect(getOpLog()).toEqual([{ op: 'getDocs', path: 'houses', constraints }]);
-  });
-
-  it('searches 25 miles around the location and filters by gender', async () => {
-    const search = { filters: { location: { lat: 30, lng: -90 }, gender: 'female' } };
-
-    const result = await searchForHouses(search as unknown as HouseSearch);
-
-    expect(result).toEqual([expect.objectContaining({ id: 'h1' })]);
     expect(getOpLog()).toEqual([{ op: 'getDocs', path: 'houses', constraints }]);
   });
 });
