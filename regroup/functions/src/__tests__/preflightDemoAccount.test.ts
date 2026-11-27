@@ -98,6 +98,12 @@ describe('preflight-demo-account.js', () => {
     expect(run.stderr).toMatch(/demo:mark-account/);
   });
 
+  it('ignores emulator hosts left in the shell for a real project', () => {
+    const source = fs.readFileSync(SCRIPT, 'utf8');
+    expect(source).toMatch(/delete process\.env\.FIRESTORE_EMULATOR_HOST/);
+    expect(source).toMatch(/delete process\.env\.FIREBASE_AUTH_EMULATOR_HOST/);
+  });
+
   it('is a predeploy hook of the functions deploy and of both rules deploys', () => {
     const functionsConfig = JSON.parse(
       fs.readFileSync(path.join(REGROUP_DIR, 'firebase.json'), 'utf8'),
@@ -105,10 +111,16 @@ describe('preflight-demo-account.js', () => {
     const rulesConfig = JSON.parse(
       fs.readFileSync(path.join(REGROUP_DIR, 'mobile/firebase/firebase.json'), 'utf8'),
     );
-    const hooked = (hooks: string[] | undefined) =>
-      (hooks ?? []).some((h) => h.includes('preflight-demo-account.js'));
-    expect(hooked(functionsConfig.functions.predeploy)).toBe(true);
-    expect(hooked(rulesConfig.firestore.predeploy)).toBe(true);
-    expect(hooked(rulesConfig.storage.predeploy)).toBe(true);
+    // Resolve each hook as the CLI does ($PROJECT_DIR = the firebase.json's
+    // folder): it must name this very script.
+    const hooked = (hooks: string[] | undefined, projectDir: string) =>
+      (hooks ?? []).some((h) => {
+        const m = h.match(/^node "(.+)"$/);
+        return !!m && path.resolve(m[1].replace('$PROJECT_DIR', projectDir)) === SCRIPT;
+      });
+    expect(hooked(functionsConfig.functions.predeploy, REGROUP_DIR)).toBe(true);
+    const rulesDir = path.join(REGROUP_DIR, 'mobile/firebase');
+    expect(hooked(rulesConfig.firestore.predeploy, rulesDir)).toBe(true);
+    expect(hooked(rulesConfig.storage.predeploy, rulesDir)).toBe(true);
   });
 });

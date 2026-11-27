@@ -93,6 +93,10 @@ async function main() {
   const projectId = process.env.GCLOUD_PROJECT || '';
   let readers = { readConfig: async () => undefined, getUser: async () => undefined };
   if (projectId && !projectId.startsWith('demo-')) {
+    // A shell left over from an emulator run would point the Admin SDK at the
+    // emulator, where a marked account would pass the gate for the real project.
+    delete process.env.FIRESTORE_EMULATOR_HOST;
+    delete process.env.FIREBASE_AUTH_EMULATOR_HOST;
     try {
       readers = adminFor(projectId);
     } catch (error) {
