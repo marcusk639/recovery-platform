@@ -41,6 +41,7 @@ describe('searchHouseListings', () => {
         constraints: [
           ['where', 'geohash', '>=', range.lower.slice(0, 6)],
           ['where', 'geohash', '<=', range.upper],
+          ['limit', 200],
         ],
       },
     ]);

@@ -35,6 +35,7 @@ export const mem = {
     clock = 1_000;
     autoId = 0;
     mem.writes.length = 0;
+    mem.selects.length = 0;
     mem.beforeCommit = null;
   },
   seed(path: string, data: Data): void {
@@ -54,6 +55,7 @@ export const mem = {
     return [...store.keys()].filter((p) => p.startsWith(prefix)).sort();
   },
   writes: [] as Array<{ op: string; path: string; data?: Data }>,
+  selects: [] as Array<[string, string[]]>,
   beforeCommit: null as null | (() => void | Promise<void>),
 };
 
@@ -168,18 +170,36 @@ function matches(d: Data, field: string, op: string, v: unknown): boolean {
   }
 }
 
-function query(collection: string, filters: Array<[string, string, unknown]>, max = Infinity): any {
+function query(
+  collection: string,
+  filters: Array<[string, string, unknown]>,
+  max = Infinity,
+  fields?: string[],
+): any {
   const depth = collection.split('/').length + 1;
+  const project = (p: string) => {
+    const snap = snapshot(p);
+    if (!fields) return snap;
+    const all = snap.data() as Data;
+    const picked = Object.fromEntries(fields.filter((f) => f in all).map((f) => [f, all[f]]));
+    return { ...snap, data: () => picked };
+  };
   return {
-    where: (f: string, op: string, v: unknown) => query(collection, [...filters, [f, op, v]], max),
-    limit: (n: number) => query(collection, filters, n),
+    where: (f: string, op: string, v: unknown) =>
+      query(collection, [...filters, [f, op, v]], max, fields),
+    limit: (n: number) => query(collection, filters, n, fields),
+    // select(...fields): the Admin SDK's projection; logged in mem.selects.
+    select: (...f: string[]) => {
+      mem.selects.push([collection, f]);
+      return query(collection, filters, max, f);
+    },
     get: async () => {
       const docs = [...store.entries()]
         .filter(([p]) => p.startsWith(`${collection}/`) && p.split('/').length === depth)
         .filter(([, s]) => filters.every(([f, op, v]) => matches(s.data, f, op, v)))
         .sort(([a], [b]) => (a < b ? -1 : 1))
         .slice(0, max)
-        .map(([p]) => snapshot(p));
+        .map(([p]) => project(p));
       return { empty: docs.length === 0, size: docs.length, docs };
     },
   };

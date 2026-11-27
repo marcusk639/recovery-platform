@@ -1,4 +1,12 @@
-import { collection, doc, getDoc, getDocs, query, where } from '@react-native-firebase/firestore';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  query,
+  where,
+} from '@react-native-firebase/firestore';
 import { firestore } from '../../firebase-setup';
 import { HouseListing } from '../entities/HouseListing';
 import { HouseSearch } from '../entities/HouseSearch';
@@ -13,6 +21,8 @@ import { logException } from '../util/logging';
 export const houseListingCollection = collection(firestore, 'house-listings');
 
 const SEARCH_RADIUS_MILES = 25;
+/** At most this many listings per search: the data is public, so bound the read. */
+const SEARCH_LIMIT = 200;
 
 /**
  * Listed houses within 25 miles of the search location, optionally of one
@@ -29,6 +39,7 @@ export async function searchHouseListings(searchData: HouseSearch): Promise<Hous
         houseListingCollection,
         where('geohash', '>=', range.lower.slice(0, 6)),
         where('geohash', '<=', range.upper),
+        limit(SEARCH_LIMIT),
       ),
     );
     const listings = snap.docs.map((d) => d.data() as HouseListing);

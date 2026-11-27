@@ -10,7 +10,7 @@ jest.mock('firebase-admin', () => ({
 
 import { mem, memDb } from '../helpers/memFirestore';
 import { run } from '../../scripts/backfillHouseListings';
-import { toHouseListing } from '../../houses/houseListing';
+import { LISTING_SOURCE_FIELDS, toHouseListing } from '../../houses/houseListing';
 
 const listed = (extra: Record<string, unknown> = {}) => ({
   name: 'A House',
@@ -54,6 +54,14 @@ it('writes, removes and leaves alone on --apply', async () => {
   expect(mem.get('house-listings/lapsed')).toBeUndefined();
   expect(mem.get('house-listings/gone')).toBeUndefined();
   expect(mem.writes.filter((w) => w.path === 'house-listings/same')).toHaveLength(0);
+});
+
+it('reads only the fields a listing is made from', async () => {
+  seedAll();
+  await run(memDb, false);
+  expect(mem.selects).toEqual([['houses', LISTING_SOURCE_FIELDS]]);
+  expect(LISTING_SOURCE_FIELDS).not.toContain('street');
+  expect(LISTING_SOURCE_FIELDS).not.toContain('complaints');
 });
 
 it('logs house ids, never a house field', async () => {

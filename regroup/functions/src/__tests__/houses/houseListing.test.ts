@@ -126,6 +126,22 @@ describe('toHouseListing', () => {
     expect(listing).not.toHaveProperty('wifi');
   });
 
+  // Free text an operator typed is public here, so it is capped.
+  it('caps the free-text fields', () => {
+    const listing = toHouseListing(
+      'h1',
+      house({ depositsAndFees: 'x'.repeat(5000), phoneNumber: '5'.repeat(100), name: 'N'.repeat(500) }),
+    );
+    expect(listing?.depositsAndFees).toHaveLength(500);
+    expect(listing?.phoneNumber).toHaveLength(30);
+    expect(listing?.name).toHaveLength(200);
+  });
+
+  it('copies the house phone and deposits text', () => {
+    const listing = toHouseListing('h1', house({ depositsAndFees: '$200 deposit' }));
+    expect(listing).toMatchObject({ phoneNumber: '512-555-0100', depositsAndFees: '$200 deposit' });
+  });
+
   it('never reports negative open beds', () => {
     expect(toHouseListing('h1', house({ currentCapacity: 12 }))?.openBeds).toBe(0);
   });

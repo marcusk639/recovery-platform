@@ -76,6 +76,35 @@ it('removes the listing when the house is deleted', async () => {
   expect(listing()).toBeUndefined();
 });
 
+it('removes the listing when the house becomes a demo house', async () => {
+  mem.seed(`houses/${H}`, house());
+  await run(event);
+  mem.seed(`houses/${H}`, house({ isDemoHouse: true }));
+  await run(event);
+  expect(listing()).toBeUndefined();
+});
+
+it('removes the listing when the name or the location goes', async () => {
+  mem.seed(`houses/${H}`, house());
+  await run(event);
+  mem.seed(`houses/${H}`, house({ name: '  ' }));
+  await run(event);
+  expect(listing()).toBeUndefined();
+  mem.seed(`houses/${H}`, house());
+  await run(event);
+  mem.seed(`houses/${H}`, house({ geohash: 'unknown' }));
+  await run(event);
+  expect(listing()).toBeUndefined();
+});
+
+it('converges on a retry: a second run of the same event changes nothing', async () => {
+  mem.seed(`houses/${H}`, house());
+  expect(await syncHouseListing(H)).toBe('write');
+  const writes = mem.writes.length;
+  expect(await syncHouseListing(H)).toBe('unchanged');
+  expect(mem.writes.length).toBe(writes);
+});
+
 it('lists nothing for a demo house', async () => {
   mem.seed(`houses/${H}`, house({ isDemoHouse: true }));
   expect(await syncHouseListing(H)).toBe('unchanged');

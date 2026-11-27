@@ -17,7 +17,7 @@
  */
 import './scriptBootstrap';
 import * as admin from 'firebase-admin';
-import { planHouseListing } from '../houses/houseListing';
+import { LISTING_SOURCE_FIELDS, planHouseListing } from '../houses/houseListing';
 
 const BATCH_LIMIT = 400;
 
@@ -32,7 +32,11 @@ export interface Counts {
 export async function run(database: FirebaseFirestore.Firestore, apply: boolean): Promise<Counts> {
   console.log(`Mode: ${apply ? 'LIVE (writes)' : 'DRY RUN (no writes)'} — house listings`);
   const [houses, listings] = await Promise.all([
-    database.collection('houses').get(),
+    // Only the listing's source fields: never load residents' data.
+    database
+      .collection('houses')
+      .select(...LISTING_SOURCE_FIELDS)
+      .get(),
     database.collection('house-listings').get(),
   ]);
   const existing = new Map(listings.docs.map((d) => [d.id, d.data()]));

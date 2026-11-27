@@ -20,6 +20,16 @@
  */
 export const LISTING_GEOHASH_PRECISION = 6;
 const LISTED_STATUSES = new Set(['active', 'trialing']);
+/** Free text an operator typed is public here, so each string is capped. */
+const STRING_CAP: Record<string, number> = {
+  name: 200,
+  phoneNumber: 30,
+  depositsAndFees: 500,
+  avatar: 2048,
+  imageUrl: 2048,
+};
+const DEFAULT_STRING_CAP = 100;
+const capped = (k: string, v: string) => v.slice(0, STRING_CAP[k] ?? DEFAULT_STRING_CAP);
 
 type Data = Record<string, unknown>;
 
@@ -73,6 +83,19 @@ const NUMBER_FIELDS = [
 ] as const;
 const BOOLEAN_FIELDS = ['certified', 'wifi'] as const;
 
+/** Every house field a listing is made from: the backfill reads only these. */
+export const LISTING_SOURCE_FIELDS: string[] = [
+  'isDemoHouse',
+  'subscriptionStatus',
+  'name',
+  'geohash',
+  'phases',
+  'rooms',
+  ...STRING_FIELDS,
+  ...NUMBER_FIELDS,
+  ...BOOLEAN_FIELDS,
+];
+
 const isObject = (v: unknown): v is Data => !!v && typeof v === 'object' && !Array.isArray(v);
 const countOf = (v: unknown): number =>
   Array.isArray(v) ? v.length : isObject(v) ? Object.keys(v).length : 0;
@@ -82,7 +105,7 @@ export function toHouseListing(houseId: string, house: Data | undefined): HouseL
   if (!house) return null;
   if (house.isDemoHouse === true) return null;
   if (!LISTED_STATUSES.has(String(house.subscriptionStatus ?? ''))) return null;
-  const name = typeof house.name === 'string' ? house.name.trim() : '';
+  const name = typeof house.name === 'string' ? capped('name', house.name.trim()) : '';
   const geohash = typeof house.geohash === 'string' ? house.geohash : '';
   if (!name || geohash.length < LISTING_GEOHASH_PRECISION || geohash === 'unknown') return null;
 
@@ -96,7 +119,10 @@ export function toHouseListing(houseId: string, house: Data | undefined): HouseL
     bedCount: rooms.reduce<number>((n, room) => n + (isObject(room) ? countOf(room.beds) : 0), 0),
   };
   const out = listing as unknown as Data;
-  for (const k of STRING_FIELDS) if (typeof house[k] === 'string') out[k] = house[k];
+  for (const k of STRING_FIELDS) {
+    const v = house[k];
+    if (typeof v === 'string') out[k] = capped(k, v);
+  }
   for (const k of NUMBER_FIELDS) {
     if (typeof house[k] === 'number' && Number.isFinite(house[k])) out[k] = house[k];
   }
