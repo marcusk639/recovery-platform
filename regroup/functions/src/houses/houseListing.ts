@@ -58,7 +58,8 @@ export interface HouseListing {
   monthlyRent?: number;
   weeklyRent?: number;
   rentFrequency?: string;
-  depositsAndFees?: string;
+  /** Text, or a dollar amount: the setup wizard stores a number. */
+  depositsAndFees?: string | number;
   phaseCount: number;
   roomCount: number;
   bedCount: number;
@@ -74,7 +75,6 @@ const STRING_FIELDS = [
   'imageUrl',
   'phoneNumber',
   'rentFrequency',
-  'depositsAndFees',
 ] as const;
 const NUMBER_FIELDS = [
   'rating',
@@ -97,6 +97,7 @@ export const LISTING_SOURCE_FIELDS: string[] = [
   ...STRING_FIELDS,
   ...NUMBER_FIELDS,
   ...BOOLEAN_FIELDS,
+  'depositsAndFees',
 ];
 
 const isObject = (v: unknown): v is Data => !!v && typeof v === 'object' && !Array.isArray(v);
@@ -130,6 +131,10 @@ export function toHouseListing(houseId: string, house: Data | undefined): HouseL
     if (typeof house[k] === 'number' && Number.isFinite(house[k])) out[k] = house[k];
   }
   for (const k of BOOLEAN_FIELDS) if (typeof house[k] === 'boolean') out[k] = house[k];
+  // Deposits and fees: free text, or a dollar amount (the setup wizard saves a number).
+  const fees = house.depositsAndFees;
+  if (typeof fees === 'string') listing.depositsAndFees = capped('depositsAndFees', fees);
+  else if (typeof fees === 'number' && Number.isFinite(fees)) listing.depositsAndFees = fees;
   if (typeof listing.maximumCapacity === 'number' && typeof listing.currentCapacity === 'number') {
     listing.openBeds = Math.max(0, listing.maximumCapacity - listing.currentCapacity);
   }

@@ -29,7 +29,8 @@ export interface HouseListing {
   monthlyRent?: number;
   weeklyRent?: number;
   rentFrequency?: string;
-  depositsAndFees?: string;
+  /** Text, or dollars as a number (the setup wizard saves a number). */
+  depositsAndFees?: string | number;
   phaseCount: number;
   roomCount: number;
   bedCount: number;
