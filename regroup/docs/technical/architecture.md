@@ -253,7 +253,7 @@ Cloud Functions live in `regroup/functions/` in this monorepo (the old standalon
 
 ### 3.1 Callable Functions (httpsCallable)
 
-These are invoked from the mobile client (and the web operator portal) via `httpsCallable('functionName')(payload)`. Every callable rejects an unauthenticated caller except `getTierCatalog` (public pricing) and `peekInvitation` (the invitation token is the credential). Contracts for the billing and payment callables are in `regroup/functions/CLAUDE.md` ("Callable contracts").
+These are invoked from the mobile client (and the web operator portal) via `httpsCallable('functionName')(payload)`. Every callable rejects an unauthenticated caller except `getTierCatalog` (public pricing), `getAppConfig` (the minimum app version, read before sign-in) and `peekInvitation` (the invitation token is the credential). Contracts for the billing and payment callables are in `regroup/functions/CLAUDE.md` ("Callable contracts").
 
 #### Auth Functions (`src/callable/auth.ts`)
 
@@ -274,6 +274,7 @@ These are invoked from the mobile client (and the web operator portal) via `http
 | `createHouses`        | `callable/houses.ts`              | Creates the operator's houses in one transaction (house type from the plan, primary owner record, property cap, tombstone check)   |
 | `finishOperatorSetup` | `callable/finishOperatorSetup.ts` | Recovers a half-finished operator setup: re-grants missing house claims for houses with the caller's primary owner record (max 25) |
 | `myHouseTiers`        | `callable/myHouseTiers.ts`        | The caller's own tier per house, for the operator portal's display                                                                 |
+| `getAppConfig`        | `callable/getAppConfig.ts`        | **Unauthenticated.** `{ minVersion: { ios, android } }` from server-only `config/app` (cached 60 s); the app's minimum-version gate |
 | `createInvitation`    | `callable/invitations.ts`         | Issues a server-side invitation token (7-day expiry) and emails the link (SendGrid)                                                |
 | `peekInvitation`      | `callable/invitations.ts`         | **Unauthenticated.** Returns `houseId`, `role`, `invitedEmail`, `initialPhase` and `expiresAt` for a usable token                  |
 | `redeemInvitation`    | `callable/invitations.ts`         | Grants the invited role's claims and tier record once the gates pass                                                               |

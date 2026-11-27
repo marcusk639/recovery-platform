@@ -45,7 +45,7 @@ ALL_FUNCTIONS=(
   connectStripeAccount disconnectStripeAccount getStripeAccountStatus
   createOperatorSubscription reactivateOperatorSubscription cancelUserSubscription
   updateSubscriptionGuests updateSubscriptionHouses
-  createBillingPortalSession applyBundleDiscount getTierCatalog myHouseTiers
+  createBillingPortalSession applyBundleDiscount getTierCatalog getAppConfig myHouseTiers
   getDocumentLink
   setOxfordEnabled castOxfordVote complianceExport rentRoiMetrics
   deleteAccount

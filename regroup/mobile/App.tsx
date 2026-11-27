@@ -1,6 +1,6 @@
 // App.tsx - Migrated to Redux Toolkit
 // Phase 3.2: Added Context providers (ModalProvider, NotificationProvider, DataProvider)
-// Provider tree: ErrorBoundary > SafeAreaProvider > StripeProvider > ThemeProvider > DataProvider > NotificationProvider > ModalProvider > Auth
+// Provider tree: ErrorBoundary > SafeAreaProvider > StripeProvider > ThemeProvider > DataProvider > NotificationProvider > ModalProvider > Auth > VersionGate
 import React, { memo, useState, useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import 'react-native-gesture-handler';
@@ -23,6 +23,7 @@ import { withSplash } from './src/screens/Splash/Splash';
 import Auth from './src/components/auth/auth';
 import IOSStatusBar from './src/components/ios-status-bar';
 import ErrorBoundary from './src/components/ErrorBoundary';
+import VersionGate from './src/components/version-gate/VersionGate';
 import { ModalProvider, NotificationProvider, DataProvider } from './src/context';
 import {
   RootNavigator,
@@ -124,12 +125,14 @@ const App: React.FC = () => {
                 <ModalProvider>
                   <Auth>
                     <IOSStatusBar backgroundColor={color.black} barStyle="light-content" />
-                    <RootNavigatorMemo
-                      key={navigationKey}
-                      initialRoute={initialRoute}
-                      authInitialRoute={authInitialRoute}
-                      initialMainRoute={initialMainRoute}
-                    />
+                    <VersionGate>
+                      <RootNavigatorMemo
+                        key={navigationKey}
+                        initialRoute={initialRoute}
+                        authInitialRoute={authInitialRoute}
+                        initialMainRoute={initialMainRoute}
+                      />
+                    </VersionGate>
                   </Auth>
                 </ModalProvider>
               </NotificationProvider>
