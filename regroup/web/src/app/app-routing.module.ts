@@ -50,8 +50,9 @@ export const routes: Routes = [
   { path: 'contact', component: ContactPageComponent },
   { path: 'privacy-policy', component: PrivacyPolicyComponent },
   { path: 'terms', component: TermsComponent },
-  // Invitation emails link here (functions/src/util/inviteEmails.ts) with the
-  // app link in ?url=; the page opens the app, else the store.
+  // Older invitation emails (already sent) link here with the app link in
+  // ?url=; the page opens the app, else the store. New emails link to /invite
+  // (functions/src/util/inviteEmails.ts). Retire this once those emails expire.
   { path: 'redirect', component: RedirectComponent },
   // The paths regroup/app-links.json claims for the app. With the app installed
   // and its links verified, the OS opens the app and this page never loads;

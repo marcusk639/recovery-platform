@@ -109,3 +109,15 @@ test('the theme init skips the screenshot slider ScreenshotOneComponent already 
   assert.match(theme, /\$\('\.app-screenshots'\)\.not\('\.slick-initialized'\)\.slick\(/);
   assert.match(read('src/app/components/screenshots/screenshot-one/screenshot-one.component.ts'), /\.slick\(/);
 });
+
+// An invitation link's query carries its token (/invite?token=…), and every
+// such page renders through `ssr`, so the function logs a request's path only.
+test('the ssr function never logs a request URL with its query', () => {
+  const src = read('functions/src/index.ts');
+  const uses = [...src.matchAll(/(.{0,20})\boriginalUrl\b(?!:)/g)];
+  assert.ok(uses.length > 0, 'expected ssr to read request.originalUrl');
+  for (const m of uses) {
+    assert.match(m[1], /pathOnly\(request\.$/, `originalUrl used without pathOnly(): ${m[0].trim()}`);
+  }
+  assert.match(src, /const pathOnly = \(url: string\): string => url\.split\(\/\[\?#\]\/\)\[0\];/);
+});

@@ -31,11 +31,40 @@ const getMeetingsWithinDistance = (
   );
 };
 
+// Custom meetings are searchable from every house, so a result carries what a
+// directory meeting carries (mapDirectoryToRats), plus daysAndTimes, where a
+// custom meeting keeps its schedule: never who added it or which house owns it.
+// An allowlist, so a field added to meetings later stays out of results.
+const PUBLIC_MEETING_FIELDS = [
+  "id",
+  "name",
+  "time",
+  "day",
+  "daysAndTimes",
+  "type",
+  "street",
+  "city",
+  "state",
+  "zip",
+  "lat",
+  "lng",
+  "online",
+  "link",
+  "onlineNotes",
+  "dataAsOf",
+] as const;
+
+export const toPublicMeeting = (doc: Record<string, unknown>): RatsMeeting =>
+  Object.fromEntries(
+    PUBLIC_MEETING_FIELDS.filter((field) => doc[field] !== undefined).map(
+      (field) => [field, doc[field]],
+    ),
+  ) as unknown as RatsMeeting;
+
 export const filterCustomMeetings = (
   meetings: RatsMeeting[],
   criteria: MeetingSearchCriteria,
 ) => {
-  logger.info("Filtering custom meetings by critera", criteria);
   return meetings.filter((meeting) => {
     let meetingMeetsCriteria = true;
     if (criteriaExists(criteria.name)) {
@@ -79,7 +108,7 @@ export const getCustomMeetings = async (
   try {
     const start = Date.now();
     const meetingQuery = await getMeetings();
-    let meetings = meetingQuery.docs.map((doc) => doc.data() as RatsMeeting);
+    let meetings = meetingQuery.docs.map((doc) => toPublicMeeting(doc.data()));
     meetings = getMeetingsWithinDistance(location, meetings);
     if (criteria) {
       return filterCustomMeetings(meetings, criteria);
@@ -99,7 +128,7 @@ export const getCustomMeetings = async (
 export const geocodeNAMeeting = async (
   query: string,
 ): Promise<Location | undefined> => {
-  logger.info("Retrieving geocode for NA meeting", query);
+  logger.info("Retrieving geocode for NA meeting");
   const geocodeResponse = await partialGeocode(query);
   let location: Location | undefined;
   geocodeResponse.results.some((result) => {
@@ -110,5 +139,6 @@ export const geocodeNAMeeting = async (
     }
     return false;
   });
+  if (!location) logger.warn("NA meeting geocode failed");
   return location;
 };

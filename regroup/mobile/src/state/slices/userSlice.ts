@@ -278,9 +278,9 @@ const userSlice = createSlice({
         state.error = null;
       })
       .addCase(login.fulfilled, (state, action) => {
-        // A login to an existing account opens that account's start route
-        // (LoginForm), so an invitation left from before is stale.
-        state.invitation = null;
+        // An invitation that arrived signed out survives the login (launch
+        // spec §4.2, P5 Task 3): LoginForm then opens the invitation screen,
+        // where the user accepts it or continues to the app.
         state.loggingOutSuccessful = false;
         state.user = action.payload.user;
         state.setupRecoveryFailed = action.payload.setupRecoveryFailed;

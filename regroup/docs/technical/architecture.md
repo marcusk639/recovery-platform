@@ -249,11 +249,11 @@ TypeScript interfaces in `src/entities/` define Firestore document shapes. Key e
 
 ## 3. Backend: Firebase Cloud Functions
 
-Cloud Functions live in `regroup/functions/` in this monorepo (the old standalone `regroup-functions` repository is archived in `regroup/_legacy/regroup-functions/`). `src/index.ts` re-exports 62 deployed functions: callables, Firestore triggers, scheduled jobs, HTTP handlers and two Stripe webhooks. `regroup/FUNCTION_AUDIT.md` is the generated inventory (source file, path or schedule, bound secrets), and `regroup/scripts/deploy-batched.sh` `ALL_FUNCTIONS` lists the same names (a test keeps it equal to the exports). The web app's SSR function is a separate codebase; see §3.7.
+Cloud Functions live in `regroup/functions/` in this monorepo (the old standalone `regroup-functions` repository is archived in `regroup/_legacy/regroup-functions/`). `src/index.ts` re-exports 63 deployed functions: callables, Firestore triggers, scheduled jobs, HTTP handlers and two Stripe webhooks. `regroup/FUNCTION_AUDIT.md` is the generated inventory (source file, path or schedule, bound secrets), and `regroup/scripts/deploy-batched.sh` `ALL_FUNCTIONS` lists the same names (a test keeps it equal to the exports). The web app's SSR function is a separate codebase; see §3.7.
 
 ### 3.1 Callable Functions (httpsCallable)
 
-These are invoked from the mobile client (and the web operator portal) via `httpsCallable('functionName')(payload)`. Every callable rejects an unauthenticated caller except `getTierCatalog` (public pricing) and `peekInvitation` (the invitation token is the credential). Contracts for the billing and payment callables are in `regroup/functions/CLAUDE.md` ("Callable contracts").
+These are invoked from the mobile client (and the web operator portal) via `httpsCallable('functionName')(payload)`. Every callable rejects an unauthenticated caller except `getTierCatalog` (public pricing), `getAppConfig` (the minimum app version, read before sign-in) and `peekInvitation` (the invitation token is the credential). Contracts for the billing and payment callables are in `regroup/functions/CLAUDE.md` ("Callable contracts").
 
 #### Auth Functions (`src/callable/auth.ts`)
 
@@ -274,6 +274,7 @@ These are invoked from the mobile client (and the web operator portal) via `http
 | `createHouses`        | `callable/houses.ts`              | Creates the operator's houses in one transaction (house type from the plan, primary owner record, property cap, tombstone check)   |
 | `finishOperatorSetup` | `callable/finishOperatorSetup.ts` | Recovers a half-finished operator setup: re-grants missing house claims for houses with the caller's primary owner record (max 25) |
 | `myHouseTiers`        | `callable/myHouseTiers.ts`        | The caller's own tier per house, for the operator portal's display                                                                 |
+| `getAppConfig`        | `callable/getAppConfig.ts`        | **Unauthenticated.** `{ minVersion: { ios, android } }` from server-only `config/app` (cached 60 s); the app's minimum-version gate |
 | `createInvitation`    | `callable/invitations.ts`         | Issues a server-side invitation token (7-day expiry) and emails the link (SendGrid)                                                |
 | `peekInvitation`      | `callable/invitations.ts`         | **Unauthenticated.** Returns `houseId`, `role`, `invitedEmail`, `initialPhase` and `expiresAt` for a usable token                  |
 | `redeemInvitation`    | `callable/invitations.ts`         | Grants the invited role's claims and tier record once the gates pass                                                               |
@@ -334,6 +335,7 @@ These execute automatically when documents are created, updated, or deleted:
 | `onActivityWritten`                  | `/activities/{id}`                  | onWrite  | Recomputes week-summaries; stamps `residentUid`; dispute notifications, live dispute list, decision log and archive                 |
 | `sendContactEmail`                   | `/contact/{id}`                     | onCreate | Emails support team                                                                                                                 |
 | `sendSubscriptionUpdateEmail`        | `/users/{id}`                       | onUpdate | Emails on subscription status change                                                                                                |
+| `onUserAdminProfileSync`             | `/users/{id}`                       | onUpdate | Copies the user's current name and phone onto every `admins` record with that `userId` when they change                             |
 | `reportBug`                          | `/bugs/{id}`                        | onCreate | Emails dev team                                                                                                                     |
 | `submitFeedback`                     | `/feedback/{id}`                    | onCreate | Emails product team                                                                                                                 |
 

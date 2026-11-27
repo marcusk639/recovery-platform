@@ -395,6 +395,23 @@ close sales again, run the same with `--value=false`.
 4. **Review notes:** the demo operator account and what a reviewer should try.
 5. **Before release:** the owner's notice to existing operators (roadmap owner track, P10 step 10.1).
 
+### Part F — Minimum app version (spec §5 step 10.6)
+
+Only once the new version is downloadable in that store: set earlier, it blocks everyone on that
+platform from an app they can't get yet. Each platform has its own value (iOS `1.53` and Android
+`0.55` today; use the version you just released).
+
+```bash
+cd functions
+npm run switch:set -- --switch=minVersion --platform=ios --value=<new iOS version>            # dry run
+npm run switch:set -- --switch=minVersion --platform=ios --value=<new iOS version> --apply
+npm run switch:set -- --switch=minVersion --platform=android --value=<new Android version> --apply
+```
+
+**Expected result:** within a minute, an older build shows "Update required" with a store button, and
+the new build opens normally. To undo it, run the same with `--value=none` (or a lower version):
+blocked users get straight back in on their next launch or return to the app.
+
 ## Verification
 
 After C1–C8 and D:

@@ -24,6 +24,8 @@ export * from './callable/documentLinks';
 // Callable functions — public tier pricing catalog (no auth — see file
 // comment in getTierCatalog.ts for why this callable is deliberately public)
 export * from './callable/getTierCatalog';
+// Public app config: the minimum-version gate (no auth, like getTierCatalog).
+export * from './callable/getAppConfig';
 // The caller's own tier per house, for the operator portal.
 export * from './callable/myHouseTiers';
 

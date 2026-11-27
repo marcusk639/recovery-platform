@@ -14,6 +14,7 @@ import { normalize } from "../../styles/theme";
 import { RatsLogo } from "../../components/rats-logo";
 import { getInitialLink, onLink } from "../../services/native-deep-links";
 import { parseAppLink } from "../../services/appLinks/parseAppLink";
+import { reportBrokenInvitationLink } from "../../services/appLinks/brokenInvitation";
 import { refreshPlanState } from "../../services/planState";
 import { queryClient } from "../../state/queryClient";
 import {
@@ -154,6 +155,8 @@ export const withSplash = <P extends object>(
           dispatch: latest.current.dispatch,
           onCheckoutReturn: () => refreshPlanState(queryClient, latest.current.userState.user),
         });
+      } else {
+        reportBrokenInvitationLink(link.url);
       }
       return appLink;
     }, []);
