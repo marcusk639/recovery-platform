@@ -15,7 +15,18 @@ import {
   assertFails,
   RulesTestEnvironment,
 } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, deleteField } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+  deleteField,
+  collectionGroup,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -383,6 +394,12 @@ describe("houses/{houseId}/applications/{appId}", () => {
   });
 
   describe("create", () => {
+    // Owner decision 2026-11-27 (Q3): one application per applicant per house,
+    // under the id `${houseId}_${uid}`. Creates go to that id.
+    const MY_APP_ID = `${HOUSE_ID}_${APPLICANT_UID}`;
+    const appDoc = (ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>) =>
+      doc(ctx.firestore(), `houses/${HOUSE_ID}/applications/${MY_APP_ID}`);
+
     it("allows an authenticated user to create their own application", async () => {
       const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
       await assertSucceeds(
@@ -425,7 +442,7 @@ describe("houses/{houseId}/applications/{appId}", () => {
     // app's anonymous session, so the create is pinned to what
     // submitApplication writes.
     const submitted = (uid: string, extra: Record<string, unknown> = {}) => ({
-      id: APP_ID,
+      id: MY_APP_ID,
       houseId: HOUSE_ID,
       applicantUid: uid,
       applicantName: "Pat Lee",
@@ -472,8 +489,11 @@ describe("houses/{houseId}/applications/{appId}", () => {
       const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
       await assertFails(
         setDoc(
-          doc(ctx.firestore(), `houses/no-such-house/applications/${APP_ID}`),
-          submitted(APPLICANT_UID, { houseId: "no-such-house" }),
+          doc(ctx.firestore(), `houses/no-such-house/applications/no-such-house_${APPLICANT_UID}`),
+          submitted(APPLICANT_UID, {
+            houseId: "no-such-house",
+            id: `no-such-house_${APPLICANT_UID}`,
+          }),
         ),
       );
     });
@@ -488,6 +508,33 @@ describe("houses/{houseId}/applications/{appId}", () => {
       );
       await assertSucceeds(
         setDoc(appDoc(ctx), submitted(APPLICANT_UID, { currentSituation: "x".repeat(2000) })),
+      );
+    });
+
+    it("denies a create under any id but `${houseId}_${uid}`", async () => {
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
+      const at = (id: string) => doc(ctx.firestore(), `houses/${HOUSE_ID}/applications/${id}`);
+      await assertFails(setDoc(at(APP_ID), submitted(APPLICANT_UID, { id: APP_ID })));
+      await assertFails(
+        setDoc(
+          at(`${HOUSE_ID}_${OTHER_UID}`),
+          submitted(APPLICANT_UID, { id: `${HOUSE_ID}_${OTHER_UID}` }),
+        ),
+      );
+    });
+
+    it("denies a second application to the same house", async () => {
+      await testEnv.withSecurityRulesDisabled(async (admin) => {
+        await setDoc(
+          doc(admin.firestore(), `houses/${HOUSE_ID}/applications/${MY_APP_ID}`),
+          submitted(APPLICANT_UID),
+        );
+      });
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
+      // A write to the existing id is an update, which only house admins may make.
+      await assertFails(setDoc(appDoc(ctx), submitted(APPLICANT_UID)));
+      await assertFails(
+        setDoc(appDoc(ctx), { currentSituation: "again" }, { merge: true }),
       );
     });
 
@@ -533,6 +580,65 @@ describe("houses/{houseId}/applications/{appId}", () => {
     it("denies other authenticated users from reading applications", async () => {
       const ctx = testEnv.authenticatedContext(OTHER_UID, {});
       await assertFails(getDoc(appDoc(ctx)));
+    });
+  });
+
+  // Owner decision 2026-11-27 (Q2): an applicant finds their applications
+  // again (the landing screen's "Check my application") with a
+  // collection-group query on applicantUid, and only their own.
+  describe("collection-group read (an applicant's own, across houses)", () => {
+    beforeEach(async () => {
+      await testEnv.withSecurityRulesDisabled(async (ctx) => {
+        for (const [houseId, uid] of [
+          [HOUSE_ID, APPLICANT_UID],
+          [HOUSE_ID_OTHER, APPLICANT_UID],
+          [HOUSE_ID, OTHER_UID],
+        ]) {
+          await setDoc(doc(ctx.firestore(), `houses/${houseId}/applications/${houseId}_${uid}`), {
+            id: `${houseId}_${uid}`,
+            houseId,
+            applicantUid: uid,
+            status: "pending",
+          });
+        }
+      });
+    });
+
+    const mine = (ctx: ReturnType<RulesTestEnvironment["authenticatedContext"]>, uid: string) =>
+      getDocs(
+        query(collectionGroup(ctx.firestore(), "applications"), where("applicantUid", "==", uid)),
+      );
+
+    it("lets an applicant list their own applications in every house", async () => {
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {
+        firebase: { sign_in_provider: "anonymous" },
+      });
+      const snap = await assertSucceeds(mine(ctx, APPLICANT_UID));
+      expect(snap.docs.map((d) => d.id).sort()).toEqual(
+        [`${HOUSE_ID}_${APPLICANT_UID}`, `${HOUSE_ID_OTHER}_${APPLICANT_UID}`].sort(),
+      );
+    });
+
+    it("denies listing another user's applications", async () => {
+      const ctx = testEnv.authenticatedContext(OTHER_UID, {});
+      await assertFails(mine(ctx, APPLICANT_UID));
+    });
+
+    it("denies staff of another house listing an applicant's applications", async () => {
+      const ctx = testEnv.authenticatedContext(ADMIN_UID, {
+        admin: { [HOUSE_ID_OTHER]: true },
+      });
+      await assertFails(mine(ctx, APPLICANT_UID));
+    });
+
+    it("denies a collection-group read without the applicant filter", async () => {
+      const ctx = testEnv.authenticatedContext(APPLICANT_UID, {});
+      await assertFails(getDocs(collectionGroup(ctx.firestore(), "applications")));
+    });
+
+    it("denies a signed-out read", async () => {
+      const ctx = testEnv.unauthenticatedContext();
+      await assertFails(mine(ctx as any, APPLICANT_UID));
     });
   });
 

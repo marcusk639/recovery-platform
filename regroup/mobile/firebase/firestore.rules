@@ -503,6 +503,14 @@ service cloud.firestore {
       allow read, update, delete: if isSameUser(resource.data.reporter);
     }
     
+    // An applicant's own applications, across houses: the landing screen's
+    // "Check my application" (owner, 2026-11-27). Only a query filtered on the
+    // caller's own applicantUid passes; staff list a house's applications
+    // through the houses/{houseId}/applications rule below.
+    match /{path=**}/applications/{appId} {
+      allow read: if signedIn() && resource.data.applicantUid == request.auth.uid;
+    }
+
     match /houses/{houseId} {
       allow read: if isGuestOrAdmin([houseId]);
       // Houses are created only by the server-side createHouses callable.
@@ -662,7 +670,11 @@ service cloud.firestore {
       }
 
       match /applications/{appId} {
+        // One application per applicant per house (owner, 2026-11-27): the id
+        // is `${houseId}_${uid}`, so a second create is an update, which only
+        // house admins may make.
         allow create: if signedIn()
+          && appId == houseId + '_' + request.auth.uid
           && exists(/databases/$(database)/documents/houses/$(houseId))
           && request.resource.data.applicantUid == request.auth.uid
           && request.resource.data.keys().hasOnly([
