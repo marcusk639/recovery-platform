@@ -25,6 +25,8 @@ npm run deploy:batched -- --project <id>   # Batched fallback for deploy quotas 
 
 **Migration scripts** (each runs `npm run build` first; dry-run is the default, `--apply` writes for the cents migrations):
 
+Scripts that import `scripts/scriptBootstrap.ts` (every `backfill:*`, `migrate:*` except `migrate:dry-run`/`migrate:run`, `rent:reverse:*`, `report:ghost-guests`, `roles:promote-manager`, `switch:set`) get their target from it (`scripts/scriptTarget.ts`): production `phoenix-cleanhouse` by default, the emulator with `FIRESTORE_EMULATOR_HOST`, or staging with `REGROUP_SCRIPT_TARGET=regroup-e2e`. Refused before anything initializes: any other or empty value, a near-miss name (`REGROUP_SCRIPTS_TARGET`, `SCRIPT_TARGET`, …), the variable with an emulator host, and in production a `GOOGLE_APPLICATION_CREDENTIALS` service account for another project. Staging never reads `service-key.json`; its credential (`GOOGLE_APPLICATION_CREDENTIALS`, else gcloud's application-default file) must be gcloud user credentials or a `regroup-e2e` service account, and the log names it. Use `$HOME`, not `~`, in the path: `REGROUP_SCRIPT_TARGET=regroup-e2e GOOGLE_APPLICATION_CREDENTIALS=$HOME/.config/regroup-e2e/service-account.json npm run backfill:house-listings:dry-run`. `migrate:dry-run`/`migrate:run` (`migrateGuestWeeks.ts`) don't use the bootstrap and fail to start without an initialized app; `legacy:cancel`, `stripe:verify-live` and `env:write` act on the Stripe key or `--project` they are given and ignore `REGROUP_SCRIPT_TARGET`.
+
 ```bash
 npm run migrate:dry-run         # Dry-run guest weeks migration
 npm run migrate:run             # Apply guest weeks migration
