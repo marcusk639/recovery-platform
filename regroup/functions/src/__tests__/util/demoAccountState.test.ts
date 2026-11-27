@@ -44,11 +44,26 @@ describe('markDemoAccount', () => {
     await markDemoAccount(db, auth, { apply: true });
     expect(state.user!.customClaims).toEqual({ admin: { h1: true }, demo: true });
     expect(docs['claims-updates/demo1']).toBeDefined();
+    // No password baseline: the first restore resets the password and takes it.
     expect(docs['config/demoAccount']).toEqual({
       uid: 'demo1',
-      tokensValidAfter: 't0',
+      tokensValidAfter: null,
       claims: { admin: { h1: true }, demo: true },
     });
+  });
+
+  it('a password changed before the mark is reset by the first restore, then left alone', async () => {
+    // Its password has been public and unguarded: it may have been changed already.
+    const { auth } = fakeAuth({ ...DEMO, tokensValidAfterTime: 'changed-before-mark' });
+    const { db } = fakeDb();
+    await markDemoAccount(db, auth, { apply: true });
+    await expect(restoreDemoAccount(db, auth)).resolves.toMatchObject({
+      outcome: 'restored',
+      passwordChanged: true,
+    });
+    expect(auth.updateUser).toHaveBeenCalledWith('demo1', SIGN_IN);
+    expect(auth.revokeRefreshTokens).toHaveBeenCalledWith('demo1');
+    await expect(restoreDemoAccount(db, auth)).resolves.toMatchObject({ outcome: 'intact' });
   });
 
   it('finds an account whose email was already changed by --uid', async () => {
@@ -61,6 +76,42 @@ describe('markDemoAccount', () => {
       outcome: 'marked',
       uid: 'demo1',
     });
+  });
+
+  it('surfaces a lookup failure other than a missing account instead of calling it missing', async () => {
+    const { auth } = fakeAuth(DEMO);
+    const denied = Object.assign(new Error('no credentials'), { code: 'app/invalid-credential' });
+    (auth.getUserByEmail as jest.Mock).mockRejectedValueOnce(denied);
+    const { db, docs } = fakeDb();
+    await expect(markDemoAccount(db, auth, { apply: true })).rejects.toBe(denied);
+    expect(docs).toEqual({});
+  });
+
+  it('refuses to re-point an already marked project at another account found by the email', async () => {
+    // The documented re-run after the functions deploy: if the demo email has
+    // moved to another account by then, the email finds that account.
+    const { auth } = fakeAuth({ ...DEMO, uid: 'other1' });
+    const seed = { 'config/demoAccount': { uid: 'demo1', tokensValidAfter: 't0', claims: {} } };
+    const { db, docs } = fakeDb(seed);
+    for (const apply of [false, true]) {
+      await expect(markDemoAccount(db, auth, { apply })).resolves.toMatchObject({
+        outcome: 'refused',
+      });
+    }
+    expect(auth.setCustomUserClaims).not.toHaveBeenCalled();
+    expect(docs).toEqual(seed);
+  });
+
+  it('re-marks the recorded account by the email (the idempotent re-run), or another one by --uid', async () => {
+    const seed = { 'config/demoAccount': { uid: 'demo1', tokensValidAfter: 't0', claims: {} } };
+    const same = fakeAuth({ ...DEMO, customClaims: { demo: true } });
+    await expect(
+      markDemoAccount(fakeDb(seed).db, same.auth, { apply: true }),
+    ).resolves.toMatchObject({ outcome: 'marked', uid: 'demo1' });
+    const other = fakeAuth({ ...DEMO, uid: 'other1' });
+    await expect(
+      markDemoAccount(fakeDb(seed).db, other.auth, { uid: 'other1', apply: true }),
+    ).resolves.toMatchObject({ outcome: 'marked', uid: 'other1' });
   });
 });
 
@@ -160,6 +211,26 @@ describe('restoreDemoAccount', () => {
     expect(auth.updateUser).toHaveBeenCalledWith('demo1', {
       ...SIGN_IN,
       providersToUnlink: ['google.com', 'apple.com'],
+    });
+    expect(state.user!.providerData).toEqual([{ providerId: 'password' }]);
+    expect(auth.revokeRefreshTokens).toHaveBeenCalledWith('demo1');
+  });
+
+  it('puts back an unlinked password provider (App Review signs in with the password)', async () => {
+    const { auth, state } = fakeAuth({
+      ...DEMO,
+      providerData: [{ providerId: 'google.com' }],
+      customClaims: { demo: true },
+    });
+    const { db } = configured();
+    await expect(restoreDemoAccount(db, auth)).resolves.toMatchObject({
+      outcome: 'restored',
+      passwordMissing: true,
+      providersUnlinked: ['google.com'],
+    });
+    expect(auth.updateUser).toHaveBeenCalledWith('demo1', {
+      ...SIGN_IN,
+      providersToUnlink: ['google.com'],
     });
     expect(state.user!.providerData).toEqual([{ providerId: 'password' }]);
     expect(auth.revokeRefreshTokens).toHaveBeenCalledWith('demo1');
