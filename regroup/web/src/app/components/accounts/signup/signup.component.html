@@ -16,7 +16,7 @@
           <div [ngClass]="{ dummy: !fromApp }"></div>
 
           <!-- Step 0a: resolving the tier from the query string against the live catalog -->
-          <div *ngIf="resolvingTier && !signUpStarted" class="col-12 col-md-8 col-lg-5">
+          <div *ngIf="(resolvingTier || (checkingAccount && !salesClosed)) && !signUpStarted" class="col-12 col-md-8 col-lg-5">
             <div class="contact-box bg-white text-center rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
               <span><i [class]="'fas fa-spinner fa-3x fa-spin'"></i></span>
             </div>
@@ -32,7 +32,27 @@
           </div>
 
           <!-- Step 0b: capacity-first plan picker (shown when the URL has no valid tier) -->
-          <div *ngIf="!resolvingTier && pickerVisible && !salesClosed && !signUpStarted" class="col-12 col-md-8 col-lg-5">
+          <!-- Step 0d: signed in to an account that can't start a plan here (mirrors the server's refusals) -->
+          <div *ngIf="!resolvingTier && !checkingAccount && !salesClosed && accountNotice && !signUpStarted"
+            class="col-12 col-md-8 col-lg-5">
+            <div class="contact-box bg-white text-center rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg"
+              data-testid="account-notice">
+              <h5 *ngIf="accountNotice === 'plan-exists'" class="text-secondary fw-3 py-3">You already have a plan.
+                Manage it from your account page.</h5>
+              <h5 *ngIf="accountNotice === 'plan-ended'" class="text-secondary fw-3 py-3">Your plan ended. Reactivate
+                it from your account page.</h5>
+              <h5 *ngIf="accountNotice === 'not-operator-account'" class="text-secondary fw-3 py-3">This account
+                belongs to a resident or house staff member, so it can't hold an operator plan. To run your own house,
+                sign out and sign up with a different email address.</h5>
+              <a *ngIf="accountNotice !== 'not-operator-account'" class="btn btn-bordered w-100 mt-3"
+                data-testid="go-to-account" [routerLink]="['/my-account']" [queryParams]="accountQueryParams">Go to
+                your account</a>
+              <button type="button" class="btn btn-link mt-2" data-testid="sign-out" (click)="signOut()">Sign
+                out</button>
+            </div>
+          </div>
+
+          <div *ngIf="!resolvingTier && !checkingAccount && !accountNotice && pickerVisible && !salesClosed && !signUpStarted" class="col-12 col-md-8 col-lg-5">
             <div class="contact-box bg-white text-left rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
               <div *ngIf="catalogError" class="text-danger">
                 We couldn't load current pricing. Please refresh the page or
@@ -43,7 +63,7 @@
           </div>
 
           <!-- Step 1: account details -->
-          <div *ngIf="!resolvingTier && !pickerVisible && !salesClosed && !signUpStarted" class="col-12 col-md-8 col-lg-5">
+          <div *ngIf="!resolvingTier && !checkingAccount && !account && !pickerVisible && !salesClosed && !signUpStarted" class="col-12 col-md-8 col-lg-5">
             <!-- Contact Box -->
             <div class="contact-box bg-white text-center rounded p-4 p-sm-5 mt-5 mt-lg-0 shadow-lg">
               <order-summary [tier]="selectedTier" [billingInterval]="billingInterval" [trialDays]="trialDays"></order-summary>
@@ -103,11 +123,13 @@
                   <h3 class="contact-title">Processing...</h3>
                   <h5 class="text-secondary fw-3 py-3">Please wait while we set up your account...</h5>
                 </div>
+                <p *ngIf="account && !loading" class="text-secondary" data-testid="signed-in-as">Signed in as
+                  {{ account.email }}. Not you? <a href="" (click)="$event.preventDefault(); signOut()">Sign out</a></p>
                 <order-summary [tier]="selectedTier" [billingInterval]="billingInterval" [trialDays]="trialDays"></order-summary>
                 <billing-info [initialSubscription]="true" [loading]="loading" [setLoading]="setLoading"
                   [setBillingCompleted]="setBillingCompleted" [user]="user"
                   [houseType]="selectedTier?.houseType" [tier]="selectedTier?.tier"
-                  [billingInterval]="billingInterval">
+                  [billingInterval]="billingInterval" [existingAccount]="!!account" [fromApp]="fromApp">
                 </billing-info>
                 <div *ngIf="loading">
                   <span><i [class]="'fas fa-spinner fa-3x fa-spin'"></i></span>

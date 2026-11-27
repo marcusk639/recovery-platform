@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { AngularFirestore } from '@angular/fire/firestore';
 import { AngularFireAuth } from '@angular/fire/auth';
 import { User, createSuperAdmin } from 'src/app/entities/User';
+import OperatorSubscription from 'src/app/entities/OperatorSubscription';
 import BaseFirestoreService from '../base-service';
 import _ from 'lodash';
 import {
@@ -265,6 +266,13 @@ export class AuthService extends BaseFirestoreService<User> {
       id: authUser.uid,
       uid: authUser.uid,
       email: (stored && stored.email) || authUser.email,
+      // The callable's schema needs a status string; an older doc may lack one.
+      // The server reads the stored record, not this, to decide.
+      subscriptionMetadata: {
+        ...new OperatorSubscription(),
+        ...((stored && stored.subscriptionMetadata) || {}),
+        status: (stored && stored.subscriptionMetadata && stored.subscriptionMetadata.status) || '',
+      },
     } as User;
   }
 
