@@ -614,7 +614,7 @@ describe("houses/{houseId}/applications/{appId}", () => {
         firebase: { sign_in_provider: "anonymous" },
       });
       const snap = await assertSucceeds(mine(ctx, APPLICANT_UID));
-      expect(snap.docs.map((d) => d.id).sort()).toEqual(
+      expect(snap.docs.map((d: { id: string }) => d.id).sort()).toEqual(
         [`${HOUSE_ID}_${APPLICANT_UID}`, `${HOUSE_ID_OTHER}_${APPLICANT_UID}`].sort(),
       );
     });
