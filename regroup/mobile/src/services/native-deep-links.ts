@@ -5,16 +5,12 @@ import { claimsInvitation, parseAppLink } from './appLinks/parseAppLink';
 import { invitationFromAppLink } from './appLinks/invitationFromAppLink';
 
 const customScheme = 'regroup-app://';
-const iosPackageName = 'com.rats.dev';
 
 export type LinkType = 'invitation' | 'checkout-return'; // emailConfirmation removed
 
 export interface NativeDeepLink {
   url: string;
 }
-
-const APP_SCHEME_PREFIXES = [customScheme, `${iosPackageName}://`];
-const REDIRECT_PAGE = /^https:\/\/regroup-app\.com\/redirect\/?(\?|#|$)/i;
 
 const decodeParam = (raw: string): string => {
   try {
@@ -41,19 +37,6 @@ export const parseLinkQuery = (url: string): Record<string, string> => {
     query[key] = eq === -1 ? '' : decodeParam(pair.slice(eq + 1));
   }
   return query;
-};
-
-/**
- * The invitation email links to https://regroup-app.com/redirect?url=<app link>.
- * Where that https link opens the app directly (iOS associated domains,
- * Android App Links), the app receives the wrapper, so unwrap it, one level,
- * and only to an app-scheme link.
- */
-export const resolveDeepLinkUrl = (url: string): string => {
-  if (!REDIRECT_PAGE.test(url)) return url;
-  const inner = parseLinkQuery(url).url;
-  const isAppLink = !!inner && APP_SCHEME_PREFIXES.some((p) => inner.toLowerCase().startsWith(p));
-  return isAppLink ? inner : url;
 };
 
 /**
@@ -91,7 +74,7 @@ export const getInitialLink = async (): Promise<NativeDeepLink | null> => {
 
     if (initialUrl) {
       if (reachesApp(initialUrl)) {
-        return { url: resolveDeepLinkUrl(initialUrl) };
+        return { url: initialUrl };
       }
     }
 
@@ -108,7 +91,7 @@ export const getInitialLink = async (): Promise<NativeDeepLink | null> => {
 export const onLink = (listener: (link: NativeDeepLink) => void): (() => void) => {
   const handleUrl = (event: { url: string }) => {
     if (reachesApp(event.url)) {
-      listener({ url: resolveDeepLinkUrl(event.url) });
+      listener({ url: event.url });
     }
   };
 
@@ -124,7 +107,7 @@ export const onLink = (listener: (link: NativeDeepLink) => void): (() => void) =
  * Throws when the link is not an invitation parseAppLink accepts.
  */
 export const createInvitationFromLink = (link: NativeDeepLink): Invitation => {
-  const parsed = parseAppLink(resolveDeepLinkUrl(link.url));
+  const parsed = parseAppLink(link.url);
   if (parsed?.kind === 'invitation' || parsed?.kind === 'invitation-legacy') {
     return invitationFromAppLink(parsed);
   }
@@ -137,7 +120,7 @@ export const createInvitationFromLink = (link: NativeDeepLink): Invitation => {
  * parseAppLink, so `type` is read wherever it sits in the query).
  */
 export const getLinkType = (link: NativeDeepLink): LinkType | null => {
-  const url = resolveDeepLinkUrl(link.url);
+  const url = link.url;
   const parsed = parseAppLink(url);
   if (parsed) return parsed.kind === 'checkout-return' ? 'checkout-return' : 'invitation';
   // An invitation whose params parseAppLink refuses is still an invitation, so
@@ -150,11 +133,11 @@ export const getLinkType = (link: NativeDeepLink): LinkType | null => {
  * which Splash reports as broken instead of opening the app silently.
  */
 const reachesApp = (urlString: string): boolean =>
-  isValidDeepLink(urlString) || claimsInvitation(resolveDeepLinkUrl(urlString));
+  isValidDeepLink(urlString) || claimsInvitation(urlString);
 
 /**
  * Checks if a URL is a link this app handles outside navigation (an
  * invitation or a checkout hand-back), on an accepted scheme or web origin.
  */
 export const isValidDeepLink = (urlString: string): boolean =>
-  parseAppLink(resolveDeepLinkUrl(urlString)) !== null;
+  parseAppLink(urlString) !== null;

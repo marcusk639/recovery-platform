@@ -10,9 +10,12 @@ jest.mock('../../../firebase-setup', () => {
   const mockGet = jest.fn();
   const mockOrderBy = jest.fn(() => ({ get: mockGet }));
   const mockWhere = jest.fn(() => ({ orderBy: mockOrderBy, get: mockGet }));
+  // submitApplication first checks the applicant hasn't applied already.
+  const mockAppDocGet = jest.fn().mockResolvedValue({ exists: () => false, data: () => undefined });
   const mockAppDoc = jest.fn(() => ({
     set: mockSet,
     update: mockUpdate,
+    get: mockAppDocGet,
     id: 'generated-app-id',
   }));
   const mockAppCollection = jest.fn(() => ({
@@ -91,9 +94,10 @@ describe('applications service', () => {
       expect(new Date(written.createdAt).toISOString()).toBe(written.createdAt);
     });
 
-    it('returns the generated application id', async () => {
+    // One application per applicant per house (owner, 2026-11-27).
+    it('returns the application id, `${houseId}_${uid}`', async () => {
       const id = await submitApplication('house-1', baseData);
-      expect(id).toBe('generated-app-id');
+      expect(id).toBe('house-1_applicant-uid-1');
     });
 
     it('throws if user is not authenticated', async () => {

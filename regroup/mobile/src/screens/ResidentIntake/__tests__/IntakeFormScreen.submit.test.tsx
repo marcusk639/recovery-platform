@@ -2,6 +2,7 @@
 import React from 'react';
 import { Alert } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import IntakeFormScreen from '../IntakeFormScreen';
 
 jest.mock('@react-navigation/native', () => ({
@@ -26,7 +27,12 @@ jest.mock('../../../state/queries/guestQueries', () => ({
 }));
 
 const toLastStep = () => {
-  const utils = render(<IntakeFormScreen />);
+  // The screen reads the application it was opened from (P5 Task 16).
+  const utils = render(
+    <QueryClientProvider client={new QueryClient()}>
+      <IntakeFormScreen />
+    </QueryClientProvider>,
+  );
   fireEvent.changeText(utils.getByPlaceholderText('First Name'), 'John');
   fireEvent.changeText(utils.getByPlaceholderText('Last Name'), 'Doe');
   fireEvent.changeText(utils.getByPlaceholderText('Email'), 'john@test.com');

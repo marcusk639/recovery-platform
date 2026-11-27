@@ -4,6 +4,7 @@ The most critical features are the ones that (1) reduce operator admin load and 
 
 - **Resident profiles**: Intake info, emergency contacts, admit/discharge dates, legal status, meds, privileges, and documents, all in one place.[2][3][1]
 - **Property/bed management**: Houses, rooms, beds, occupancy status, waitlist, and simple admissions workflow so you always know who is where and what’s available.[3][4][5]
+- **Applications → intake** (as built, P5 Task 16, owner decision D1 = option (a), 2026-11-25): a prospective resident finds a house (house search → house summary), taps APPLY and fills a three-step application on the app's anonymous session, with no account. The status screen shows that application on that device (read by its id), and the landing screen's "Check my application" leads back to it later on the same device (owner, 2026-11-27). One application per applicant per house: its id is `${houseId}_${uid}`, and a second APPLY shows the first one's status. The operator reviews it under Applications; Approve opens resident intake pre-filled with the applicant's name, email, phone and sobriety date. The resident then joins through the normal invitation; the application stays linked to the house, not to a login. Not built: rate limiting or spam control for anonymous applications beyond one per house; a way back from another device (the application belongs to this device's anonymous session). Blocked until signed-out house search can read houses (coverage matrix EMU-009): today the rules let only a house's members read it, so a signed-out visitor finds no house to apply to.
 - **Rules, phases, and privileges**: Configurable house rules, levels/phases, curfew, passes/overnights, and privileges tied to compliance and behavior.[2][3]
 
 These give operators a clear operational backbone and reduce spreadsheet/whiteboard chaos.[4][5]
@@ -54,4 +55,5 @@ Nice‑to‑have resident‑facing extras (mood logs, goals, journaling, self‑
 [20](https://www.reddit.com/r/software/comments/1dolatj/need_simple_database_software_for_a_small/)
 
 ---
-*Last reviewed: 2026-05-24 | Audience: developer | Type: reference*
+
+_Last reviewed: 2026-05-24 | Audience: developer | Type: reference_

@@ -62,6 +62,13 @@ describe('allowedReturnOrigins', () => {
       expect(safeReturnUrlSchema.safeParse('http://localhost:4200/x').success).toBe(true);
     });
 
+    // Launch P5 Task 11: my-account opened from the app sends this return URL.
+    it('accepts the my-account return URL with from=app', () => {
+      delete process.env.ALLOWED_RETURN_ORIGINS;
+      expect(safeReturnUrlSchema.safeParse('https://regroup-app.com/my-account?from=app').success).toBe(true);
+      expect(safeReturnUrlSchema.safeParse('https://evil.example/my-account?from=app').success).toBe(false);
+    });
+
     it('honours the configured list at parse time and still rejects evil', () => {
       process.env.ALLOWED_RETURN_ORIGINS = 'https://regroup-e2e.web.app';
       expect(safeReturnUrlSchema.safeParse('https://regroup-e2e.web.app/r').success).toBe(true);

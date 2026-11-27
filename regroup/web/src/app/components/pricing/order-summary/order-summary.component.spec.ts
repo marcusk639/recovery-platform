@@ -58,8 +58,39 @@ describe('OrderSummaryComponent', () => {
 
   it('computes the first charge date as today plus the trial length', () => {
     component.tier = tier;
+    component.trialDays = 5;
     const expected = new Date();
-    expected.setDate(expected.getDate() + component.trialDays);
+    expected.setDate(expected.getDate() + 5);
     expect(component.firstChargeDate.toDateString()).toBe(expected.toDateString());
+  });
+
+  // Launch P5 Task 12 (M12): the trial length is the catalog's, never the page's.
+  describe('trial terms', () => {
+    const text = (): string =>
+      ((fixture.nativeElement as HTMLElement).textContent || '').replace(/\s+/g, ' ');
+
+    it("renders the catalog's trialDays: a fixture with 5 shows a 5-day free trial", () => {
+      component.tier = tier;
+      component.trialDays = 5;
+      fixture.detectChanges();
+      expect(text()).toContain('5-day free trial.');
+      expect(text()).not.toContain('7-day');
+    });
+
+    it('shows no trial line and no day count when the catalog gave no trial length', () => {
+      component.tier = tier;
+      component.trialDays = null;
+      fixture.detectChanges();
+      expect(text()).toContain('$69 / mo');
+      expect(text()).not.toMatch(/\d+-day/);
+      expect(text()).not.toContain('free trial');
+    });
+
+    it('shows no trial line for a zero-day trial', () => {
+      component.tier = tier;
+      component.trialDays = 0;
+      fixture.detectChanges();
+      expect(text()).not.toContain('free trial');
+    });
   });
 });

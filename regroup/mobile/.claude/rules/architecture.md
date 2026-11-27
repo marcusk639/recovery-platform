@@ -82,7 +82,7 @@ Key modal routes: OxfordDashboard, OfficerManagement, EESTracker, BusinessMeetin
 | `EnhancedAuthService.ts`        | Sign in/up with rate limiting + validation                |
 | `feedback.ts`                   | User feedback submissions                                 |
 | `guest.tsx`                     | CRUD with optimistic locking, transactions, stat merging  |
-| `guestImport.ts`                | Bulk guest import from CSV/data                           |
+| `guestImport.ts`                | Bulk guest import from CSV: owners and managers only; at most 500 rows, each checked by `guestImportRules.ts` (skipped rows are reported with a reason); a retry skips emails already on the house |
 | `house.tsx`                     | CRUD, nearby search, admin management, batch create       |
 | `invitations.ts`                | Invitation callables: create, peek, redeem                 |
 | `issues.ts`                     | House maintenance issue CRUD                              |
@@ -141,6 +141,8 @@ The gate is `SubscriptionGate` (`src/components/subscription/SubscriptionGate.ts
 - **potentialSuperAdmin / setup-incomplete users:** not gated (routed to SetupStack before gate runs)
 
 A resident's document access (owner decision 2026-11-26): their own documents only, read-only, from GuestHome's **My Documents** card (`my-documents-card`) in an active house or from `ResidentLimitedView` in a blocked one; staff keep the **Documents** card. The rules read the ID token's guest claim, so a resident who moved out still sees their own document list (names only) for up to an hour, until the token refreshes; accepted for launch. `getDocumentLink` reads live claims, so the files don't open.
+
+Plans are bought and managed only on the web, in the system browser: every entry point (`SubscriptionRequiredScreen`, `PlanRequiredPanel`, the Oxford upgrade, operator sign-up and `SubscriptionHandler`) calls `openWebBilling('pricing' | 'my-account')` (`src/services/webBilling.ts`), which opens `<webBaseUrl()>/<page>?from=app`. No screen loads billing in a WebView or collects card details (launch design A6, App Store 3.1.1). Neither page may be claimed by `regroup/app-links.json`; `webBilling.test.ts` pins that. The Oxford upgrade card's price, trial length and button come from the public `getTierCatalog` callable (`src/services/tierCatalog.ts`, `useTierCatalog` in `state/queries/tierCatalogQueries.ts`), never from numbers in the screen: with the catalog null, sales closed or no trial it shows "See plans" and no trial.
 
 Oxford features are additionally gated by `houseOxfordActive()` in Firestore rules (requires `oxfordEnabled == true` AND `subscriptionStatus ∈ {active, trialing}`).
 

@@ -109,6 +109,7 @@ const BusinessMeetingDetail: React.FC<Props> = ({ navigation, route }) => {
   return (
     <RatsScrollView
       {...IQ_SCROLL_VIEW_PROPS}
+      testID="business-meeting-detail-screen"
       style={{ flex: 1, backgroundColor: color.light_grey }}
       contentContainerStyle={{}}>
       <ScreenHeader renderBackButton header="Business Meeting" />
@@ -149,60 +150,62 @@ const BusinessMeetingDetail: React.FC<Props> = ({ navigation, route }) => {
         </View>
 
         {/* Attendance */}
-        <RatsText
-          translate={false}
-          text="Attendance"
-          style={{
-            fontSize: fontSize.medium,
-            color: color.black,
-            marginBottom: normalize(8),
-          }}
-        />
-        {guestList.map(g => {
-          const present = attendees.includes(g.id);
-          const name =
-            `${g.firstName || ''} ${g.lastName || ''}`.trim() || 'Resident';
-          return (
-            <TouchableOpacity
-              key={g.id}
-              testID={`attendance-toggle-${g.id}`}
-              onPress={() => toggleAttendance(g.id)}
-              style={[
-                CARD_STYLE,
-                {
-                  backgroundColor: color.white,
-                  marginBottom: normalize(6),
-                  padding: normalize(12),
-                  flexDirection: 'row',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                },
-              ]}>
-              <RatsText
-                translate={false}
-                text={name}
-                style={{ fontSize: fontSize.regular, color: color.black }}
-              />
-              <View
-                style={{
-                  backgroundColor: present ? color.green : color.light_grey,
-                  width: normalize(24),
-                  height: normalize(24),
-                  borderRadius: normalize(12),
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}>
-                {present && (
-                  <RatsText
-                    translate={false}
-                    text="✓"
-                    style={{ color: color.white, fontSize: fontSize.small }}
-                  />
-                )}
-              </View>
-            </TouchableOpacity>
-          );
-        })}
+        <View testID="meeting-attendance-section">
+          <RatsText
+            translate={false}
+            text="Attendance"
+            style={{
+              fontSize: fontSize.medium,
+              color: color.black,
+              marginBottom: normalize(8),
+            }}
+          />
+          {guestList.map(g => {
+            const present = attendees.includes(g.id);
+            const name =
+              `${g.firstName || ''} ${g.lastName || ''}`.trim() || 'Resident';
+            return (
+              <TouchableOpacity
+                key={g.id}
+                testID={`attendance-toggle-${g.id}`}
+                onPress={() => toggleAttendance(g.id)}
+                style={[
+                  CARD_STYLE,
+                  {
+                    backgroundColor: color.white,
+                    marginBottom: normalize(6),
+                    padding: normalize(12),
+                    flexDirection: 'row',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  },
+                ]}>
+                <RatsText
+                  translate={false}
+                  text={name}
+                  style={{ fontSize: fontSize.regular, color: color.black }}
+                />
+                <View
+                  style={{
+                    backgroundColor: present ? color.green : color.light_grey,
+                    width: normalize(24),
+                    height: normalize(24),
+                    borderRadius: normalize(12),
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}>
+                  {present && (
+                    <RatsText
+                      translate={false}
+                      text="✓"
+                      style={{ color: color.white, fontSize: fontSize.small }}
+                    />
+                  )}
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
 
         {/* Minutes */}
         <RatsText

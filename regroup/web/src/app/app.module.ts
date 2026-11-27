@@ -100,7 +100,6 @@ import { ContactService } from './services/contact/contact.service';
 import { SubscriptionService } from './services/subscriptions/subscription.service';
 import { PrivacyPolicyComponent } from './components/privacypolicy/privacy-policy/privacy-policy.component';
 import { TermsComponent } from './components/terms/privacy-policy/terms.component';
-import { RedirectComponent } from './components/redirect/redirect.component';
 import { AppLinkLandingComponent } from './components/app-link-landing/app-link-landing.component';
 import { MyAccountComponent } from './components/accounts/my-account/my-account.component';
 import { ModalComponent } from './components/modal/modal.component';
@@ -201,7 +200,6 @@ import { analyticsImports, analyticsProviders } from './analytics-providers';
     LoadingComponent,
     PrivacyPolicyComponent,
     TermsComponent,
-    RedirectComponent,
     AppLinkLandingComponent,
     ModalComponent,
     TierPickerComponent,
