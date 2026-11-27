@@ -3,6 +3,7 @@ import React, { useEffect, useCallback, useMemo } from "react";
 // Removed: withNotifier, withLoadingModal, withFormModal, withPopover
 // Added: useModal, useNotification hooks
 import AvatarItem from "../../components/avatar-item";
+import { isRemoteImageUri } from "../Profile/profileAvatar";
 import { useModal, useNotification } from "../../context";
 import { Guest } from "../../entities/Guest";
 import { Guests } from "../../types";
@@ -381,7 +382,12 @@ const PersonalScreen: React.FC<PersonalProps> = ({ navigation }) => {
         subTextStyle={{ fontSize: fontSize.regular_medium }}
         name={fullName || " "}
         type={user && user.isAdmin ? "Admin" : "Guest"}
-        avatarUrl={_user?.avatar || ""}
+        // The account's own photo: the profile form saves the user doc, and
+        // the store has it at once; the guest/admin copies here can be the
+        // ones loaded before the save.
+        avatarUrl={
+          isRemoteImageUri(user?.avatar) ? user.avatar : _user?.avatar || ""
+        }
         testID="personal-avatar"
       />
     );

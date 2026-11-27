@@ -112,10 +112,11 @@ jest.mock(
 
 jest.mock("../../../components/avatar-item", () => {
   const { View, Text } = require("react-native");
-  return ({ name, type }: any) => (
+  return ({ name, type, avatarUrl }: any) => (
     <View testID="avatar-item">
       <Text testID="avatar-name">{name}</Text>
       <Text testID="avatar-type">{type}</Text>
+      <Text testID="avatar-url">{avatarUrl}</Text>
     </View>
   );
 });
@@ -492,6 +493,25 @@ describe("PersonalScreen", () => {
     it("displays admin full name when user is an admin", () => {
       const { getByTestId } = renderScreen({ admin: BASE_ADMIN });
       expect(getByTestId("avatar-name").props.children).toBe("Alice Manager");
+    });
+
+    // The profile form saves the user doc and the store has it at once; the
+    // admin/guest copy in the store can be the one loaded before the save.
+    it("shows the account's own saved photo over an older admin copy", () => {
+      const url = "https://storage.example/users%2Fu1%2Favatar?alt=media&v=2";
+      const { getByTestId } = renderScreen({
+        user: { ...BASE_USER_ADMIN, avatar: url },
+        admin: { ...BASE_ADMIN, avatar: "https://storage.example/old.jpg" },
+      });
+      expect(getByTestId("avatar-url").props.children).toBe(url);
+    });
+
+    it("falls back to the admin copy when the account's own value is a phone path", () => {
+      const { getByTestId } = renderScreen({
+        user: { ...BASE_USER_ADMIN, avatar: "file:///var/mobile/IMG_1.jpg" },
+        admin: { ...BASE_ADMIN, avatar: "https://storage.example/a.jpg" },
+      });
+      expect(getByTestId("avatar-url").props.children).toBe("https://storage.example/a.jpg");
     });
 
     it('displays "Admin" role label when user.isAdmin is true', () => {
