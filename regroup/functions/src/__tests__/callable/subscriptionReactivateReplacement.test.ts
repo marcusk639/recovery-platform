@@ -48,7 +48,9 @@ jest.mock('../../api/stripe', () => ({
 // One stored user doc; getUser returns the copy read before it moved on.
 let mockStored: Record<string, any>;
 let mockStaleRead: Record<string, any>;
+let mockFailRecordWrite = false;
 const mockApplyUpdate = (data: Record<string, unknown>) => {
+  if (mockFailRecordWrite && 'subscriptionMetadata' in data) throw new Error('ABORTED');
   for (const [key, value] of Object.entries(data)) {
     const [top, nested] = key.split('.');
     if (nested) mockStored[top] = { ...mockStored[top], [nested]: value };
@@ -93,8 +95,23 @@ const reactivate = () =>
     data: { user: { id: 'op', subscriptionMetadata: { ...CANCELED } } },
   });
 
+const storeOperator = (houses: object = {}) => {
+  mockStaleRead = { id: 'op', email: 'op@test.com', subscriptionMetadata: { ...CANCELED, houses } };
+  mockStored = JSON.parse(JSON.stringify(mockStaleRead));
+};
+const upsertSubscriptionDoc = () =>
+  jest.requireMock<{ upsertSubscriptionDoc: jest.Mock }>('../../api/firestore')
+    .upsertSubscriptionDoc;
+const setOperatorHousesStatus = () =>
+  jest.requireMock<{ setOperatorHousesStatus: jest.Mock }>('../../util/operatorHouses')
+    .setOperatorHousesStatus;
+const loggedError = () =>
+  jest.requireMock<{ logger: { error: jest.Mock } }>('firebase-functions').logger.error;
+const UNFINISHED = /plan restarted, but we couldn't finish updating your account/i;
+
 beforeEach(() => {
   jest.clearAllMocks();
+  mockFailRecordWrite = false;
   process.env.TIER_BILLING_ENABLED = 'true';
   process.env.STRIPE_PRICE_TRAD_PROFESSIONAL = 'price_pro';
 });
@@ -130,4 +147,47 @@ describe("Reactivate's replacement", () => {
     expect(mockStored.subscriptionMetadata.checkoutStartedAt).toBeUndefined();
     expect(result.subscriptionMetadata.houses).toEqual({ h1: { numberOfGuests: 2 } });
   });
+});
+
+// The replacement has no trial: Stripe has charged by the time these writes run.
+// The webhooks find a subscription only through its subscriptions doc, so it
+// is seeded first: if a later write fails, the next event still finds it.
+describe('after Stripe created the replacement', () => {
+  it('seeds the subscriptions doc before the record names the new subscription', async () => {
+    storeOperator();
+    let recordAtSeed: unknown;
+    upsertSubscriptionDoc().mockImplementation(async () => {
+      recordAtSeed = mockStored.subscriptionMetadata.subscriptionId;
+    });
+    await reactivate();
+
+    expect(upsertSubscriptionDoc()).toHaveBeenCalledWith(
+      expect.objectContaining({ stripeSubscriptionId: 'sub_new', userId: 'op' }),
+    );
+    expect(recordAtSeed).toBe('sub_old');
+  });
+
+  it.each([
+    [
+      'the subscriptions doc',
+      () => upsertSubscriptionDoc().mockRejectedValueOnce(new Error('ABORTED')),
+    ],
+    ['the record', () => (mockFailRecordWrite = true)],
+    [
+      'the house statuses',
+      () => setOperatorHousesStatus().mockRejectedValueOnce(new Error('ABORTED')),
+    ],
+  ])(
+    'when %s fails, logs the new ids for support and says the plan restarted',
+    async (_what, fail) => {
+      storeOperator();
+      fail();
+      await expect(reactivate()).rejects.toMatchObject({ code: 'internal', message: UNFINISHED });
+
+      expect(loggedError()).toHaveBeenCalledWith(
+        expect.stringContaining('by hand'),
+        expect.objectContaining({ userId: 'op', subscriptionId: 'sub_new', customerId: 'cus_1' }),
+      );
+    },
+  );
 });

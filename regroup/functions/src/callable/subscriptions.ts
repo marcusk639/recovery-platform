@@ -23,7 +23,6 @@ import {
   initializeTierCustomer,
   updateSubscriptionItem,
   getSubscriptionItem,
-  updateSubscriptionMetadata,
   retrievePaymentMethod,
   updatePaymentMethod,
   cancelSubscription,
@@ -71,11 +70,11 @@ import {
 import {
   getHouse,
   getUser,
-  updateUser,
   upsertSubscriptionDoc,
   type SubscriptionDoc,
 } from "../api/firestore";
 import { closeOperatorBilling, subscriptionEnded } from "../api/stripeDeletion";
+import { operatorStatusFromStripe } from "../webhooks/subscriptionState";
 import { parseInput, safeReturnUrlSchema } from "../validation";
 
 // ── Schemas ────────────────────────────────────────────────────────────────────
@@ -180,6 +179,8 @@ const BILLING_OFF_MESSAGE = "New subscriptions are not available right now";
 const SALES_CLOSED_MESSAGE = "Subscriptions open when the new Regroup app is released";
 const CHECKOUT_REVERSED_MESSAGE =
   "We couldn't finish setting up your subscription, so we cancelled it. You have not been charged. Please try again.";
+const REACTIVATE_UNFINISHED_MESSAGE =
+  "Your plan restarted, but we couldn't finish updating your account. Please contact support before trying again.";
 const CHECKOUT_ORPHANED_MESSAGE =
   "We couldn't finish setting up your subscription. Please contact support before trying again, so you aren't billed twice.";
 
@@ -236,11 +237,7 @@ async function reverseUnrecordedCheckout(
   throw new HttpsError("internal", CHECKOUT_REVERSED_MESSAGE);
 }
 
-/**
- * Sets the stored status alone (setSubscriptionStatus) and returns the stored
- * metadata as it now is, for the caller to return. A record that names another
- * subscription by now is left alone and logged.
- */
+/** setSubscriptionStatus, logging when the record no longer names the subscription. */
 async function writeStatusOf(
   uid: string,
   subscriptionId: string,
@@ -248,13 +245,57 @@ async function writeStatusOf(
 ): Promise<OperatorSubscription> {
   const { written, subscriptionMetadata } = await setSubscriptionStatus(uid, subscriptionId, status);
   if (!written) {
-    logger.warn("Subscription status not written: the record names another subscription", {
+    const reason = subscriptionMetadata.subscriptionId
+      ? "the record names another subscription"
+      : "the record has no subscription";
+    logger.warn(`Subscription status not written: ${reason}`, {
       userId: uid,
       subscriptionId,
       status,
     });
   }
   return subscriptionMetadata as OperatorSubscription;
+}
+
+/**
+ * Records Reactivate's replacement, which Stripe has already created and, with
+ * no trial, charged for. The webhooks find a subscription only through its
+ * subscriptions doc, and the replacement's first events can arrive before the
+ * record points at it, so the doc is seeded first: if a later write fails, the
+ * next event still finds it and writes the status to the record and houses.
+ * A failure is logged with the new ids for support, and the operator is told
+ * the plan restarted; a retry is refused as unrecorded-subscription until fixed.
+ */
+async function recordReplacement(
+  uid: string,
+  replacement: OperatorSubscription,
+  planId: string,
+): Promise<OperatorSubscription> {
+  try {
+    await upsertSubscriptionDoc({
+      houseId: "",
+      stripeCustomerId: replacement.customerId,
+      stripeSubscriptionId: replacement.subscriptionId,
+      status: replacement.status as SubscriptionDoc["status"],
+      currentPeriodEnd: replacement.currentPeriodEnd
+        ? new Date(replacement.currentPeriodEnd).toISOString()
+        : "",
+      planId,
+      guestCount: 0,
+      userId: uid,
+    });
+    const written = await writeReplacementSubscription(uid, replacement);
+    await setOperatorHousesStatus(uid, written.status);
+    return written;
+  } catch (error) {
+    logger.error("Reactivate's replacement is live in Stripe but its records aren't all written: finish them by hand", {
+      userId: uid,
+      subscriptionId: replacement.subscriptionId,
+      customerId: replacement.customerId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    throw new HttpsError("internal", REACTIVATE_UNFINISHED_MESSAGE);
+  }
 }
 
 /** Whether Stripe shows the subscription ended; false when it can't be read. */
@@ -559,9 +600,10 @@ export const reactivateOperatorSubscription = onCall(
     let subscriptionMetadata: typeof storedMetadata;
     let replacement = false;
     if (status === "cancelling") {
-      // Set to cancel at period end but still live — resume in place.
-      await uncancelSubscription(storedMetadata.subscriptionId);
-      subscriptionMetadata = { ...storedMetadata, status: "active" };
+      // Set to cancel at period end but still live — resume in place, with the
+      // status Stripe has (a resumed trial is still trialing).
+      const resumed = await uncancelSubscription(storedMetadata.subscriptionId);
+      subscriptionMetadata = { ...storedMetadata, status: operatorStatusFromStripe(resumed) };
     } else if (status === "canceled") {
       // Terminal in Stripe: a canceled subscription cannot be resumed, so a
       // replacement is the only route back. The sole branch allowed to create.
@@ -618,34 +660,24 @@ export const reactivateOperatorSubscription = onCall(
       );
     }
     logger.info("Subscription reactivated");
-    // A replacement replaces the plan, keeping the stored houses map; a resume
-    // writes only the status.
+    // Not storedMetadata, read before Stripe: writing it back would put back
+    // fields changed meanwhile.
     subscriptionMetadata = replacement
-      ? await writeReplacementSubscription(data.user.id, subscriptionMetadata)
-      : await writeStatusOf(data.user.id, storedMetadata.subscriptionId, "active");
-    if (replacement) {
-      // The webhooks find a subscription only through its subscriptions doc, and
-      // the replacement's first events can arrive before the record above points
-      // at it, so the doc is seeded and the houses written here, as checkout does.
-      await upsertSubscriptionDoc({
-        houseId: "",
-        stripeCustomerId: subscriptionMetadata.customerId,
-        stripeSubscriptionId: subscriptionMetadata.subscriptionId,
-        status: subscriptionMetadata.status as SubscriptionDoc["status"],
-        currentPeriodEnd: subscriptionMetadata.currentPeriodEnd
-          ? new Date(subscriptionMetadata.currentPeriodEnd).toISOString()
-          : "",
-        // The replacement is created on the stored plan.
-        planId: resolveTierPriceId(
-          storedMetadata.houseType as HouseType,
-          storedMetadata.tier as TierKey,
-          storedBillingInterval(storedMetadata.billingInterval),
-        ),
-        guestCount: 0,
-        userId: data.user.id,
-      });
-      await setOperatorHousesStatus(data.user.id, subscriptionMetadata.status);
-    }
+      ? await recordReplacement(
+          data.user.id,
+          subscriptionMetadata,
+          // The replacement is created on the stored plan.
+          resolveTierPriceId(
+            storedMetadata.houseType as HouseType,
+            storedMetadata.tier as TierKey,
+            storedBillingInterval(storedMetadata.billingInterval),
+          ),
+        )
+      : await writeStatusOf(
+          data.user.id,
+          storedMetadata.subscriptionId,
+          subscriptionMetadata.status,
+        );
     return { ...data.user, subscriptionMetadata };
   },
 );
@@ -673,11 +705,12 @@ export const cancelUserSubscription = onCall(
         "permission-denied",
         "Subscription does not belong to caller",
       );
-    await cancelSubscription(data.subscriptionId);
+    // The status Stripe has: a past_due plan set to cancel is still past_due.
+    const cancelled = await cancelSubscription(data.subscriptionId);
     const subscriptionMetadata = await writeStatusOf(
       request.auth.uid,
       data.subscriptionId,
-      "cancelling",
+      operatorStatusFromStripe(cancelled),
     );
     return { ...data.user, subscriptionMetadata };
   },
@@ -719,7 +752,8 @@ export const updateSubscriptionGuests = onCall(
       await changeSubscriptionHouses(user.id!, (stored, storedMeta) => {
         // The guests endpoint only mutates occupancy of houses already on the
         // subscription. It must not implicitly create a house — that would
-        // bypass the property cap enforced by updateSubscriptionHouses.
+        // bypass the property cap enforced by createHouses and
+        // updateSubscriptionHouses.
         if (!(houseId in stored)) {
           throw new HttpsError(
             "failed-precondition",
@@ -817,7 +851,7 @@ export const updateSubscriptionHouses = onCall(
       }
       // Changed from the stored map, so the property cap counts houses
       // createHouses added meanwhile, and none of them is dropped.
-      const houses = await changeSubscriptionHouses(user.id!, (stored, storedMeta) => {
+      const written = await changeSubscriptionHouses(user.id!, (stored, storedMeta) => {
         // The stored plan's caps too: a downgrade meanwhile applies.
         const meta = { ...houseMeta, ...storedMeta, houses: stored };
         return (
@@ -826,7 +860,8 @@ export const updateSubscriptionHouses = onCall(
             : removeHouseFromSubscription(meta, houseIds[0])
         ).houses;
       });
-      const updatedMeta = { ...houseMeta, houses };
+      // The record as stored, not the read above.
+      const updatedMeta = written as OperatorSubscription;
       logger.info("Tier subscription house occupancy updated", {
         ownerUserId,
         action,

@@ -1,9 +1,7 @@
-// Writers that change one part of an operator's subscriptionMetadata used to
-// read the whole map, change it and write it all back. A record that changed
-// in between was put back as it was read: the checkout lock (util/checkoutGuard)
-// erased, so a checkout still under way was refused; houses createHouses had
-// just added dropped, freeing property-cap slots. Each writer now writes only
-// what it changes, and the houses map is changed in a transaction.
+// Writers of one part of subscriptionMetadata write only what they change, in a
+// transaction. Writing back a whole copy read earlier put back what changed in
+// between: the checkout lock erased (a checkout under way refused), or houses
+// createHouses had just added dropped (freed property-cap slots).
 
 class HttpsError extends Error {
   code: string;
@@ -30,8 +28,8 @@ jest.mock('firebase-admin', () => ({
   ),
 }));
 jest.mock('../../api/stripe', () => ({
-  cancelSubscription: jest.fn(async () => ({ cancel_at_period_end: true })),
-  uncancelSubscription: jest.fn(async () => undefined),
+  cancelSubscription: jest.fn(async () => ({ status: 'active', cancel_at_period_end: true })),
+  uncancelSubscription: jest.fn(async () => ({ status: 'active', cancel_at_period_end: false })),
 }));
 
 // One stored user doc. getUser returns the copy read before the record moved
@@ -154,14 +152,19 @@ describe('a resident added or removed', () => {
     expect(mockStored.subscriptionMetadata.houses).toEqual({ h1: { numberOfGuests: 3 } });
   });
 
-  it("on accepting an invitation, doesn't bring back a house removed from the plan", async () => {
-    recordMovedOn(
-      { ...TIER_PLAN, houses: { h1: { numberOfGuests: 1 } } },
-      { ...TIER_PLAN, houses: {} },
-    );
+  // The invitation check admits a house missing from the owner's map (counting
+  // its pending invitations), so the accepted resident is counted there too,
+  // else every redeem would free a slot and the cap would never hold.
+  it('on accepting an invitation, counts a house missing from the map, and logs it', async () => {
+    recordMovedOn({ ...TIER_PLAN, houses: {} }, { ...TIER_PLAN, houses: {} });
     await recordResidentAccepted('op', 'h1');
 
-    expect(mockStored.subscriptionMetadata.houses).toEqual({});
+    expect(mockStored.subscriptionMetadata.houses).toEqual({ h1: { numberOfGuests: 1 } });
+    const { logger } = jest.requireMock<{ logger: { warn: jest.Mock } }>('firebase-functions');
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('not on the plan'),
+      expect.objectContaining({ ownerId: 'op', houseId: 'h1' }),
+    );
   });
 
   it('on accepting an invitation, leaves the lock and counts from the stored map', async () => {
@@ -234,32 +237,45 @@ describe('a house added to or removed from the plan', () => {
 });
 
 describe('a plan set to cancel, or resumed', () => {
-  it('cancelling writes only the status', async () => {
+  it('cancelling writes only the status, and returns the record as stored', async () => {
     recordMovedOn(
       { ...TIER_PLAN, status: 'active', houses: {} },
       { ...TIER_PLAN, status: 'active', houses: { h1: { numberOfGuests: 1 } } },
     );
-    await call(cancelUserSubscription, { user: CLIENT_USER, subscriptionId: 'sub_1' });
+    const result = await call(cancelUserSubscription, {
+      user: CLIENT_USER,
+      subscriptionId: 'sub_1',
+    });
 
     expect(mockStored.subscriptionMetadata).toMatchObject({
       status: 'cancelling',
       houses: { h1: { numberOfGuests: 1 } },
     });
+    expect(result.subscriptionMetadata).toMatchObject({
+      subscriptionId: 'sub_1',
+      tier: 'professional',
+      status: 'cancelling',
+      houses: { h1: { numberOfGuests: 1 } },
+      lastUpdatedAt: expect.any(String),
+    });
   });
-
-  it('resuming writes only the status', async () => {
+  it('resuming writes only the status, and returns the record as stored', async () => {
     recordMovedOn(
       { ...TIER_PLAN, status: 'cancelling', houses: {} },
       { ...TIER_PLAN, status: 'cancelling', houses: { h1: { numberOfGuests: 1 } } },
     );
-    await call(reactivateOperatorSubscription, { user: CLIENT_USER });
+    const result = await call(reactivateOperatorSubscription, { user: CLIENT_USER });
 
     expect(mockStored.subscriptionMetadata).toMatchObject({
       status: 'active',
       houses: { h1: { numberOfGuests: 1 } },
     });
+    expect(result.subscriptionMetadata).toMatchObject({
+      subscriptionId: 'sub_1',
+      status: 'active',
+      houses: { h1: { numberOfGuests: 1 } },
+    });
   });
-
   it("doesn't set the status on a record that now names another subscription", async () => {
     recordMovedOn(
       { ...TIER_PLAN, status: 'active', houses: {} },

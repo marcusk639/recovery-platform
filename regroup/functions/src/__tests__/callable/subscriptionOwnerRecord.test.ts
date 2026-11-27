@@ -22,9 +22,10 @@ const mockUpdateUser = jest.fn();
 jest.mock('../../util/operatorSubscriptionWrite', () => ({
   writeOperatorSubscription: jest.fn(),
   changeSubscriptionHouses: async (uid: string, change: (h: object, m: object) => object) => {
-    const houses = change({}, { tier: 'professional', maxProperties: 3, houses: {} });
-    await mockUpdateUser(uid, { subscriptionMetadata: { houses } });
-    return houses;
+    const meta = { tier: 'professional', maxProperties: 3, houses: {} };
+    const houses = change({}, meta);
+    await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, houses } });
+    return { ...meta, houses };
   },
 }));
 jest.mock('../../api/firestore', () => ({

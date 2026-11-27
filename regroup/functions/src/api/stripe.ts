@@ -221,11 +221,14 @@ export const createItemsFromMetadata = (
 /**
  * Reactivate creates the replacement on the stored customer, which charges its
  * saved card. A customer Stripe no longer has (deleted, say by support) can't
- * be billed, and the create would fail only after the lookup, with an error not
- * marked as before any subscription. Refused here instead, before anything is
- * created, so the lock is freed and the operator told what to do.
+ * be billed. findLiveSubscriptionForUser counts it as holding nothing, so
+ * without this check the create would fail with an error not marked as before
+ * any subscription, and the lock would be held until it expires. Refusing here,
+ * before anything is created, frees the lock and tells the operator to contact
+ * support; the refusal is logged so support can find it. Any other Stripe error
+ * is thrown as it is (still before any subscription).
  */
-const assertCustomerOnFile = async (customerId: string): Promise<void> => {
+const assertCustomerOnFile = async (customerId: string, userId?: string): Promise<void> => {
   let gone: boolean;
   try {
     gone = (await stripe.customers.retrieve(customerId)).deleted === true;
@@ -234,6 +237,10 @@ const assertCustomerOnFile = async (customerId: string): Promise<void> => {
     gone = true;
   }
   if (gone) {
+    logger.warn("Reactivate refused: the stored Stripe customer is no longer on file", {
+      userId,
+      customerId,
+    });
     throw new HttpsError(
       "failed-precondition",
       "This plan's billing details are no longer on file, so it can't be restarted. Please contact support.",
@@ -264,10 +271,11 @@ export const reactivateSubscription = async (
     let price: string;
     try {
       price = resolveTierPriceId(houseType, tier, billingInterval);
-      await assertCustomerOnFile(customerId);
+      await assertCustomerOnFile(customerId, userId);
       await attempt.beforeCreate();
     } catch (error) {
-      // Before Stripe is called, so the callable may free the checkout lock.
+      // Before Stripe creates the subscription, so the callable may free the
+      // checkout lock.
       throw markedBeforeSubscription(error);
     }
     const subscription = await stripe.subscriptions.create(
@@ -282,8 +290,12 @@ export const reactivateSubscription = async (
     freshMetadata.houseType = houseType;
     freshMetadata.tier = tier;
     freshMetadata.billingInterval = billingInterval;
+    // The replacement replaces the whole plan: left at its default false, an
+    // Oxford operator lost the Oxford features they pay for.
+    freshMetadata.oxfordEnabled = houseType === "oxford";
     freshMetadata.maxResidents = subscriptionMetadata.maxResidents;
     freshMetadata.maxProperties = subscriptionMetadata.maxProperties;
+    // Replaced with the stored map when written (writeReplacementSubscription).
     freshMetadata.houses = subscriptionMetadata.houses ?? {};
     mapSubscriptionToMetadata(subscription, freshMetadata, customerId);
     freshMetadata.subscriptionItemId = subscription.items.data[0].id;
@@ -513,8 +525,11 @@ const listSubscriptionsOf = async (customer: string): Promise<Stripe.Subscriptio
   try {
     return (await stripe.subscriptions.list({ customer, status: "all", limit: 20 })).data;
   } catch (error) {
-    if (isResourceMissing(error)) return [];
-    throw error;
+    if (!isResourceMissing(error)) throw error;
+    logger.warn("Stored Stripe customer not found; counted as holding no subscription", {
+      customerId: customer,
+    });
+    return [];
   }
 };
 
@@ -628,59 +643,3 @@ export const initializeTierCustomer = async (
   };
 };
 
-export const updateSubscriptionMetadata = (
-  user: User,
-  houseId: string,
-  action: "add" | "remove",
-  houseIds: string[],
-  forHouse: boolean = false,
-) => {
-  if (!forHouse) {
-    const currentGuests =
-      user.subscriptionMetadata.houses[houseId]?.numberOfGuests ?? 0;
-    return {
-      ...user.subscriptionMetadata,
-      houses: {
-        ...user.subscriptionMetadata.houses,
-        [houseId]: {
-          numberOfGuests:
-            action === "add"
-              ? currentGuests + 1
-              : Math.max(0, currentGuests - 1),
-        },
-      },
-    };
-  } else {
-    if (action === "add") {
-      const houseEntry: Record<string, { numberOfGuests: number }> = {};
-      if (houseIds && houseIds.length) {
-        houseIds.forEach((id) => {
-          houseEntry[id] = {
-            numberOfGuests: 0,
-          };
-        });
-      }
-      if (houseId) {
-        houseEntry[houseId] = {
-          numberOfGuests: 0,
-        };
-      }
-      return {
-        ...user.subscriptionMetadata,
-        houses: {
-          ...user.subscriptionMetadata.houses,
-          ...houseEntry,
-        },
-      };
-    } else {
-      // Immutable removal — spread creates a new houses object without houseId.
-      // delete on a shallow copy would mutate the original houses reference.
-      const { [houseId]: _removed, ...remainingHouses } =
-        user.subscriptionMetadata.houses;
-      return {
-        ...user.subscriptionMetadata,
-        houses: remainingHouses,
-      };
-    }
-  }
-};

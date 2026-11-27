@@ -102,11 +102,14 @@ export async function assertResidentCapacityAvailable(
 
 /**
  * Persists the newly-accepted resident so future cap checks see it as an
- * occupied slot rather than (transiently) a pending invitation. Mirrors the
- * "add" branch of updateSubscriptionGuests (callable/subscriptions.ts) —
- * same `numberOfGuests` counter, same tier-only guard. No-op for legacy
- * (non-tier) subscriptions, which track occupancy via Stripe item quantity
- * instead, and a no-op when the owner can't be resolved.
+ * occupied slot rather than (transiently) a pending invitation. Same
+ * `numberOfGuests` counter and tier-only guard as updateSubscriptionGuests'
+ * add branch, but it neither refuses nor checks the cap: the cap was checked
+ * when the invitation was created and redeemed, and the redeem has happened.
+ * A house missing from the owner's map is counted there all the same and
+ * logged: assertResidentCapacityAvailable admits such a house, so leaving the
+ * resident out would let every redeem past the cap. No-op for non-tier
+ * subscriptions and when the owner can't be resolved.
  */
 export async function recordResidentAccepted(
   ownerId: string | undefined,
@@ -117,11 +120,16 @@ export async function recordResidentAccepted(
   const meta = owner?.subscriptionMetadata;
   if (!meta?.tier) return;
 
-  // From the stored map, writing only it: see changeSubscriptionHouses. A
-  // house no longer on the plan (deleted, its slot freed) isn't brought back.
-  await changeSubscriptionHouses(ownerId, (houses) =>
-    houseId in houses
-      ? { ...houses, [houseId]: { numberOfGuests: (houses[houseId]?.numberOfGuests ?? 0) + 1 } }
-      : houses,
-  );
+  // From the stored map, writing only it: see changeSubscriptionHouses.
+  let notOnPlan = false;
+  await changeSubscriptionHouses(ownerId, (houses) => {
+    notOnPlan = !(houseId in houses);
+    return { ...houses, [houseId]: { numberOfGuests: (houses[houseId]?.numberOfGuests ?? 0) + 1 } };
+  });
+  if (notOnPlan) {
+    logger.warn('residentCapacity: accepted resident for a house not on the plan; counted there', {
+      ownerId,
+      houseId,
+    });
+  }
 }

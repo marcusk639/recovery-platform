@@ -44,7 +44,6 @@ const mockCancelSubscription = jest.fn();
 const mockReactivateSubscription = jest.fn();
 const mockMapSubscriptionToMetadata = jest.fn();
 const mockUncancelSubscription = jest.fn();
-const mockUpdateSubscriptionMetadata = jest.fn();
 
 const mockStripeSubscriptionsUpdate = jest.fn().mockResolvedValue({});
 const mockApplyBundleDiscountToSubscription = jest
@@ -60,7 +59,6 @@ jest.mock("../../api/stripe", () => ({
   failedBeforeSubscription: () => false,
   updateSubscriptionItem: mockUpdateSubscriptionItem,
   getSubscriptionItem: mockGetSubscriptionItem,
-  updateSubscriptionMetadata: mockUpdateSubscriptionMetadata,
   retrievePaymentMethod: mockRetrievePaymentMethod,
   updatePaymentMethod: mockUpdatePaymentMethod,
   cancelSubscription: mockCancelSubscription,
@@ -133,7 +131,7 @@ const mockChangeSubscriptionHouses = jest.fn(async (uid: string, change: MockCha
   const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
   const houses = change(meta.houses ?? {}, meta);
   await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, houses } });
-  return houses;
+  return { ...meta, houses };
 });
 const mockSetSubscriptionStatus = jest.fn(async (uid: string, _sub: string, status: string) => {
   const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
@@ -141,10 +139,13 @@ const mockSetSubscriptionStatus = jest.fn(async (uid: string, _sub: string, stat
   await mockUpdateUser(uid, { subscriptionMetadata });
   return { written: true, subscriptionMetadata };
 });
-// Reactivate's replacement, also recorded on mockUpdateUser.
+// Reactivate's replacement, also recorded on mockUpdateUser. Like the real one
+// it keeps the stored houses map (subscriptionReactivateReplacement.test.ts).
 const mockWriteReplacementSubscription = jest.fn(async (uid: string, meta: object) => {
-  await mockUpdateUser(uid, { subscriptionMetadata: meta });
-  return meta;
+  const houses = (await mockGetUser(uid))?.subscriptionMetadata?.houses ?? {};
+  const written = { ...meta, houses };
+  await mockUpdateUser(uid, { subscriptionMetadata: written });
+  return written;
 });
 jest.mock("../../util/operatorSubscriptionWrite", () => ({
   writeOperatorSubscription: (uid: string, meta: object) =>
@@ -627,7 +628,7 @@ describe("createOperatorSubscription — potentialSuperAdmin claim grant (W7)", 
 describe("cancelUserSubscription", () => {
   it("calls cancelSubscription with the subscriptionId from data", async () => {
     mockGetUser.mockResolvedValue(fakeUser);
-    mockCancelSubscription.mockResolvedValue({ cancel_at_period_end: true });
+    mockCancelSubscription.mockResolvedValue({ status: "active", cancel_at_period_end: true });
     mockUpdateUser.mockResolvedValue(undefined);
 
     await call(cancelUserSubscription, {
@@ -640,7 +641,7 @@ describe("cancelUserSubscription", () => {
 
   it("updates user with cancelling status after cancellation", async () => {
     mockGetUser.mockResolvedValue(fakeUser);
-    mockCancelSubscription.mockResolvedValue({ cancel_at_period_end: true });
+    mockCancelSubscription.mockResolvedValue({ status: "active", cancel_at_period_end: true });
     mockUpdateUser.mockResolvedValue(undefined);
 
     await call(cancelUserSubscription, {
@@ -658,7 +659,7 @@ describe("cancelUserSubscription", () => {
 
   it("returns user with cancelling status", async () => {
     mockGetUser.mockResolvedValue(fakeUser);
-    mockCancelSubscription.mockResolvedValue({ cancel_at_period_end: true });
+    mockCancelSubscription.mockResolvedValue({ status: "active", cancel_at_period_end: true });
     mockUpdateUser.mockResolvedValue(undefined);
 
     const result = await call(cancelUserSubscription, {
@@ -826,7 +827,7 @@ describe("reactivateOperatorSubscription — never creates a duplicate subscript
 
   it("uncancels instead of creating when status is cancelling", async () => {
     mockGetUser.mockResolvedValue(userWithStatus("cancelling"));
-    mockUncancelSubscription.mockResolvedValue(undefined);
+    mockUncancelSubscription.mockResolvedValue({ status: "active", cancel_at_period_end: false });
 
     await call(reactivateOperatorSubscription, { user: fakeUser });
 
