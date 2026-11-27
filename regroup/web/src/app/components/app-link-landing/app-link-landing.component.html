@@ -1,7 +1,13 @@
 <div class="app-link-landing">
   <div class="card">
     <h2 *ngIf="isCheckoutReturn">You're done here</h2>
-    <h2 *ngIf="!isCheckoutReturn">Continue in the Regroup app</h2>
+    <h2 *ngIf="!isCheckoutReturn && !isIncompleteInvitation">Continue in the Regroup app</h2>
+    <ng-container *ngIf="isIncompleteInvitation">
+      <h2>This invitation link is incomplete</h2>
+      <p class="incomplete-invitation">
+        This invitation link is incomplete. Open it again from the invitation email, or ask the house for a new invitation.
+      </p>
+    </ng-container>
     <p *ngIf="appUrl">
       {{ isCheckoutReturn ? 'Go back to the app to see your plan.' : 'Tap below to open this link in Regroup.' }}
     </p>
