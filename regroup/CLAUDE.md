@@ -38,7 +38,7 @@ Commits from this repo's installed hook also run `.claude/agent-gates/verify-dif
 
 **Payment suite** (`cd e2e && npm run test:payments -- <filter>`; commands in `mobile/maestro/README.md`): emulators plus the local Stripe sandbox, not run in CI. A fresh worktree needs the gitignored `functions/.secret.local` copied in. Red rows are deliberate: each `fail` row in `mobile/docs/e2e/coverage-matrix.md` waits on a named fix, and a row is `pass` only when its test covers the row's whole Action. A Stripe test-clock stall can time a lifecycle test out at 180 s; rerun it alone with `-t` before calling it red.
 
-Account deletion is a resumable orchestrator in `functions/src/accountDeletion/`. Stripe ownership is proven only by `metadata.userId`. The property cap counts keys of `users/{uid}.subscriptionMetadata.houses`.
+Account deletion is a resumable orchestrator in `functions/src/accountDeletion/`; it also removes the user's chore photos in every house (`houses/*/chore-evidence/{uid}/`) and their `claims-updates` doc. Stripe ownership is proven only by `metadata.userId`. The property cap counts keys of `users/{uid}.subscriptionMetadata.houses`.
 
 ---
 

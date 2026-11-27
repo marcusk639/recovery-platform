@@ -127,6 +127,11 @@ jest.mock('../../../styles/theme', () => ({
   color: { black: '#000000' },
 }));
 
+// The claims-refresh listener (S5) reaches Firestore; this suite renders App only.
+jest.mock('../../../hooks/useClaimsUpdateRefresh', () => ({
+  useClaimsUpdateRefresh: jest.fn(),
+}));
+
 // ── App import (after all mocks are in place) ─────────────────────────────────
 // Cast to React.ComponentType<any> because the exported App is wrapped by withSplash,
 // whose SplashProps type requires a `navigation` prop that is irrelevant in unit tests

@@ -4,7 +4,10 @@
 # can see it, for maestro/flows/device-document-upload.yaml (device pass row 4):
 #   iOS simulator:    Files → On My iPhone → e2e-upload.pdf
 #   Android emulator: Downloads → e2e-upload.pdf
-# The file holds no personal data.
+# and a small photo in the photo library, for guest-chore-photo.yaml (S5):
+#   iOS simulator:    Photos (xcrun simctl addmedia)
+#   Android emulator: Pictures → e2e-photo.png
+# The files hold no personal data.
 #
 # Usage:
 #   maestro/scripts/stage-picker-files.sh --platform ios --device <simulator udid>
@@ -40,6 +43,19 @@ trailer << /Root 1 0 R >>
 %%EOF
 EOF
 
+# A small solid-colour PNG for the photo picker.
+PNG="$TMP/e2e-photo.png"
+python3 - "$PNG" <<'PY'
+import struct, sys, zlib
+w = h = 64
+raw = b''.join(b'\x00' + b'\x3c\x8d\xbc' * w for _ in range(h))
+def chunk(kind, data):
+    return struct.pack('>I', len(data)) + kind + data + struct.pack('>I', zlib.crc32(kind + data) & 0xffffffff)
+png = b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 2, 0, 0, 0)) \
+    + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
+open(sys.argv[1], 'wb').write(png)
+PY
+
 case "$PLATFORM" in
   ios)
     GROUPS_DIR="$HOME/Library/Developer/CoreSimulator/Devices/$DEVICE/data/Containers/Shared/AppGroup"
@@ -57,12 +73,18 @@ case "$PLATFORM" in
     mkdir -p "$dest"
     cp "$PDF" "$dest/e2e-upload.pdf"
     echo "✓ staged e2e-upload.pdf in On My iPhone ($DEVICE)"
+    xcrun simctl addmedia "$DEVICE" "$PNG"
+    echo "✓ added e2e-photo.png to Photos ($DEVICE)"
     ;;
   android)
     adb -s "$DEVICE" push "$PDF" /sdcard/Download/e2e-upload.pdf >/dev/null
     adb -s "$DEVICE" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
       -d file:///sdcard/Download/e2e-upload.pdf >/dev/null
     echo "✓ staged e2e-upload.pdf in Downloads ($DEVICE)"
+    adb -s "$DEVICE" push "$PNG" /sdcard/Pictures/e2e-photo.png >/dev/null
+    adb -s "$DEVICE" shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE \
+      -d file:///sdcard/Pictures/e2e-photo.png >/dev/null
+    echo "✓ staged e2e-photo.png in Pictures ($DEVICE)"
     ;;
   *) echo "✗ --platform must be ios or android" >&2; exit 2 ;;
 esac

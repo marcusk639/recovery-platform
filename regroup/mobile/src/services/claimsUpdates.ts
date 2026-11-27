@@ -15,7 +15,10 @@ import { logException } from '../util/logging';
 export const claimsUpdatesCollection = collection(firestore, 'claims-updates');
 
 type StampValue =
-  { toMillis?: () => number; seconds?: number; _seconds?: number } | Date | null | undefined;
+  | { toMillis?: () => number; seconds?: number; _seconds?: number }
+  | Date
+  | null
+  | undefined;
 
 /** Milliseconds of a Firestore Timestamp in any of the shapes the SDK returns, else undefined. */
 export function stampMillis(value: StampValue): number | undefined {
@@ -54,7 +57,11 @@ export function watchClaimsUpdates(uid: string, deps: ClaimsWatchDeps): () => vo
     (snapshot) => {
       const stampMs = stampMillis(snapshot.exists() ? snapshot.data()?.updatedAt : undefined);
       if (stampMs === undefined) return;
-      queue = queue.then(() => handle(stampMs)).catch((error) => logException(error));
+      queue = queue
+        .then(() => handle(stampMs))
+        .catch((error) => {
+          logException(error);
+        });
     },
     (error) => logException(error),
   );

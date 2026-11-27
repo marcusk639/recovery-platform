@@ -1,0 +1,87 @@
+# S5 (REV-A13): a resident completes a chore with a photo. The photo uploads to
+# houses/{houseId}/chore-evidence/{their uid}/, the only chore path storage.rules
+# lets them write (before S5 the app's path matched no rule and every chore
+# photo was refused), and the logged chore links to it.
+# Persona: guest-a.
+# Before running: maestro/scripts/stage-picker-files.sh --platform <ios|android> --device <id>
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/guest-chore-photo.yaml
+appId: ${APP_ID}
+tags:
+  - guest
+  - activities
+  - device
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-guest-a@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+- runScript:
+    file: ../scripts/maestro-js/chore-photos.js
+    env:
+      HOUSE_ID: test-house-123
+      USER_ID: e2e-guest-a
+- assertTrue:
+    condition: ${output.photoCount === 0}
+    label: no chore photo before the flow (re-seed first)
+- tapOn:
+    id: "guest-tab"
+- extendedWaitUntil:
+    visible:
+      id: "guest-overview-screen"
+    timeout: 30000
+- tapOn:
+    id: "chores-card"
+- extendedWaitUntil:
+    visible:
+      id: "chore-summary-screen"
+    timeout: 30000
+- tapOn:
+    id: "complete-chore-button"
+- extendedWaitUntil:
+    visible:
+      text: "Add Photo"
+    timeout: 15000
+- tapOn:
+    text: "Add Photo"
+# The system photo picker, with the photo stage-picker-files.sh added.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - extendedWaitUntil:
+          visible: "Photo, .*"
+          timeout: 20000
+      - tapOn:
+          text: "Photo, .*"
+          index: 0
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - extendedWaitUntil:
+          visible: "Photo taken on.*"
+          timeout: 20000
+      - tapOn:
+          text: "Photo taken on.*"
+          index: 0
+- extendedWaitUntil:
+    visible:
+      text: "Chore marked as complete!"
+    timeout: 60000
+- tapOn:
+    text: "OK"
+- runScript:
+    file: ../scripts/maestro-js/chore-photos.js
+    env:
+      HOUSE_ID: test-house-123
+      USER_ID: e2e-guest-a
+- assertTrue:
+    condition: ${output.photoCount === 1}
+    label: the photo is in the resident's own chore-evidence folder
+- assertTrue:
+    condition: ${output.activityHasPhoto}
+    label: the logged chore links to that photo
+- runFlow:
+    file: ../subflows/logout.yaml
