@@ -176,6 +176,13 @@ describe('createConfirmationEmail', () => {
     expect(email.html).toContain(link);
   });
 
+  it('escapes the name in the html greeting', () => {
+    const email = createConfirmationEmail('test@example.com', 'https://example.com/verify', '<a href="x">Al</a>');
+    expect(email.html).toContain('Hello &lt;a href=&quot;x&quot;&gt;Al&lt;/a&gt;,');
+    expect(email.html).not.toContain('<a href="x">');
+    expect(email.text).toContain('Hello <a href="x">Al</a>,');
+  });
+
   it('sets from field using regroupEmail', () => {
     const email = createConfirmationEmail('test@example.com', 'https://example.com/verify');
     expect(email.from).toContain('admin@regroup-app.com');
