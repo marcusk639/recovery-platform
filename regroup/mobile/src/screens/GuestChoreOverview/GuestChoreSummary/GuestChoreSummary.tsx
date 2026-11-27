@@ -162,6 +162,7 @@ const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
     try {
       // Step 1: Optional photo
       let photoUrl: string | undefined;
+      let photoFailed = false;
 
       await new Promise<void>((resolve) => {
         Alert.alert(
@@ -198,7 +199,9 @@ const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
                     );
                   } catch (uploadError) {
                     logException(uploadError);
-                    // Photo upload failed — continue without photo
+                    // Log the chore without it, and say so below: the
+                    // Storage rules refuse e.g. a non-image or over 10 MB.
+                    photoFailed = true;
                   }
                 }
                 resolve();
@@ -225,7 +228,12 @@ const GuestChoreSummary: React.FC<Props> = ({ navigation }) => {
         loggedBy: currentUser.uid,
       });
 
-      Alert.alert("Done", "Chore marked as complete!");
+      Alert.alert(
+        "Done",
+        photoFailed
+          ? "Chore marked as complete, but the photo couldn't be uploaded."
+          : "Chore marked as complete!"
+      );
     } catch {
       Alert.alert("Error", "Could not complete chore. Please try again.");
     } finally {
