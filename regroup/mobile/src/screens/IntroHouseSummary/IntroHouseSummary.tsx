@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { House } from "../../entities/House";
+import { HouseListing } from "../../entities/HouseListing";
 import { View, ViewStyle, TouchableOpacity, TextStyle } from "react-native";
 import RatsScrollView from "../../components/rats-scroll-view";
 import { RatsText } from "../../components/rats-text";
@@ -13,10 +13,11 @@ import {
 } from "../../styles/theme";
 import { Routes, AuthScreenNavigationProp } from "../../navigation/types";
 import Admin from "../../entities/Admin";
-import { isNil, map, size } from "lodash";
+import { isNil, map } from "lodash";
 import { Admins } from "../../types";
 import RatsAvatar from "../../components/rats-avatar";
 import RatsButton from "../../components/rats-button/rats-button";
+import RatsLoadingIndicator from "../../components/rats-loading-indicator/rats-loading-indicator";
 import { callNumber } from "../../util/phone";
 import ImageHeader from "../../components/image-header";
 import { getAddressDisplay } from "../../util/address";
@@ -24,19 +25,19 @@ import { RatsIcon } from "../../components/rats-icon";
 import { houseImage } from "../../../assets/index";
 import WeekStatSummary from "../../components/week-stat-summary";
 import { camelCaseToDisplayForm } from "../../util/display";
-import {
-  HEALTH_ICON_MAP,
-  getHealthByPercentage,
-  HEALTH_STATUS_MAP,
-} from "../../util/guest";
-import { calculateHouseHealth } from "../../util/house";
 import { useAppSelector } from "../../state/store";
-import { useSelectedHouse } from "../../hooks/useSelectedHouse";
+import { useHouseListing } from "../../state/queries/houseListingQueries";
 import { STAT_BUTTON_TEXT } from "../../styles/theme";
 
 interface Props {
   navigation: AuthScreenNavigationProp;
 }
+
+/** The share of beds open, 0 to 100, for the summary ring. */
+const openShare = (house: HouseListing): number =>
+  house.maximumCapacity
+    ? Math.round(((house.openBeds ?? 0) / house.maximumCapacity) * 100)
+    : 0;
 
 const contentStyle: ViewStyle = {
   flexGrow: 1,
@@ -62,8 +63,20 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
   }>({});
 
   // RTK Typed Selectors (no more 'as any')
-  const { house } = useSelectedHouse();
+  // A prospective resident is signed out (the app's anonymous session), so
+  // this reads the house's public listing, not houses/{id}, which is for its
+  // members only (EMU-009). The id comes from the store, not
+  // useSelectedHouse(), which would also read houses/{id} and be refused.
+  const houseId = useAppSelector((state) => state.houses.selectedHouseId);
+  const {
+    data: house,
+    isLoading: loadingListing,
+    isError: listingFailed,
+  } = useHouseListing(houseId);
   const admins = useAppSelector((state) => state.admin.houseAdmins);
+  // A signed-out visitor (the anonymous session) sees no ADMINISTRATORS
+  // section (owner, 2026-11-27): admins' records aren't public.
+  const signedOut = useAppSelector((state) => !!state.user.user?.isAnonymous);
 
   // D1 = option (a) (P5 Task 16): a prospective resident applies on the
   // anonymous session the app already holds. Self-signup stays on the landing
@@ -156,7 +169,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     return Collapsibles;
   };
 
-  const renderStar = (house: House) => {
+  const renderStar = (house: HouseListing) => {
     const number = isNil(house.rating) ? 3 : house.rating;
     return (
       <View
@@ -177,11 +190,13 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  const renderHouseSummary = (house: House) => {
+  const renderHouseSummary = (house: HouseListing) => {
     return (
       <WeekStatSummary
-        percentage={calculateHouseHealth(house.health)}
-        header="HOUSE HEALTH"
+        // House health comes from residents' activity, so the listing has
+        // none; the ring shows the share of beds open.
+        percentage={openShare(house)}
+        header="OPENINGS"
         rightSideContainer={{ justifyContent: "flex-start" }}
         rightSideContent={
           <View style={{ flex: 1 }}>
@@ -207,9 +222,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
                   style={{ color: house.certified ? color.green : color.red }}
                 />
                 <RatsText
-                  text={`${house.maximumCapacity - house.currentCapacity} of ${
-                    house.maximumCapacity
-                  }`}
+                  text={`${house.openBeds ?? 0} of ${house.maximumCapacity ?? 0}`}
                   style={{
                     fontSize: fontSize.regular,
                     color: color.black,
@@ -236,7 +249,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  const renderApplyButton = (house: House): React.JSX.Element | null => {
+  const renderApplyButton = (house: HouseListing): React.JSX.Element | null => {
     return (
       <RatsButton
         testID="apply-button"
@@ -249,13 +262,13 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
   };
 
   const renderIconSection = (
-    house: House,
-    value: "rooms" | "baths" | "wifi" | "beds" | "health"
+    house: HouseListing,
+    value: "rooms" | "baths" | "wifi" | "beds"
   ) => {
     const ATTRIBUTES = {
       rooms: {
         icon: "archive",
-        text: size(house.rooms),
+        text: house.roomCount,
       },
       baths: {
         icon: "bath",
@@ -267,15 +280,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
       },
       beds: {
         icon: "bed",
-        text: map(house.rooms, (room) => room.beds).length,
-      },
-      health: {
-        icon: HEALTH_ICON_MAP[
-          getHealthByPercentage(calculateHouseHealth(house.health))
-        ],
-        text: HEALTH_STATUS_MAP[
-          getHealthByPercentage(calculateHouseHealth(house.health))
-        ].toLowerCase(),
+        text: house.bedCount,
       },
     };
     return (
@@ -286,26 +291,20 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
             size={normalize(25)}
             style={{ color: color.dark_grey, marginRight: normalize(5) }}
           />
-          {value !== "health" && (
-            <RatsText
-              text={ATTRIBUTES[value].text}
-              translate={false}
-              style={{
-                fontSize: fontSize.medium,
-                fontFamily: fontFamily.bold,
-                color: color.light_black,
-              }}
-            />
-          )}
+          <RatsText
+            text={ATTRIBUTES[value].text}
+            translate={false}
+            style={{
+              fontSize: fontSize.medium,
+              fontFamily: fontFamily.bold,
+              color: color.light_black,
+            }}
+          />
         </View>
         <RatsText
           style={{ alignSelf: "center" as const, color: color.light_black }}
           text={
-            value === "wifi"
-              ? "WiFi"
-              : value === "health"
-              ? camelCaseToDisplayForm(ATTRIBUTES[value].text)
-              : camelCaseToDisplayForm(value)
+            value === "wifi" ? "WiFi" : camelCaseToDisplayForm(value)
           }
           translate={false}
         />
@@ -313,7 +312,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  const renderSubheader = (house: House) => {
+  const renderSubheader = (house: HouseListing) => {
     const HOUSE_DESCRIPTION_TEXT: TextStyle = {
       fontSize: fontSize.regular,
       color: color.light_black,
@@ -359,7 +358,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  const renderCost = (house: House) => {
+  const renderCost = (house: HouseListing) => {
     const COST: ViewStyle = {
       justifyContent: "center",
       alignItems: "center",
@@ -369,7 +368,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
       fontSize: fontSize.medium,
       fontFamily: fontFamily.bold,
     };
-    const getCost = (cost: number | string) => `$${cost || 0}`;
+    const getCost = (cost: number | string | undefined) => `$${cost || 0}`;
     return (
       <View
         style={[
@@ -411,7 +410,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  const renderLocation = (house: House) => {
+  const renderLocation = (house: HouseListing) => {
     return (
       <View
         style={[
@@ -428,14 +427,6 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
           <RatsText
             style={{ color: color.dark_grey, marginBottom: normalize(3) }}
             text="LOCATION"
-          />
-          <RatsText
-            style={{
-              fontFamily: fontFamily.bold,
-              fontSize: fontSize.regular_medium,
-              marginBottom: normalize(3),
-            }}
-            text={house.street}
           />
           <RatsText
             style={{
@@ -473,7 +464,7 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  const renderAmenities = (house: House) => {
+  const renderAmenities = (house: HouseListing) => {
     return (
       <View
         style={[
@@ -494,8 +485,42 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
     );
   };
 
-  if (!house) {
+  if (!houseId) {
     return null;
+  }
+
+  if (!house) {
+    if (loadingListing) {
+      return <RatsLoadingIndicator testID="house-summary-loading" />;
+    }
+    // Delisted since the search, or the read failed. The auth stack has no
+    // header, so give the visitor a way back instead of a blank screen.
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          padding: normalize(20),
+        }}
+      >
+        <RatsText
+          translate={false}
+          text={
+            listingFailed
+              ? "Could not load this house. Please try again."
+              : "This house is no longer listed."
+          }
+          style={{ textAlign: "center", marginBottom: normalize(15) }}
+        />
+        <RatsButton
+          testID="house-summary-back"
+          title="BACK"
+          onPress={() => navigation.goBack()}
+          light
+        />
+      </View>
+    );
   }
 
   return (
@@ -503,21 +528,25 @@ const IntroHouseSummary: React.FC<Props> = ({ navigation }) => {
       <ImageHeader
         image={house.imageUrl ? { uri: house.imageUrl } : houseImage}
         onHelpPress={() => {}}
-        vacancy={house.currentCapacity < house.maximumCapacity}
+        vacancy={(house.openBeds ?? 0) > 0}
         navigation={navigation}
       />
       {renderSubheader(house)}
       {renderCost(house)}
       {renderLocation(house)}
       {renderHouseSummary(house)}
-      <View style={{ ...CARD_STYLE, marginBottom: 1 }}>
-        <RatsText
-          translate={false}
-          text="ADMINISTRATORS"
-          style={{ fontFamily: fontFamily.bold }}
-        />
-      </View>
-      {renderCollapsibles()}
+      {!signedOut && (
+        <>
+          <View style={{ ...CARD_STYLE, marginBottom: 1 }}>
+            <RatsText
+              translate={false}
+              text="ADMINISTRATORS"
+              style={{ fontFamily: fontFamily.bold }}
+            />
+          </View>
+          {renderCollapsibles()}
+        </>
+      )}
     </RatsScrollView>
   );
 };

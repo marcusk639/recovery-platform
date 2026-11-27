@@ -17,6 +17,8 @@ export const weeksCollection = ratsFirestore.collection('guest-weeks');
 export const weekSummariesCollection = ratsFirestore.collection('week-summaries');
 export const userCollection = ratsFirestore.collection('users');
 export const houseCollection = ratsFirestore.collection('houses');
+// A house's public listing, server-written (houses/houseListing.ts).
+export const houseListingCollection = ratsFirestore.collection('house-listings');
 export const notificationCollection = ratsFirestore.collection('notifications');
 export const meetingCollection = ratsFirestore.collection('meetings');
 export const reportCollection = ratsFirestore.collection('guest-reports');

@@ -139,7 +139,6 @@ import {
   updateHouse,
   updateHouseAwaitingVerification,
   getNearbyHouses,
-  searchForHouses,
   createHouseBatch,
   finalizeHouseSetup,
   shapeHouses,
@@ -421,45 +420,6 @@ describe("house service", () => {
       const result = await getNearbyHouses(41.8, -87.6, 10);
 
       expect(result).toEqual({});
-    });
-  });
-
-  // ── searchForHouses ───────────────────────────────────────────────────────
-
-  describe("searchForHouses", () => {
-    it("returns all nearby houses when no gender filter is set", async () => {
-      const collectionObj = (firestore as any)._collectionObj;
-      collectionObj.get.mockResolvedValueOnce({
-        docs: [
-          { id: "h1", data: () => ({ name: "House A", gender: "male" }) },
-          { id: "h2", data: () => ({ name: "House B", gender: "female" }) },
-        ],
-      });
-
-      const result = await searchForHouses({
-        filters: { location: { lat: 41.8, lng: -87.6 } },
-      } as any);
-
-      expect(Object.keys(result as object)).toHaveLength(2);
-    });
-
-    it("filters houses by gender when a gender filter is provided", async () => {
-      const collectionObj = (firestore as any)._collectionObj;
-      collectionObj.get.mockResolvedValueOnce({
-        docs: [
-          { id: "h1", data: () => ({ name: "House A", gender: "male" }) },
-          { id: "h2", data: () => ({ name: "House B", gender: "female" }) },
-        ],
-      });
-
-      const result = await searchForHouses({
-        filters: { location: { lat: 41.8, lng: -87.6 }, gender: "male" },
-      } as any);
-
-      expect(Array.isArray(result)).toBe(true);
-      expect((result as any[]).every((h: any) => h.gender === "male")).toBe(
-        true,
-      );
     });
   });
 

@@ -2,10 +2,8 @@
 # and the device placed in Austin (the seeded E2E Test House), the search screen
 # gets a position (no location-denied banner), finishes loading and draws without
 # a crash.
-# Not asserted: the seeded house being listed. A signed-out visitor can't read
-# houses under the rules (houses: read only for the house's own guests and admins,
-# same on main), so the geohash query is refused and the empty state shows. That
-# is a launch bug outside the upgrade; tighten this flow when house search is fixed.
+# Not asserted here: the seeded house being listed. house-search-signed-out.yaml
+# asserts that, now that search reads the public listings (EMU-009).
 # Run: maestro/scripts/run-flows.sh device-house-search-location
 appId: ${APP_ID}
 tags:
