@@ -171,6 +171,7 @@ import notificationsReducer from "../../../state/slices/notificationsSlice";
 import meetingsReducer from "../../../state/slices/meetingsSlice";
 
 import BusinessMeetings from "../BusinessMeetings";
+import { Routes } from "../../../navigation/types";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -452,6 +453,19 @@ describe("BusinessMeetings", () => {
         expect(getByText("Sunday, March 1, 2026")).toBeTruthy();
         expect(getByText("Wednesday, April 1, 2026")).toBeTruthy();
       });
+    });
+
+    // P5 Task 15: the row navigated to 'BusinessMeetingDetail', a name no
+    // navigator registered, so tapping a meeting opened nothing.
+    it("tapping a meeting opens its detail route with the meeting", async () => {
+      const meeting = makeMeeting({ id: "meeting-1" });
+      mockGetBusinessMeetings.mockResolvedValue([meeting]);
+      const { findByTestId } = renderScreen();
+      fireEvent.press(await findByTestId("business-meeting-row-meeting-1"));
+      expect(mockNavigation.navigate).toHaveBeenCalledWith(
+        Routes.BusinessMeetingDetail,
+        { meeting },
+      );
     });
   });
 

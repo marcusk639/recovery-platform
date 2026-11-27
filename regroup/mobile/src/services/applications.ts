@@ -2,6 +2,7 @@ import {
   collection,
   collectionGroup,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
@@ -30,6 +31,21 @@ export type ApplicationInput = {
 const applicationsCollection = (houseId: string) =>
   collection(doc(collection(firestore, 'houses'), houseId), 'applications');
 
+/**
+ * One application per applicant per house (owner, 2026-11-27): its id is
+ * `${houseId}_${uid}`, and the create rule requires that id.
+ */
+export const applicationIdFor = (houseId: string, uid: string) =>
+  `${houseId}_${uid}`;
+
+/** The applicant has already applied to this house; the id is theirs to show. */
+export class ApplicationExistsError extends Error {
+  constructor(public readonly applicationId: string) {
+    super("You've already applied to this house.");
+    this.name = 'ApplicationExistsError';
+  }
+}
+
 export async function submitApplication(
   houseId: string,
   data: ApplicationInput,
@@ -37,8 +53,19 @@ export async function submitApplication(
   const currentUser = auth.currentUser;
   if (!currentUser) throw new Error('Must be signed in to apply');
 
-  const appRef = doc(applicationsCollection(houseId));
-  const appId = appRef.id;
+  const appId = applicationIdFor(houseId, currentUser.uid);
+  const appRef = doc(applicationsCollection(houseId), appId);
+
+  // A second create would be an update, which the rules refuse; say why
+  // instead. The applicant may read their own application.
+  let alreadyApplied: boolean;
+  try {
+    alreadyApplied = (await getDoc(appRef)).exists();
+  } catch (error) {
+    logException(error);
+    throw new Error('Failed to submit application. Please try again.');
+  }
+  if (alreadyApplied) throw new ApplicationExistsError(appId);
 
   const application = {
     id: appId,
@@ -69,6 +96,24 @@ export async function listHouseApplications(
   } catch (error) {
     logException(error);
     throw new Error('Failed to load applications.');
+  }
+}
+
+/**
+ * One application, read by its path. The applicant reads their own and house
+ * admins read their house's (the applications read rule). Null when it does
+ * not exist.
+ */
+export async function getApplication(
+  houseId: string,
+  appId: string,
+): Promise<HouseApplication | null> {
+  try {
+    const snap = await getDoc(doc(applicationsCollection(houseId), appId));
+    return snap.exists() ? (snap.data() as HouseApplication) : null;
+  } catch (error) {
+    logException(error);
+    throw new Error('Failed to load the application.');
   }
 }
 
