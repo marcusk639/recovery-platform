@@ -38,12 +38,18 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
         <!-- Deep Link Intent Filters -->
+        <!-- App Links: host and paths follow regroup/app-links.json (appLinkHost is
+             a manifestPlaceholder in build.gradle; scripts/app-link-registrations.test.js
+             keeps them in agreement). -->
         <intent-filter android:autoVerify="true">
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.DEFAULT" />
             <category android:name="android.intent.category.BROWSABLE" />
-            <data android:scheme="https"
-                  android:host="regroup-app.com" />
+            <data android:scheme="https" />
+            <data android:host="${appLinkHost}" />
+            <data android:path="/invite" />
+            <data android:pathPrefix="/app/" />
+            <data android:path="/checkout-return" />
         </intent-filter>
         <intent-filter>
             <action android:name="android.intent.action.VIEW" />
