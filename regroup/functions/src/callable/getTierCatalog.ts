@@ -11,7 +11,9 @@ import {
   BillingInterval,
 } from '../util/tierPricing';
 
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+// Checkout charges the price Stripe holds at call time, so a changed price
+// shows stale on the pricing page for at most this long.
+const CACHE_TTL_MS = 5 * 60 * 1000;
 // The sales-open switch, apart from prices: the catalog is public and
 // unauthenticated, so it isn't read on every call. Checkout reads it uncached.
 const SALES_TTL_MS = 60 * 1000;

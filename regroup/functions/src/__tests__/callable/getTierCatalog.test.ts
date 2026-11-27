@@ -191,7 +191,7 @@ describe('getTierCatalog: trial length and the sales-open switch', () => {
     expect(result.trialDays).toBe(7);
   });
 
-  it('reports the switch, re-reading it after 60 seconds while prices stay cached for the hour', async () => {
+  it('reports the switch, re-reading it after 60 seconds while prices stay cached', async () => {
     setAllPriceEnvVars();
     const getTierCatalog = loadGetTierCatalog();
     const start = 1_767_225_600_000;
@@ -208,6 +208,27 @@ describe('getTierCatalog: trial length and the sales-open switch', () => {
     now.mockReturnValue(start + 61_000);
     expect((await call(getTierCatalog)).salesOpen).toBe(false);
     expect(mockPricesRetrieve.mock.calls.length).toBe(stripeCalls);
+  });
+
+  // Checkout charges the price Stripe holds at call time, so a changed price
+  // may show stale for at most this long.
+  it('re-reads prices from Stripe after five minutes, not later', async () => {
+    setAllPriceEnvVars();
+    const getTierCatalog = loadGetTierCatalog();
+    const start = 1_767_225_600_000;
+    const now = jest.spyOn(Date, 'now').mockReturnValue(start);
+    mockIsSalesOpen.mockResolvedValue(true);
+
+    await call(getTierCatalog);
+    const firstFetch = mockPricesRetrieve.mock.calls.length;
+
+    now.mockReturnValue(start + 4 * 60_000);
+    await call(getTierCatalog);
+    expect(mockPricesRetrieve.mock.calls.length).toBe(firstFetch);
+
+    now.mockReturnValue(start + 5 * 60_000 + 1);
+    await call(getTierCatalog);
+    expect(mockPricesRetrieve.mock.calls.length).toBe(firstFetch * 2);
   });
 });
 
