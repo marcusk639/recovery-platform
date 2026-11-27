@@ -86,3 +86,69 @@ describe('getDocumentLink', () => {
     expect(mockGetSignedUrl).not.toHaveBeenCalled();
   });
 });
+
+describe("getDocumentLink: a resident's own documents", () => {
+  const OWN = 'houses/h1/guests/g1/documents/doc2';
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockDocs['documents/doc2'] = { houseId: 'h1', guestId: 'g1', storagePath: OWN };
+    mockDocs['guests/g1'] = { houseId: 'h1', userId: 'resident' };
+    mockClaims.resident = { guest: { h1: true } };
+    mockClaims.neighbour = { guest: { h1: true } };
+    mockClaims.discharged = {};
+  });
+
+  it('gives the resident a read link to their own document', async () => {
+    const result = await call('resident', { documentId: 'doc2' });
+    expect(result.url).toBe('https://signed.example/doc');
+    expect(mockFile).toHaveBeenCalledWith(OWN);
+  });
+
+  it("refuses another resident of the house", async () => {
+    await expect(call('neighbour', { documentId: 'doc2' })).rejects.toMatchObject({
+      code: 'not-found',
+    });
+    expect(mockGetSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it('refuses the account once its guest claim is gone (moved out)', async () => {
+    mockDocs['guests/g1'] = { houseId: 'h1', userId: 'discharged' };
+    await expect(call('discharged', { documentId: 'doc2' })).rejects.toMatchObject({
+      code: 'not-found',
+    });
+  });
+
+  it('refuses when the guest record is in another house', async () => {
+    mockDocs['guests/g1'] = { houseId: 'h2', userId: 'resident' };
+    await expect(call('resident', { documentId: 'doc2' })).rejects.toMatchObject({
+      code: 'not-found',
+    });
+  });
+
+  it('refuses when the guest record is missing', async () => {
+    delete mockDocs['guests/g1'];
+    await expect(call('resident', { documentId: 'doc2' })).rejects.toMatchObject({
+      code: 'not-found',
+    });
+  });
+
+  it("won't sign a file outside the resident's own folder", async () => {
+    mockDocs['documents/doc2'] = {
+      houseId: 'h1',
+      guestId: 'g1',
+      storagePath: 'houses/h1/documents/house-lease',
+    };
+    await expect(call('resident', { documentId: 'doc2' })).rejects.toMatchObject({
+      code: 'not-found',
+    });
+    expect(mockGetSignedUrl).not.toHaveBeenCalled();
+  });
+
+  it("still gives the house's admin a link to it", async () => {
+    await expect(call('admin', { documentId: 'doc2' })).resolves.toMatchObject({
+      url: 'https://signed.example/doc',
+    });
+  });
+});
+
