@@ -15,7 +15,7 @@ interface Props extends FilterFormProps {
 
 // "Any" maps to '' (not the literal string 'any') to match the
 // HouseSearchFilter.gender "no filter" sentinel (src/entities/HouseSearch.tsx)
-// and searchForHouses's falsy check (src/services/house.tsx) — a truthy
+// and searchHouseListings's falsy check (src/services/houseListings.ts) — a truthy
 // 'any' would filter for house.gender === 'any', which no house ever has.
 export const genderPickerItems = {
   Male: "male",

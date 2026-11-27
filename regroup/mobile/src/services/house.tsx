@@ -161,22 +161,6 @@ export async function updateHouseAwaitingVerification(
   return updateHouse(house.id, house);
 }
 
-export async function searchForHouses(searchData: HouseSearch) {
-  const houses = await getNearbyHouses(
-    searchData.filters!.location.lat!,
-    searchData.filters!.location.lng!,
-    25,
-  );
-  // filter houses by gender
-  if (searchData?.filters?.gender) {
-    const filteredHouses = filter(houses, (house) => {
-      return house.gender === searchData?.filters?.gender;
-    });
-    return filteredHouses;
-  }
-  return houses;
-}
-
 export async function createHouseBatch(house: House, _admins: Admin[]) {
   const batch = writeBatch(firestore);
   const admins: Admin[] = [];
