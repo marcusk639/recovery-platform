@@ -44,6 +44,8 @@ const ADMIN_SCREENS = [
   Routes.ApplicationDetail,
   Routes.HouseSettings,
   Routes.StaffNotes,
+  // House Settings → Rent: peer leaders get its read-only view.
+  Routes.RentSettings,
 ];
 // Guest Import: bulk-adding residents is for owners and managers (owner,
 // 2026-11-27), the same tiers as the house's money.
@@ -53,6 +55,8 @@ const MONEY_SCREENS = [
   Routes.PaymentDashboard,
   Routes.StripeSettings,
   Routes.AdminReport,
+  // A resident's balance: owners and managers correct it.
+  Routes.GuestBalance,
 ];
 // Stripe Connect setup is the owner's (OPS-042): the Connect callables accept
 // only the house's owners, so a manager is refused it too.

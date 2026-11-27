@@ -21,6 +21,8 @@ import HouseSettings from '../screens/HouseSettings/HouseSettings';
 import StripeSettingsScreen from '../screens/HouseSettings/StripeSettingsScreen';
 import AdminReportScreen from '../screens/AdminReport/AdminReportScreen';
 import StaffNotesFeed from '../screens/StaffNotes/StaffNotesFeed';
+import RentSettingsScreen from '../screens/HouseSettings/RentSettingsScreen';
+import GuestBalanceScreen from '../screens/GuestUpdate/GuestBalanceScreen';
 
 const SCREENS: Record<string, [React.ComponentType<any>, HouseRank]> = {
   [Routes.DrugTesting]: [DrugTestingScreen, 'admin'],
@@ -39,6 +41,12 @@ const SCREENS: Record<string, [React.ComponentType<any>, HouseRank]> = {
   // Stripe Connect setup: the Connect callables accept only the house's owners.
   [Routes.StripeSettings]: [StripeSettingsScreen, 'owner'],
   [Routes.AdminReport]: [AdminReportScreen, 'manager'],
+  // House Settings → Rent: every admin. A peer leader gets the read-only view
+  // (useMayEditRentMoney); residents are refused.
+  [Routes.RentSettings]: [RentSettingsScreen, 'admin'],
+  // A resident's balance, for staff correcting it: owners and managers, as the
+  // rules' rentMoneyByManager. Only GuestHome's staff Balance card opens it.
+  [Routes.GuestBalance]: [GuestBalanceScreen, 'manager'],
 };
 
 /** Route → its minimum rank, for the guard tests. */

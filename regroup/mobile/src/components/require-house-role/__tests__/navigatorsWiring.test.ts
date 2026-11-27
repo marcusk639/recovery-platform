@@ -34,4 +34,9 @@ describe('navigators.tsx registers operator-only screens behind their role check
       /from '\.\.\/screens\/HouseSettings\/(HouseSettings|PaymentDashboard|StripeSettingsScreen)'/,
     );
   });
+
+  it('imports neither rent screen directly (RentSettings, GuestBalance)', () => {
+    expect(source).not.toMatch(/from '\.\.\/screens\/HouseSettings\/RentSettingsScreen'/);
+    expect(source).not.toMatch(/from '\.\.\/screens\/GuestUpdate\/GuestBalanceScreen'/);
+  });
 });
