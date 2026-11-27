@@ -61,21 +61,31 @@ export const stringToColour = (
 };
 
 const RatsAvatar = (props: RatsAvatarProps) => {
-  const { name, placeholderStyle, placeholderTextStyle, source, style, ...restProps } = props;
+  const { name, placeholderStyle, placeholderTextStyle, source, style, onError, ...restProps } = props;
   const { first, second } = getInitials(name);
   const [viewLayout, setViewLayout] = useState({ height: 0, width: 0 });
-  //@ts-ignore
-  if (source && source.uri) {
+  // The initials stand in for an image that fails to load: a URL that no
+  // longer works, or a file path an older build saved as the avatar (it shows
+  // only on the phone that picked it, if at all). Keyed by uri, so a new
+  // avatar is tried again.
+  const [failedUri, setFailedUri] = useState<string | null>(null);
+  const uri = (source as { uri?: string } | undefined)?.uri;
+  if (uri && uri !== failedUri) {
     return (
       <RatsImage
         source={source}
         style={style || imageStyles}
+        onError={event => {
+          setFailedUri(uri);
+          onError?.(event);
+        }}
         {...restProps}
       />
     );
   } else {
     return (
       <View
+        testID={props.testID ? `${props.testID}-placeholder` : undefined}
         onLayout={event =>
           setViewLayout({
             height: event.nativeEvent.layout.height,

@@ -65,6 +65,18 @@ export const uploadUserAvatar = async (
   return uploadPhoto(getUserAvatarUrl(userId), pathOnDevice, metadata);
 };
 
+// storage.rules: users/{uid}/avatar is written and read by its owner only, so
+// the owner reads its download URL once, here, and stores that in the user doc
+// (and the guest/admin copies); everyone else shows the URL.
+export const uploadUserAvatarAndGetUrl = async (
+  pathOnDevice: string,
+  userId: string,
+  metadata?: SettableMetadata,
+): Promise<string> => {
+  await uploadUserAvatar(pathOnDevice, userId, metadata);
+  return getDownloadURL(ref(getStorage(), getUserAvatarUrl(userId)));
+};
+
 export const uploadGuestAvatar = async (
   pathOnDevice: string,
   houseId: string,

@@ -88,12 +88,15 @@ const EditUserInfoFormView = (props: EditUserInfoProps & FormikProps<User>) => {
                 if (asset) {
                   const uri = asset.uri;
                   props.setFieldValue("avatar", uri);
+                  // For the upload's content type (EditUserInfoForm).
+                  props.setFieldValue("avatarContentType", asset.type ?? null);
                 }
               }}
               label={props.values.avatar ? "Avatar" : "Upload Avatar"}
               avatarStyle
               onClear={() => {
                 props.setFieldValue("avatar", "");
+                props.setFieldValue("avatarContentType", null);
               }}
               uri={props.values.avatar}
             />

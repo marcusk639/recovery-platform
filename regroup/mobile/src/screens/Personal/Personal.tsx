@@ -382,6 +382,7 @@ const PersonalScreen: React.FC<PersonalProps> = ({ navigation }) => {
         name={fullName || " "}
         type={user && user.isAdmin ? "Admin" : "Guest"}
         avatarUrl={_user?.avatar || ""}
+        testID="personal-avatar"
       />
     );
   };

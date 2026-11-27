@@ -12,8 +12,17 @@ import Admin from "../../entities/Admin";
 import EditUserInfoFormView, {
   EditUserInfoProps,
 } from "./EditUserInfoFormView";
+import { auth } from "../../../firebase-setup";
+import { logException } from "../../util/logging";
+import { avatarForSave } from "./profileAvatar";
 
-type EditUserInfoValues = Partial<User>;
+// `avatarContentType` is the picked photo's type, for the upload only: it is
+// never saved.
+type EditUserInfoValues = Partial<User> & { avatarContentType?: string | null };
+
+export const AVATAR_UPLOAD_FAILED_TITLE = "Photo Upload Failed";
+export const AVATAR_UPLOAD_FAILED_MESSAGE =
+  "Couldn't upload your photo, so nothing was saved. Check your connection and try again, or remove the photo to save the rest.";
 
 const stats: string[] = [
   "dateOfBirth",
@@ -36,7 +45,7 @@ const EditUserInfoForm = withFormik<EditUserInfoProps, EditUserInfoValues>({
     );
     return values;
   },
-  handleSubmit: async (values: Partial<User>, formikBag) => {
+  handleSubmit: async (formValues: EditUserInfoValues, formikBag) => {
     const {
       guest,
       user,
@@ -46,6 +55,27 @@ const EditUserInfoForm = withFormik<EditUserInfoProps, EditUserInfoValues>({
       updateAdmin,
       navigation,
     } = formikBag.props;
+
+    // A newly picked photo is uploaded first and saved as its download URL
+    // (the picker's file path shows on no other phone). If the upload fails,
+    // nothing is saved and the user is told.
+    const { avatarContentType, ...values } = formValues;
+    try {
+      const uid = auth.currentUser?.uid;
+      const picked = values.avatar && values.avatar !== user?.avatar;
+      if (picked && !uid) throw new Error("EditUserInfoForm: no signed-in user");
+      values.avatar = (await avatarForSave(
+        values.avatar,
+        user?.avatar,
+        uid ?? "",
+        avatarContentType
+      )) as string | undefined;
+    } catch (uploadError) {
+      logException(uploadError, "EditUserInfoForm: avatar upload failed");
+      formikBag.setSubmitting(false);
+      Alert.alert(AVATAR_UPLOAD_FAILED_TITLE, AVATAR_UPLOAD_FAILED_MESSAGE);
+      return;
+    }
 
     try {
       // Update user with new values
