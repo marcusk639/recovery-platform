@@ -117,6 +117,45 @@ describe('toHouseListing', () => {
     expect(toHouseListing('h1', house({ subscriptionStatus: 'trialing' }))).not.toBeNull();
   });
 
+  // Owner decision 2026-11-27: a past-due house leaves search when the app's
+  // guest grace ends (guestGraceEndsAt), not when Stripe gives up.
+  describe('a past-due house', () => {
+    const NOW = Date.parse('2026-12-01T12:00:00Z');
+    const pastDue = (guestGraceEndsAt?: unknown) =>
+      house({ subscriptionStatus: 'past_due', guestGraceEndsAt });
+
+    it('is listed while its guest grace runs', () => {
+      expect(toHouseListing('h1', pastDue('2026-12-03T00:00:00Z'), NOW)).not.toBeNull();
+    });
+
+    it('is not listed once its guest grace has ended', () => {
+      expect(toHouseListing('h1', pastDue('2026-12-01T11:59:59Z'), NOW)).toBeNull();
+      expect(toHouseListing('h1', pastDue('2026-12-01T12:00:00Z'), NOW)).toBeNull();
+    });
+
+    it.each([
+      ['no deadline', undefined],
+      ['an unreadable deadline', 'soon'],
+      ['a deadline that is not a string', 1764590400000],
+    ])('is not listed with %s', (_label, deadline) => {
+      expect(toHouseListing('h1', pastDue(deadline), NOW)).toBeNull();
+    });
+
+    it('never puts the grace deadline in the listing', () => {
+      expect(toHouseListing('h1', pastDue('2026-12-03T00:00:00Z'), NOW)).not.toHaveProperty(
+        'guestGraceEndsAt',
+      );
+    });
+
+    it('is planned for deletion once the grace ends, from the same builder', () => {
+      const listed = toHouseListing('h1', pastDue('2026-12-03T00:00:00Z'), NOW)!;
+      const later = Date.parse('2026-12-03T00:00:01Z');
+      expect(
+        planHouseListing('h1', pastDue('2026-12-03T00:00:00Z'), { ...listed }, later),
+      ).toEqual({ kind: 'delete' });
+    });
+  });
+
   it('drops a field of the wrong type instead of copying it', () => {
     const listing = toHouseListing(
       'h1',

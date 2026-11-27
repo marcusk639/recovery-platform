@@ -58,7 +58,7 @@ ALL_FUNCTIONS=(
   onActivityWritten onGuestLinkedRestamp onHouseRentSettingsWrite onHouseListingSync
   onUserAdminProfileSync
   updateDisputes warmWebsite officerTermReminder weeklyTransfers
-  overdueRentNotification scheduledRentCollection rentCharges
+  overdueRentNotification scheduledRentCollection rentCharges houseListingGraceSweep
 )
 
 BATCH_SIZE=5
