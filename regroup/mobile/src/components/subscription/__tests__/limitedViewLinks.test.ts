@@ -23,7 +23,11 @@ describe('linking config and the limited view', () => {
     expect(names.length).toBeGreaterThan(0);
   });
 
-  it.each([Routes.PaymentHistory, Routes.Documents])('has no deep link to %s', (route) => {
-    expect(names).not.toContain(route);
-  });
+  // DeleteAccount is reached from the limited view and the paywall too.
+  it.each([Routes.PaymentHistory, Routes.Documents, Routes.DeleteAccount])(
+    'has no deep link to %s',
+    (route) => {
+      expect(names).not.toContain(route);
+    },
+  );
 });

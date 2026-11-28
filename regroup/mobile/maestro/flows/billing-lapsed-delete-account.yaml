@@ -1,0 +1,64 @@
+# BILL-023 (App Store 5.1.1(v)): a lapsed operator can still reach account
+# deletion. SubscriptionGate replaces the tabs, so Personal > Delete account is
+# out of reach; the paywall's "Delete account" opens the same DeleteAccount
+# screen (password check, then the deleteAccount callable).
+# Persona: lapsed-operator (house test-house-lapsed, subscriptionStatus canceled).
+#
+# Non-destructive on purpose: the seed's lapsed operator is shared with the
+# other billing flows, and its sub_<uid> id isn't in Stripe, so a real deletion
+# would stop at the billing check anyway. A wrong password is refused by the
+# re-authentication before the callable runs, and proves the screen works
+# from the paywall. The deletion itself is covered by DeleteAccount.test.tsx,
+# account.test.ts and the functions' accountDeletion tests.
+#
+# Run: maestro/scripts/run-flows.sh billing-lapsed-delete-account
+appId: ${APP_ID}
+tags:
+  - operator
+  - billing
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: test-lapsed-operator@rats-e2e.com
+      PASSWORD: ${E2E_TEST_PASSWORD}
+      LANDING_ID: subscription-required-screen
+- tapOn:
+    id: btn-delete-account
+- extendedWaitUntil:
+    visible:
+      id: delete-password-input
+    timeout: 15000
+- assertVisible:
+    text: ".*This cannot be undone.*"
+- assertNotVisible:
+    id: subscription-required-screen
+- tapOn:
+    id: delete-password-input
+- inputText: not-the-password
+- hideKeyboard
+- tapOn:
+    id: delete-account-button
+- extendedWaitUntil:
+    visible:
+      id: delete-account-error
+    timeout: 20000
+- assertVisible:
+    text: "That password is incorrect."
+# Back to the paywall: still lapsed, still blocked, still signed in.
+- tapOn:
+    id: back-button
+- extendedWaitUntil:
+    visible:
+      id: subscription-required-screen
+    timeout: 15000
+- assertNotVisible:
+    id: house-tab
+# Sign out so the next flow starts signed out (clearState keeps the iOS keychain).
+- tapOn:
+    text: "Sign out"
+- extendedWaitUntil:
+    visible:
+      id: initial-landing-screen
+    timeout: 30000

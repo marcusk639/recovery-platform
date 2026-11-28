@@ -79,6 +79,16 @@ describe('ResidentLimitedView', () => {
     expect(screen.queryByTestId('limited-documents')).toBeNull();
   });
 
+  // App Store 5.1.1(v): this view replaces the tabs, so it is the only way to
+  // the existing Delete account screen (Personal is out of reach).
+  it('opens the existing Delete account screen, with or without their record', () => {
+    mockGuest = null;
+    const screen = render(<ResidentLimitedView />);
+    fireEvent.press(screen.getByTestId('limited-delete-account'));
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith(Routes.DeleteAccount);
+  });
+
   it('signs out', () => {
     const screen = render(<ResidentLimitedView />);
     fireEvent.press(screen.getByTestId('limited-sign-out'));
