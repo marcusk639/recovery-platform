@@ -31,14 +31,24 @@ jobs:
         if: ${{ !contains(github.event.pull_request.labels.*.name, 'test-change-approved') }}
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        # The gate script comes from the base commit, not the PR, so a PR cannot
-        # weaken the check that is judging it. A PR that changes verify-diff.sh is
-        # still checked by the old version; the new one applies once merged.
+        # The checkout is GitHub's merge ref (the PR merged into the base branch as
+        # it is now), so the PR's own change is HEAD^1..HEAD. base.sha is NOT used
+        # as the base: GitHub can leave it at an older base tip, and diffing from
+        # there counts every test change merged to main since as this PR's.
+        # The gate script comes from the base side (HEAD^1), not the PR, so a PR
+        # cannot weaken the check that is judging it. A PR that changes
+        # verify-diff.sh is still checked by the old version; the new one applies
+        # once merged.
         run: |
+          if git rev-parse -q --verify HEAD^2 >/dev/null; then
+            BASE="$(git rev-parse HEAD^1)"
+          else
+            BASE="$(git merge-base "$BASE_SHA" HEAD)"
+          fi
           GATE="$RUNNER_TEMP/verify-diff.sh"
-          if ! git show "$BASE_SHA:.claude/agent-gates/verify-diff.sh" > "$GATE"; then
+          if ! git show "$BASE:.claude/agent-gates/verify-diff.sh" > "$GATE"; then
             echo "::warning::verify-diff.sh not found at the base commit; gate skipped"
             exit 0
           fi
           chmod +x "$GATE"
-          "$GATE" "$(git merge-base "$BASE_SHA" HEAD)"
+          "$GATE" "$BASE"

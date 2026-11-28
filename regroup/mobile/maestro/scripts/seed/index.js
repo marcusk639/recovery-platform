@@ -32,6 +32,7 @@ const { getAuth } = require('firebase-admin/auth');
 const { getFirestore, Timestamp } = require('firebase-admin/firestore');
 const d = require('./docs');
 const { LAPSED_HOUSE, lapsedHouse } = require('./lapsedHouse');
+const { DEMO_HOUSE, demoHouse } = require('./demoHouse');
 
 const PLACEHOLDER_STRIPE_ACCOUNT = 'acct_e2e_placeholder';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -70,9 +71,12 @@ async function main() {
   const guestB = d.resident('guest-b', 0);
   // Not onboarded yet, for oxford-onboarding.yaml. The other Oxford house has finished.
   const oxfordNew = d.operator('oxford-new-operator', d.OXFORD_NEW, true, now);
+  // Staff below the owner on the test house (OPS-042, the peer-leader flows).
+  const staffManager = d.staff('staff-manager', 'manager');
+  const peerLeader = d.staff('peer-leader', 'peerLeader');
   // A blocked house and its resident, for resident-limited-view.yaml.
   const lapsed = lapsedHouse(now, Timestamp);
-  const people = [manager, oxford, oxfordNew, lapsed.operator, guestA, guestB, lapsed.resident];
+  const people = [manager, oxford, oxfordNew, lapsed.operator, guestA, guestB, lapsed.resident, staffManager, peerLeader];
 
   // 1. Accounts, claims and users docs, before houses: the subscription trigger reads them.
   for (const p of people) {
@@ -85,9 +89,22 @@ async function main() {
     await auth.setCustomUserClaims(p.uid, p.claims);
     await db.doc(`users/${p.uid}`).set(p.user);
   }
-  for (const p of [manager, oxford, oxfordNew, lapsed.operator]) {
+  for (const p of [manager, oxford, oxfordNew, lapsed.operator, staffManager, peerLeader]) {
     await db.doc(`admins/${p.uid}`).set(p.admin);
   }
+  // The App Review demo account (demo-account-refused.yaml), with the password
+  // the app's Demo link uses rather than the shared test password.
+  const demo = demoHouse(now);
+  await auth.createUser({
+    uid: demo.account.uid,
+    email: demo.account.email,
+    password: demo.account.password,
+    emailVerified: true,
+  });
+  await auth.setCustomUserClaims(demo.account.uid, demo.account.claims);
+  await db.doc(`users/${demo.account.uid}`).set(demo.account.user);
+  await db.doc(`admins/${demo.account.uid}`).set(demo.account.admin);
+  await db.doc('config/demoAccount').set(demo.config);
   await sleep(1500);
 
   // 2. Houses and their owner role records.
@@ -113,6 +130,15 @@ async function main() {
     via: 'seed',
   };
   await db.doc(`house-roles/${d.HOUSE}_${manager.uid}`).set(ownerRole);
+  for (const p of [staffManager, peerLeader]) {
+    await db.doc(`house-roles/${d.HOUSE}_${p.uid}`).set({
+      tier: p.tier,
+      primary: false,
+      grantedBy: manager.uid,
+      grantedAt: d.iso(now),
+      via: 'seed',
+    });
+  }
   await db.doc(`house-roles/${d.OXFORD}_${oxford.uid}`).set(ownerRole);
   await db.doc(`houses/${d.OXFORD_NEW}`).set(
     d.house(d.OXFORD_NEW, 'E2E New Oxford House', oxfordNew.uid, now, {
@@ -123,6 +149,8 @@ async function main() {
     }),
   );
   await db.doc(`house-roles/${d.OXFORD_NEW}_${oxfordNew.uid}`).set(ownerRole);
+  await db.doc(`houses/${DEMO_HOUSE}`).set(demo.house);
+  await db.doc(`house-roles/${DEMO_HOUSE}_${demo.account.uid}`).set(ownerRole);
   await db.doc(`houses/${LAPSED_HOUSE}`).set(lapsed.house);
   await db.doc(`house-roles/${LAPSED_HOUSE}_${lapsed.operator.uid}`).set(ownerRole);
 

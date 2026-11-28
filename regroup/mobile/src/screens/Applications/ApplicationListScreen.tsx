@@ -16,6 +16,8 @@ import {
 } from '../../entities/Application';
 import { Routes } from '../../navigation/types';
 import { useAppSelector } from '../../state/store';
+import { useApplicationsAccess } from '../../state/queries/houseTierQueries';
+import ApplicationsAccessState from './ApplicationsAccessState';
 
 type TabKey = 'pending' | 'reviewing' | 'decided';
 
@@ -53,13 +55,20 @@ export default function ApplicationListScreen() {
   );
   const [activeTab, setActiveTab] = useState<TabKey>('pending');
 
-  const { data: apps, isLoading } = useHouseApplications(houseId);
+  // Owners and managers only (owner decision 2026-11-27): a peer leader's
+  // read is refused by the rules, so it is never made.
+  const { access, retry } = useApplicationsAccess(houseId);
+  const { data: apps, isLoading } = useHouseApplications(houseId, access === 'yes');
   const filtered = (apps ?? []).filter(
     a => statusToTab(a.status) === activeTab,
   );
 
   const countFor = (tab: TabKey) =>
     (apps ?? []).filter(a => statusToTab(a.status) === tab).length;
+
+  if (access !== 'yes') {
+    return <ApplicationsAccessState access={access} retry={retry} />;
+  }
 
   return (
     <View style={styles.container}>

@@ -1,0 +1,48 @@
+# S5 (REV-A8): the shared App Review demo account can look around its demo
+# house, and is refused what changes state or costs money.
+# Persona: the demo account the landing screen's Demo link signs in to
+# (seeded by maestro/scripts/seed/demoHouse.js with the demo: true claim).
+# 1. The demo account signs in and sees the demo house.
+# 2. House settings is refused in the app ("disabled in demo mode").
+# 3. The server refuses it too, whatever the app does: createInvitation answers
+#    PERMISSION_DENIED with the same words, and a Storage upload is refused.
+# Run: maestro test -e APP_ID=com.rats.dev.e2e.emu maestro/flows/demo-account-refused.yaml
+appId: ${APP_ID}
+tags:
+  - demo
+  - security
+---
+- runFlow: ../subflows/guard-e2e-app.yaml
+# Signs in through the login form with the Demo link's credentials. The Demo
+# link itself (landing-demo-link) has its own flow, landing-demo-link.yaml.
+- runFlow:
+    file: ../subflows/login.yaml
+    env:
+      EMAIL: demo_user@appdemo.net
+      PASSWORD: DemoUser1
+# The house header is not text in the hierarchy; its settings button is.
+- extendedWaitUntil:
+    visible:
+      id: "house-settings-button"
+    timeout: 30000
+- tapOn:
+    id: "house-settings-button"
+- extendedWaitUntil:
+    visible: ".*disabled in demo mode.*"
+    timeout: 15000
+- runScript:
+    file: ../scripts/maestro-js/demo-server-refusals.js
+- assertTrue:
+    condition: ${output.signedIn}
+    label: the demo account signs in to the emulator
+- assertTrue:
+    condition: ${output.inviteStatus === 'PERMISSION_DENIED'}
+    label: createInvitation refuses the demo account
+- assertTrue:
+    condition: ${output.inviteMessage === 'This functionality is disabled in demo mode.'}
+    label: with the app's demo wording
+- assertTrue:
+    condition: ${output.uploadStatus === '403'}
+    label: Storage refuses an upload by the demo account
+- runFlow:
+    file: ../subflows/logout.yaml

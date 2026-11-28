@@ -2,6 +2,7 @@ type Doc = { path: string; data: Record<string, unknown> };
 let store: Doc[] = [];
 const mockFileDelete = jest.fn();
 const mockDeleteFiles = jest.fn();
+const mockGetFiles = jest.fn();
 const mockBatchCommit = jest.fn();
 const batchSizes: number[] = [];
 
@@ -11,6 +12,7 @@ jest.mock('firebase-admin', () => ({
     bucket: () => ({
       file: (p: string) => ({ delete: (o: unknown) => mockFileDelete(p, o) }),
       deleteFiles: (o: unknown) => mockDeleteFiles(o),
+      getFiles: (o: unknown) => mockGetFiles(o),
     }),
   }),
 }));
@@ -99,6 +101,13 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockFileDelete.mockResolvedValue(undefined);
   mockDeleteFiles.mockResolvedValue(undefined);
+  mockGetFiles.mockResolvedValue([[]]);
+});
+
+// A listed Storage object: its delete is recorded under its name.
+const storedFile = (name: string) => ({
+  name,
+  delete: (o: unknown) => mockFileDelete(name, o),
 });
 
 describe('deletePersonalData', () => {
@@ -202,6 +211,44 @@ describe('deletePersonalData', () => {
     ];
     await deletePersonalData(UID, [], {});
     expect(paths()).toEqual(['userDeviceTokens/other']);
+  });
+
+  it("deletes the user's chore photos in every house (owner decision 2026-11-27)", async () => {
+    mockGetFiles.mockResolvedValue([
+      [storedFile(`houses/h1/chore-evidence/${UID}/g1_1`), storedFile(`houses/h9/chore-evidence/${UID}/g7_2`)],
+    ]);
+    await deletePersonalData(UID, [], {});
+    expect(mockGetFiles).toHaveBeenCalledWith({ matchGlob: `houses/*/chore-evidence/${UID}/**` });
+    expect(mockFileDelete).toHaveBeenCalledWith(`houses/h1/chore-evidence/${UID}/g1_1`, {
+      ignoreNotFound: true,
+    });
+    expect(mockFileDelete).toHaveBeenCalledWith(`houses/h9/chore-evidence/${UID}/g7_2`, {
+      ignoreNotFound: true,
+    });
+  });
+
+  it("never deletes another resident's chore photo, even if the listing ignored the glob", async () => {
+    mockGetFiles.mockResolvedValue([
+      [
+        storedFile(`houses/h1/chore-evidence/${UID}/mine`),
+        storedFile('houses/h1/chore-evidence/other/theirs'),
+        storedFile(`houses/h1/chore-evidence/${UID}x/near-miss`),
+        storedFile(`houses/h1/guests/g1/avatar/${UID}`),
+        storedFile(`houses/h1/photo`),
+      ],
+    ]);
+    await deletePersonalData(UID, [], {});
+    const deleted = mockFileDelete.mock.calls.map((c) => c[0]).filter((p) => p.startsWith('houses/'));
+    expect(deleted).toEqual([`houses/h1/chore-evidence/${UID}/mine`]);
+  });
+
+  it("deletes the user's claims-refresh marker and nobody else's", async () => {
+    store = [
+      { path: `claims-updates/${UID}`, data: { updatedAt: 1 } },
+      { path: 'claims-updates/other', data: { updatedAt: 1 } },
+    ];
+    await deletePersonalData(UID, [], {});
+    expect(paths()).toEqual(['claims-updates/other']);
   });
 
   it("deletes the resident's uploaded document records and files", async () => {

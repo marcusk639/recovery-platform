@@ -17,8 +17,8 @@ const ORDER: Section[] = [
   'activities', 'drugTests', 'issues', 'complaints', 'reports',
 ];
 const LATER_SECTIONS = new Set<Section>(['beds', 'drugTests', 'issues', 'complaints', 'reports']);
-// Peer leaders see less (owner decision, 2026-11-09).
-const FULL_VIEW_SECTIONS = new Set<Section>(['payments', 'balances', 'reports']);
+// Peer leaders see less (owner decisions, 2026-11-09, and 2026-11-27 for applications).
+const FULL_VIEW_SECTIONS = new Set<Section>(['applications', 'payments', 'balances', 'reports']);
 
 const LATER_ROUTES = new Set<string>([
   Routes.Beds,
@@ -32,8 +32,11 @@ const LATER_ROUTES = new Set<string>([
 ]);
 
 // Pages a peer leader doesn't get, even by URL or bookmark (owner decisions, 2026-11-09,
-// and 2026-11-11 for a resident's own payments).
+// 2026-11-11 for a resident's own payments, and 2026-11-27 for applications, which the
+// rules let only owners and managers read).
 const FULL_VIEW_ROUTES = new Set<string>([
+  Routes.ApplicationList,
+  Routes.ApplicationDetail,
   Routes.PaymentDashboard,
   Routes.AdminReport,
   Routes.BalanceDashboard,

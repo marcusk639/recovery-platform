@@ -9,6 +9,7 @@ import { createHouseInputSchema } from '../houses/houseInput';
 import { writeOperatorSetupFlags } from '../houses/operatorSetup';
 import { grantHouseRoles } from '../util/claims';
 import { parseInput } from '../validation';
+import { refuseDemoAccount } from '../util/demoAccount';
 
 const createHousesSchema = z.object({
   houses: z
@@ -43,6 +44,7 @@ export { OPERATOR_SETUP_FIELDS } from '../houses/operatorSetup';
  * operator already owns are not rewritten, and the claims are granted again.
  */
 export const createHouses = onCall(async (request): Promise<CreateHousesResponse> => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) {
     throw new HttpsError('unauthenticated', 'Login required');
   }

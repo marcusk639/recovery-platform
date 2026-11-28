@@ -44,7 +44,12 @@ export function navigateAuthStackRoute(
   }
 }
 
-/** Enter the main app without forcing a tab (uses navigator default). */
+/**
+ * Enter the main app without forcing a tab (uses navigator default). Not after
+ * a sign-in from an auth screen: the sign-in remounts the root navigator, so
+ * this screen's navigation is gone; use resetToSignedInRoute
+ * (signedInNavigation.ts).
+ */
 export function navigateToMain(navigation: MainEntryNavigation): void {
   navigation.dispatch(CommonActions.navigate({ name: Routes.Main }));
 }

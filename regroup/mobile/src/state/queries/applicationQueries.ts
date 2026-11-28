@@ -39,7 +39,7 @@ export const useMyApplications = (enabled = true) => {
 
 /**
  * One application by id: the applicant's own (ApplicationStatus) or, for an
- * admin, one of the house's (the intake pre-fill).
+ * owner or manager, one of the house's (the intake pre-fill).
  */
 export const useApplication = (
   houseId: string,

@@ -12,6 +12,26 @@ type PagedQuery = {
   get(): Promise<{ empty: boolean; docs: Snap[] }>;
 };
 
+type Bucket = ReturnType<ReturnType<typeof admin.storage>['bucket']>;
+
+/**
+ * The user's chore photos in every house (storage.rules
+ * houses/{houseId}/chore-evidence/{uid}/{file}; owner decision 2026-11-27:
+ * they go with the account). Listed by glob, then each name re-checked here,
+ * so a backend that ignored the glob could not delete anyone else's files.
+ */
+async function deleteChorePhotos(bucket: Bucket, uid: string): Promise<void> {
+  const [files] = await bucket.getFiles({ matchGlob: `houses/*/chore-evidence/${uid}/**` });
+  const own = files.filter((file) => {
+    const parts = file.name.split('/');
+    return parts.length >= 5 && parts[0] === 'houses' && parts[2] === 'chore-evidence' && parts[3] === uid;
+  });
+  for (const file of own) {
+    await file.delete({ ignoreNotFound: true });
+  }
+  logger.info('accountDeletion: chore photos deleted', { count: own.length });
+}
+
 /**
  * Delete every doc matching the query (optionally narrowed by `shouldDelete`), in pages of
  * at most 400 writes. Pages with a startAfter cursor so pages made up entirely of
@@ -96,9 +116,12 @@ export async function deletePersonalData(
   };
   // FCM tokens, written by mobile registerDeviceToken as userDeviceTokens/{uid}.
   await collection('userDeviceTokens').doc(uid).delete();
+  // The claims-refresh marker (util/userClaims.ts).
+  await collection('claims-updates').doc(uid).delete();
 
   const bucket = admin.storage().bucket();
   await bucket.file(`users/${uid}/avatar`).delete({ ignoreNotFound: true });
+  await deleteChorePhotos(bucket, uid);
   const noHouse: string[] = [];
   for (const guestId of guestIds) {
     const houseId = houseIdsByGuest[guestId];

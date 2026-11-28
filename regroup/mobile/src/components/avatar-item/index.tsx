@@ -19,6 +19,8 @@ interface Props {
   avatarStyle?: any;
   nameStyle?: TextStyle;
   subTextStyle?: TextStyle;
+  /** The image's testID; the initials placeholder gets `${testID}-placeholder`. */
+  testID?: string;
 }
 
 const AvatarItem = (props: Props) => {
@@ -30,6 +32,7 @@ const AvatarItem = (props: Props) => {
     nameStyle = {},
     subTextStyle = {},
     avatarUrl = null,
+    testID,
   } = props;
   return (
     <View style={[ROW, container]}>
@@ -43,6 +46,7 @@ const AvatarItem = (props: Props) => {
           ...avatarStyle,
         }}
         source={avatarUrl ? { uri: avatarUrl } : ({} as any)}
+        testID={testID}
         resizeMethod="resize"
         resizeMode="cover"
       />

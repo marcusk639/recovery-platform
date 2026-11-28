@@ -3,6 +3,7 @@
     "messaging_ios_foreground_presentation_options": ["badge", "sound", "banner", "list"]
   },
   "firestore": {
+    "predeploy": ["node \"$PROJECT_DIR/../../scripts/preflight-demo-account.js\""],
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
@@ -10,6 +11,7 @@
     "rules": "database.rules.json"
   },
   "storage": {
+    "predeploy": ["node \"$PROJECT_DIR/../../scripts/preflight-demo-account.js\""],
     "rules": "storage.rules"
   },
   "emulators": {

@@ -75,13 +75,33 @@ const mockUseHouseApplications = jest.fn(
 jest.mock('../../../state/queries/applicationQueries', () => ({
   useHouseApplications: (...args: any[]) => mockUseHouseApplications(...args),
 }));
+// Owners and managers only review applications (owner decision 2026-11-27).
+let mockMayReviewApplications = true;
+// The caller's tier in the house (myHouseTiers), for the gear: a manager or a
+// peer leader.
+let mockHouseTier: string | undefined;
+jest.mock('../../../state/queries/houseTierQueries', () => ({
+  ...jest.requireActual('../../../state/queries/houseTierQueries'),
+  useMayReviewApplications: (houseId: string) => mockUseMayReviewApplications(houseId),
+  useMyHouseTier: () => mockHouseTier,
+}));
+const mockUseMayReviewApplications = jest.fn(
+  (houseId: string) => houseId === 'house-1' && mockMayReviewApplications,
+);
 
 // ─── Can component mock — always render the "yes" branch by default ───────────
 // We override per-describe block where needed
 let mockCanGranted = true;
+// The gear tests use the real permission check, so they prove which roles
+// and tiers get the gear, not just that HouseSummary obeys a stub.
+let mockUseRealCan = false;
 jest.mock('../../../components/auth', () => ({
-  Can: ({ yes, no }: { yes: () => any; no: () => any }) =>
-    mockCanGranted ? yes() : no(),
+  Can: (props: { yes: () => any; no: () => any }) =>
+    mockUseRealCan
+      ? jest.requireActual('../../../components/auth/can').default(props)
+      : mockCanGranted
+        ? props.yes()
+        : props.no(),
 }));
 
 // ─── React Query hooks mock ───────────────────────────────────────────────────
@@ -387,6 +407,9 @@ describe('HouseSummary', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockCanGranted = true;
+    mockMayReviewApplications = true;
+    mockUseRealCan = false;
+    mockHouseTier = undefined;
     mockToken = { role: { 'house-1': 'admin' }, claims: {} };
     // Default: React Query returns no data (falls back to Redux guests)
     mockUseGuests.mockReturnValue({
@@ -501,6 +524,48 @@ describe('HouseSummary', () => {
       mockCanGranted = false;
       const { queryByTestId } = renderScreen();
       expect(queryByTestId('house-settings-button')).toBeNull();
+    });
+
+    // Owner decision 2026-11-27 (#308): managers get the gear too.
+    describe('who gets the gear', () => {
+      beforeEach(() => {
+        mockUseRealCan = true;
+      });
+
+      it('shows a manager the gear, which opens House Settings', () => {
+        mockToken = { role: { 'house-1': 'admin' }, claims: {} };
+        mockHouseTier = 'manager';
+        const { getByTestId } = renderScreen();
+        fireEvent.press(getByTestId('house-settings-button'));
+        expect(mockNavigation.navigate).toHaveBeenCalledWith('houseSettings');
+      });
+
+      it('shows the owner the gear', () => {
+        mockToken = { role: { 'house-1': 'superAdmin' }, claims: {} };
+        const { getByTestId } = renderScreen();
+        expect(getByTestId('house-settings-button')).toBeTruthy();
+      });
+
+      it('gives a peer leader no gear', () => {
+        mockToken = { role: { 'house-1': 'admin' }, claims: {} };
+        mockHouseTier = 'peerLeader';
+        const { queryByTestId } = renderScreen();
+        expect(queryByTestId('house-settings-button')).toBeNull();
+      });
+
+      it('gives staff no gear while the tier is unknown', () => {
+        mockToken = { role: { 'house-1': 'admin' }, claims: {} };
+        mockHouseTier = undefined;
+        const { queryByTestId } = renderScreen();
+        expect(queryByTestId('house-settings-button')).toBeNull();
+      });
+
+      it('gives a resident no gear', () => {
+        mockToken = { role: { 'house-1': 'guest' }, claims: {} };
+        mockHouseTier = 'manager';
+        const { queryByTestId } = renderScreen();
+        expect(queryByTestId('house-settings-button')).toBeNull();
+      });
     });
 
     it('shows demo popover instead of navigating for demo user', () => {
@@ -621,17 +686,53 @@ describe('HouseSummary', () => {
     });
   });
 
+  // ─── Operator-only sections (P5 Task 20) ─────────────────────────────────────
+  describe('operator-only sections', () => {
+    const SECTIONS = ['drug-testing-section', 'intake-section', 'applications-section'];
+
+    it.each(SECTIONS)('shows %s to house staff', id => {
+      const { getByTestId } = renderScreen();
+      expect(getByTestId(id)).toBeTruthy();
+    });
+
+    it.each(SECTIONS)('hides %s from a resident', id => {
+      mockToken = { role: { 'house-1': 'guest' }, claims: {} };
+      const { queryByTestId } = renderScreen();
+      expect(queryByTestId(id)).toBeNull();
+    });
+  });
+
   // ─── Applications query (#197) ───────────────────────────────────────────────
   describe('applications query', () => {
-    it('runs for a house admin', () => {
+    it('runs for an owner or manager of the house', () => {
       renderScreen();
+      expect(mockUseMayReviewApplications).toHaveBeenCalledWith('house-1');
       expect(mockUseHouseApplications).toHaveBeenCalledWith('house-1', true);
+    });
+
+    it('does not run for a peer leader, whom the rules refuse, and hides the Applications card', () => {
+      mockMayReviewApplications = false;
+      const { queryByText } = renderScreen();
+      expect(mockUseHouseApplications).not.toHaveBeenCalledWith('house-1', true);
+      expect(mockUseHouseApplications).toHaveBeenLastCalledWith('house-1', false);
+      expect(queryByText('Applications')).toBeNull();
+    });
+
+    it('shows the Applications card to an owner or manager', () => {
+      const { getByText } = renderScreen();
+      expect(getByText('Applications')).toBeTruthy();
     });
 
     it('does not run for a resident, whom the rules refuse', () => {
       mockToken = { role: { 'house-1': 'guest' }, claims: {} };
       renderScreen();
       expect(mockUseHouseApplications).not.toHaveBeenCalledWith('house-1', true);
+    });
+
+    it("does not ask for a resident's staff tier, which they can't hold", () => {
+      mockToken = { role: { 'house-1': 'guest' }, claims: {} };
+      renderScreen();
+      expect(mockUseMayReviewApplications).not.toHaveBeenCalledWith('house-1');
     });
   });
 });

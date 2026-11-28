@@ -20,6 +20,7 @@ import { ThemeProvider, color } from './src/styles/theme';
 import { useAppSelector } from './src/state/store';
 import { selectAppUserState, selectAppNavigationState } from './src/state/selectors/appSelectors';
 import { withSplash } from './src/screens/Splash/Splash';
+import { useClaimsUpdateRefresh } from './src/hooks/useClaimsUpdateRefresh';
 import Auth from './src/components/auth/auth';
 import IOSStatusBar from './src/components/ios-status-bar';
 import ErrorBoundary from './src/components/ErrorBoundary';
@@ -77,6 +78,10 @@ const App: React.FC = () => {
   const { loggedIn, user, anonymous, invitation } = useAppSelector(selectAppUserState);
 
   const { theme } = useAppSelector(selectAppNavigationState);
+
+  // A role change made by someone else reaches this app in seconds, not at
+  // the next hourly token refresh.
+  useClaimsUpdateRefresh(user?.uid, loggedIn && !anonymous);
 
   // Calculate initial routes once on mount
   const initialRoutes = improvedNavigationService.getInitialNavigation(user, invitation);

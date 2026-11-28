@@ -50,6 +50,8 @@ const USER_DATA: Entry[] = [
   { path: 'guest-weeks/w1', data: { userId: 'u1' }, fate: 'deleted', step: 'personal' },
   // deleted (personal): FCM device tokens.
   { path: 'userDeviceTokens/u1', data: { tokens: ['t'] }, fate: 'deleted', step: 'personal' },
+  // deleted (personal): the claims-refresh marker (util/userClaims.ts).
+  { path: 'claims-updates/u1', data: { updatedAt: 1 }, fate: 'deleted', step: 'personal' },
   // deleted (personal): records of documents uploaded to the resident's profile.
   { path: 'documents/d1', data: { guestId: 'g1' }, fate: 'deleted', step: 'personal' },
   // retained-by-policy: house group chat messages stay (the screen says so).
@@ -123,6 +125,8 @@ const USER_FILES: Array<{ prefix: string; fate: Fate }> = [
   { prefix: 'users/u1/avatar', fate: 'deleted' },
   { prefix: 'houses/h1/guests/g1/avatar/', fate: 'deleted' },
   { prefix: 'houses/h1/guests/g1/documents/', fate: 'deleted' },
+  // deleted: the user's chore photos, in every house (owner decision 2026-11-27).
+  { prefix: 'houses/h1/chore-evidence/u1/g1_1', fate: 'deleted' },
   // retained-by-policy: house-level documents belong to the house.
   { prefix: 'houses/h1/documents/', fate: 'retained-by-policy' },
 ];
@@ -138,6 +142,13 @@ jest.mock('firebase-admin', () => {
       bucket: () => ({
         file: (p: string) => ({ delete: async () => void storageDeletes.push(p) }),
         deleteFiles: async (o: { prefix: string }) => void storageDeletes.push(o.prefix),
+        // Every chore photo in the bucket; the glob is ignored, as a fake backend might.
+        getFiles: async () => [
+          ['houses/h1/chore-evidence/u1/g1_1', 'houses/h1/chore-evidence/u2/g2_1'].map((name) => ({
+            name,
+            delete: async () => void storageDeletes.push(name),
+          })),
+        ],
       }),
     }),
   };

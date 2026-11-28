@@ -90,10 +90,11 @@ tags:
       - extendedWaitUntil:
           visible: "e2e-upload"
           timeout: 15000
-      # The file's name label doesn't take the tap; its thumbnail, first in the
-      # grid, does.
+      # The file's name label doesn't take the tap; its thumbnail does. It is
+      # second in the grid: stage-picker-files.sh also stages e2e-guests.csv
+      # (operator-guest-import, #306), which sorts first and is greyed out here.
       - tapOn:
-          point: "18%,29%"
+          point: "50%,29%"
 - runFlow:
     when:
       platform: Android

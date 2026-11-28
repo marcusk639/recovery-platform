@@ -13,7 +13,11 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { houseCollection, houseListingCollection, ratsFirestore } from '../../api/firestore';
 import { planHouseListing, ListingPlan } from '../../houses/houseListing';
 
-export async function syncHouseListing(houseId: string): Promise<ListingPlan['kind']> {
+/** Re-plans one house's listing from its current doc; also the grace sweep's step. */
+export async function syncHouseListing(
+  houseId: string,
+  now: number = Date.now(),
+): Promise<ListingPlan['kind']> {
   const houseRef = houseCollection.doc(houseId);
   const listingRef = houseListingCollection.doc(houseId);
   return ratsFirestore.runTransaction(async (txn) => {
@@ -23,6 +27,7 @@ export async function syncHouseListing(houseId: string): Promise<ListingPlan['ki
       houseId,
       houseSnap.exists ? houseSnap.data() : undefined,
       listingSnap.exists ? listingSnap.data() : undefined,
+      now,
     );
     if (plan.kind === 'write') {
       txn.set(listingRef, { ...plan.listing, updatedAt: FieldValue.serverTimestamp() });

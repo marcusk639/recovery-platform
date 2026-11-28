@@ -112,10 +112,11 @@ jest.mock(
 
 jest.mock("../../../components/avatar-item", () => {
   const { View, Text } = require("react-native");
-  return ({ name, type }: any) => (
+  return ({ name, type, avatarUrl }: any) => (
     <View testID="avatar-item">
       <Text testID="avatar-name">{name}</Text>
       <Text testID="avatar-type">{type}</Text>
+      <Text testID="avatar-url">{avatarUrl}</Text>
     </View>
   );
 });
@@ -169,7 +170,7 @@ import { configureStore } from "@reduxjs/toolkit";
 import housesReducer from "../../../state/slices/housesSlice";
 import guestsReducer from "../../../state/slices/guestsSlice";
 import userReducer from "../../../state/slices/userSlice";
-import adminReducer from "../../../state/slices/adminSlice";
+import adminReducer, { setUserAsAdmin } from "../../../state/slices/adminSlice";
 import authReducer from "../../../state/slices/authSlice";
 import themeReducer from "../../../state/slices/themeSlice";
 import chatReducer from "../../../state/slices/chatSlice";
@@ -494,6 +495,37 @@ describe("PersonalScreen", () => {
       expect(getByTestId("avatar-name").props.children).toBe("Alice Manager");
     });
 
+    // The user doc can be newer than the admin/guest copy: the profile form
+    // saves the user doc first, and a copy whose own save failed keeps the
+    // old photo.
+    it("shows the account's own saved photo over an older admin copy", () => {
+      const url = "https://storage.example/users%2Fu1%2Favatar?alt=media&v=2";
+      const { getByTestId } = renderScreen({
+        user: { ...BASE_USER_ADMIN, avatar: url },
+        admin: { ...BASE_ADMIN, avatar: "https://storage.example/old.jpg" },
+      });
+      expect(getByTestId("avatar-url").props.children).toBe(url);
+    });
+
+    it("falls back to the admin copy when the account's own value is a phone path", () => {
+      const { getByTestId } = renderScreen({
+        user: { ...BASE_USER_ADMIN, avatar: "file:///var/mobile/IMG_1.jpg" },
+        admin: { ...BASE_ADMIN, avatar: "https://storage.example/a.jpg" },
+      });
+      expect(getByTestId("avatar-url").props.children).toBe("https://storage.example/a.jpg");
+    });
+
+    // "" is every account's default, so on its own it doesn't mean "removed":
+    // the copy is the fallback. A removal saves "" to the copies too, and
+    // EditUserInfoForm refreshes them in the store.
+    it("shows the admin copy's photo when the account's own value is empty", () => {
+      const { getByTestId } = renderScreen({
+        user: { ...BASE_USER_ADMIN, avatar: "" },
+        admin: { ...BASE_ADMIN, avatar: "https://storage.example/a.jpg" },
+      });
+      expect(getByTestId("avatar-url").props.children).toBe("https://storage.example/a.jpg");
+    });
+
     it('displays "Admin" role label when user.isAdmin is true', () => {
       const { getByTestId } = renderScreen({
         user: BASE_USER_ADMIN,
@@ -572,7 +604,6 @@ describe("PersonalScreen", () => {
   // ─── Admin-gated options ───────────────────────────────────────────────────
   describe("admin-gated options", () => {
     it('hides "Add Home" when no admin entity exists (guest user)', () => {
-      // disabled: !admin || !admin.superAdmin — when admin is null, disabled = true
       const { queryByText } = renderScreen({
         user: BASE_USER_GUEST,
         admin: null,
@@ -581,14 +612,43 @@ describe("PersonalScreen", () => {
       expect(queryByText("Add Home")).toBeNull();
     });
 
-    it('shows "Add Home" when an admin entity exists (superAdmin property present)', () => {
-      // disabled: !admin || !admin.superAdmin — admin.superAdmin = [] is truthy, so disabled = false
-      const { getByText } = renderScreen({ admin: BASE_ADMIN });
+    // P5 Task 19, an intended behaviour change: `superAdmin: []` is a manager
+    // or peer leader, who owns no house and can't add one. It used to show,
+    // because an empty array is truthy.
+    it('hides "Add Home" from a manager (superAdmin: [])', () => {
+      const { queryByText } = renderScreen({ admin: BASE_ADMIN });
+      expect(queryByText("Add Home")).toBeNull();
+    });
+
+    it('shows "Add Home" to the owner of a house', () => {
+      const { getByText } = renderScreen({ admin: SUPER_ADMIN });
       expect(getByText("Add Home")).toBeTruthy();
     });
 
-    it('shows "Add Home" for super-admin', () => {
-      const { getByText } = renderScreen({ admin: SUPER_ADMIN });
+    it('shows "Add Home" to a new operator with no house yet', () => {
+      const { getByText } = renderScreen({
+        user: { ...BASE_USER_ADMIN, potentialSuperAdmin: true },
+        admin: null,
+      });
+      expect(getByText("Add Home")).toBeTruthy();
+    });
+
+    it('hides "Add Home" until the admin record loads, then shows it to an owner', () => {
+      const store = buildStore({ admin: null });
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: 0 } },
+      });
+      const { queryByText, getByText } = render(
+        <QueryClientProvider client={queryClient}>
+          <Provider store={store}>
+            <PersonalScreen navigation={mockNavigation} />
+          </Provider>
+        </QueryClientProvider>
+      );
+      expect(queryByText("Add Home")).toBeNull();
+      act(() => {
+        store.dispatch(setUserAsAdmin(SUPER_ADMIN));
+      });
       expect(getByText("Add Home")).toBeTruthy();
     });
 

@@ -17,6 +17,7 @@ import {
   ratsFirestore,
 } from "../api/firestore";
 import { parseInput } from "../validation";
+import { refuseDemoAccount } from "../util/demoAccount";
 
 const setOxfordEnabledSchema = z.object({
   houseId: z.string().min(1),
@@ -45,6 +46,7 @@ const setOxfordEnabledSchema = z.object({
 export const setOxfordEnabled = onCall(
   { secrets: [STRIPE_SECRET_KEY] },
   async (request) => {
+    refuseDemoAccount(request.auth);
     if (!request.auth)
       throw new HttpsError("unauthenticated", "Login required");
 
@@ -192,6 +194,7 @@ const castOxfordVoteSchema = z.object({
 // entirely; this callable (Admin SDK) is the only writer.
 // ─────────────────────────────────────────────────────────────────────────────
 export const castOxfordVote = onCall(async (request) => {
+  refuseDemoAccount(request.auth);
   if (!request.auth) throw new HttpsError("unauthenticated", "Login required");
 
   const { houseId, voteId, choice } = parseInput<{

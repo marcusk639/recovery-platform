@@ -581,7 +581,15 @@ describe("houses/{houseId}/applications/{appId}", () => {
       await assertSucceeds(getDoc(appDoc(ctx)));
     });
 
-    it("allows house admin to read applications", async () => {
+    // Owners and managers only (owner decision 2026-11-27); peer leaders are
+    // covered in applicationsAccess.rules.test.ts.
+    it("allows a manager of the house to read applications", async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context
+          .firestore()
+          .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+          .set({ houseId: HOUSE_ID, tier: "manager" });
+      });
       const ctx = testEnv.authenticatedContext(ADMIN_UID, {
         admin: { [HOUSE_ID]: true },
       });
@@ -667,7 +675,13 @@ describe("houses/{houseId}/applications/{appId}", () => {
       });
     });
 
-    it("allows house admin to update status", async () => {
+    it("allows a manager of the house to update status", async () => {
+      await testEnv.withSecurityRulesDisabled(async (context) => {
+        await context
+          .firestore()
+          .doc(`house-roles/${HOUSE_ID}_${ADMIN_UID}`)
+          .set({ houseId: HOUSE_ID, tier: "manager" });
+      });
       const ctx = testEnv.authenticatedContext(ADMIN_UID, {
         admin: { [HOUSE_ID]: true },
       });
@@ -2179,6 +2193,7 @@ describe("houses/{houseId} — delete", () => {
     const ctx = testEnv.authenticatedContext("demoAccountUid", {
       ...authHouseSuperAdmin("demoAccountUid", HOUSE_ID),
       email: "demo_user@appdemo.net",
+      demo: true, // S5: the server-set claim identifies the demo account
     });
     await assertFails(deleteDoc(houseRef(ctx)));
   });
@@ -2425,11 +2440,12 @@ describe("Demo account house-scoping (isDemoHouse gate)", () => {
   const NON_DEMO_HOUSE_ID = HOUSE_ID; // reused; seeded per-test with isDemoHouse: false or absent
 
   function authDemoAdmin(houseId: string) {
-    return { ...authHouseAdmin(DEMO_UID, houseId), email: DEMO_EMAIL };
+    // S5: the server-set demo claim identifies the account, not the email.
+    return { ...authHouseAdmin(DEMO_UID, houseId), email: DEMO_EMAIL, demo: true };
   }
 
   function authDemoGuest(houseId: string) {
-    return { ...authHouseGuest(DEMO_UID, houseId), email: DEMO_EMAIL };
+    return { ...authHouseGuest(DEMO_UID, houseId), email: DEMO_EMAIL, demo: true };
   }
 
   async function seedHouseWithFlag(

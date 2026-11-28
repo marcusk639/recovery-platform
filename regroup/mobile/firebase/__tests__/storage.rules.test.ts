@@ -142,7 +142,7 @@ describe('Unauthenticated access', () => {
     [`houses/${HOUSE_ID}/logo/logo.png`, 'image/png'],
     [`houses/${HOUSE_ID}/guests/${GUEST_ID}/avatar/photo.jpg`, 'image/jpeg'],
     [
-      `houses/${HOUSE_ID}/2024-W01/monday/chores/${GUEST_ID}/chore.jpg`,
+      `houses/${HOUSE_ID}/chore-evidence/${USER_A_UID}/chore.jpg`,
       'image/jpeg',
     ],
     [`reports/${HOUSE_ID}/report.pdf`, 'application/pdf'],
@@ -187,7 +187,37 @@ describe('User avatars (users/{userId}/avatar)', () => {
     await assertSucceeds(uploadToPath(ctx, avatarPath, TINY_PNG, 'image/jpeg'));
   });
 
-  test('ALLOW any authenticated user to read another user avatar', async () => {
+  // The profile form writes every new photo to this one path.
+  test('ALLOW owner to replace an existing avatar', async () => {
+    const ctx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authUserOnly(USER_A_UID),
+    );
+    await uploadToPath(ctx, avatarPath, TINY_PNG, 'image/png');
+    await assertSucceeds(uploadToPath(ctx, avatarPath, TINY_PNG, 'image/jpeg'));
+  });
+
+  test('ALLOW owner to upload a HEIC avatar (an iPhone photo)', async () => {
+    const ctx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authUserOnly(USER_A_UID),
+    );
+    await assertSucceeds(uploadToPath(ctx, avatarPath, TINY_PNG, 'image/heic'));
+  });
+
+  test('DENY owner writing any other file under users/{uid}/', async () => {
+    const ctx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authUserOnly(USER_A_UID),
+    );
+    await assertFails(
+      uploadToPath(ctx, `users/${USER_A_UID}/avatar/extra.png`, TINY_PNG, 'image/png'),
+    );
+  });
+
+  // S5 (REV-A13): read was any signed-in user, so free signup exposed every
+  // face photo by uid. Others see the stored download URL instead.
+  test('DENY another signed-in user reading someone else avatar', async () => {
     const ownerCtx = testEnv.authenticatedContext(
       USER_A_UID,
       authUserOnly(USER_A_UID),
@@ -198,7 +228,30 @@ describe('User avatars (users/{userId}/avatar)', () => {
       USER_B_UID,
       authUserOnly(USER_B_UID),
     );
-    await assertSucceeds(readFromPath(otherCtx, avatarPath));
+    await assertFails(readFromPath(otherCtx, avatarPath));
+  });
+
+  test('DENY a house admin reading a resident user avatar', async () => {
+    const ownerCtx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authHouseGuest(USER_A_UID, HOUSE_ID),
+    );
+    await uploadToPath(ownerCtx, avatarPath, TINY_PNG, 'image/png');
+
+    const adminCtx = testEnv.authenticatedContext(
+      USER_B_UID,
+      authHouseAdmin(USER_B_UID, HOUSE_ID),
+    );
+    await assertFails(readFromPath(adminCtx, avatarPath));
+  });
+
+  test('ALLOW owner to read their own avatar (the app stores its URL)', async () => {
+    const ctx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authUserOnly(USER_A_UID),
+    );
+    await uploadToPath(ctx, avatarPath, TINY_PNG, 'image/png');
+    await assertSucceeds(readFromPath(ctx, avatarPath));
   });
 
   test('ALLOW owner to delete their own avatar', async () => {
@@ -517,12 +570,14 @@ describe('Guest avatars (houses/{houseId}/guests/{guestId}/avatar/{fileName})', 
 });
 
 // ---------------------------------------------------------------------------
-// 6. Chore photos: houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName}
+// 6. Chore photos: houses/{houseId}/chore-evidence/{userId}/{fileName}
+//    (S5, REV-A13: only the resident writes their own folder)
 // ---------------------------------------------------------------------------
-describe('Chore photos (houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName})', () => {
-  const chorePath = `houses/${HOUSE_ID}/2024-W01/monday/chores/${GUEST_ID}/chore.jpg`;
+describe('Chore photos (houses/{houseId}/chore-evidence/{userId}/{fileName})', () => {
+  const chorePath = `houses/${HOUSE_ID}/chore-evidence/${USER_A_UID}/${GUEST_ID}_1.jpg`;
+  const legacyPath = `houses/${HOUSE_ID}/2024-W01/monday/chores/${GUEST_ID}/chore.jpg`;
 
-  test('ALLOW house guest to upload chore photo', async () => {
+  test('ALLOW house guest to upload chore photo into their own folder', async () => {
     const ctx = testEnv.authenticatedContext(
       USER_A_UID,
       authHouseGuest(USER_A_UID, HOUSE_ID),
@@ -530,12 +585,35 @@ describe('Chore photos (houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName
     await assertSucceeds(uploadToPath(ctx, chorePath, TINY_PNG, 'image/jpeg'));
   });
 
-  test('ALLOW house admin to upload chore photo', async () => {
+  test('DENY house admin (no guest claim) uploading chore photo', async () => {
     const ctx = testEnv.authenticatedContext(
       USER_A_UID,
       authHouseAdmin(USER_A_UID, HOUSE_ID),
     );
-    await assertSucceeds(uploadToPath(ctx, chorePath, TINY_PNG, 'image/jpeg'));
+    await assertFails(uploadToPath(ctx, chorePath, TINY_PNG, 'image/jpeg'));
+  });
+
+  test('DENY a housemate writing into another resident folder', async () => {
+    const ctx = testEnv.authenticatedContext(
+      USER_B_UID,
+      authHouseGuest(USER_B_UID, HOUSE_ID),
+    );
+    await assertFails(uploadToPath(ctx, chorePath, TINY_PNG, 'image/jpeg'));
+  });
+
+  test('DENY a housemate overwriting or deleting another resident photo', async () => {
+    const ownerCtx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authHouseGuest(USER_A_UID, HOUSE_ID),
+    );
+    await uploadToPath(ownerCtx, chorePath, TINY_PNG, 'image/jpeg');
+
+    const otherCtx = testEnv.authenticatedContext(
+      USER_B_UID,
+      authHouseMember(USER_B_UID, HOUSE_ID),
+    );
+    await assertFails(uploadToPath(otherCtx, chorePath, TINY_PNG, 'image/jpeg'));
+    await assertFails(deleteFromPath(otherCtx, chorePath));
   });
 
   test('ALLOW house member to read chore photo', async () => {
@@ -550,6 +628,11 @@ describe('Chore photos (houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName
       authHouseAdmin(USER_B_UID, HOUSE_ID),
     );
     await assertSucceeds(readFromPath(adminCtx, chorePath));
+    const housemateCtx = testEnv.authenticatedContext(
+      'userC',
+      authHouseGuest('userC', HOUSE_ID),
+    );
+    await assertSucceeds(readFromPath(housemateCtx, chorePath));
   });
 
   test('DENY non-member reading chore photo', async () => {
@@ -564,12 +647,17 @@ describe('Chore photos (houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName
       authUserOnly(USER_B_UID),
     );
     await assertFails(readFromPath(plainCtx, chorePath));
+    const otherHouseCtx = testEnv.authenticatedContext(
+      USER_B_UID,
+      authHouseMember(USER_B_UID, HOUSE_ID_OTHER),
+    );
+    await assertFails(readFromPath(otherHouseCtx, chorePath));
   });
 
   test('DENY non-member writing chore photo', async () => {
     const ctx = testEnv.authenticatedContext(
-      USER_B_UID,
-      authUserOnly(USER_B_UID),
+      USER_A_UID,
+      authUserOnly(USER_A_UID),
     );
     await assertFails(uploadToPath(ctx, chorePath, TINY_PNG, 'image/jpeg'));
   });
@@ -601,12 +689,29 @@ describe('Chore photos (houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName
     await assertFails(uploadToPath(ctx, chorePath, oversized, 'image/jpeg'));
   });
 
-  test('User with both guest+admin claims can upload chore photo', async () => {
+  test('User with both guest+admin claims can upload chore photo into their own folder', async () => {
     const ctx = testEnv.authenticatedContext(
       USER_A_UID,
       authHouseMember(USER_A_UID, HOUSE_ID),
     );
     await assertSucceeds(uploadToPath(ctx, chorePath, TINY_PNG, 'image/jpeg'));
+  });
+
+  test('ALLOW the resident to delete their own chore photo', async () => {
+    const ctx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authHouseGuest(USER_A_UID, HOUSE_ID),
+    );
+    await uploadToPath(ctx, chorePath, TINY_PNG, 'image/jpeg');
+    await assertSucceeds(deleteFromPath(ctx, chorePath));
+  });
+
+  test('DENY the old week/day chore path to every member', async () => {
+    const ctx = testEnv.authenticatedContext(
+      USER_A_UID,
+      authHouseMember(USER_A_UID, HOUSE_ID),
+    );
+    await assertFails(uploadToPath(ctx, legacyPath, TINY_PNG, 'image/jpeg'));
   });
 });
 

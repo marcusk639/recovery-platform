@@ -1,6 +1,7 @@
 import { handleError } from './errors/storage';
 import { House } from '../entities/House';
 import {
+  deleteObject,
   getDownloadURL,
   getStorage,
   putFile,
@@ -10,7 +11,7 @@ import {
 
 // Example house reference: rats-dev.appspot.com/houses/{houseId}
 // Example guest reference: rats-dev.appspot.com/houses/{houseId}/guests/{guestId}
-// Example chore reference: rats-dev.appspot.com/houses/{houseId}/{week}/{day}/chores/{guestId}/{fileName}
+// Example chore reference: rats-dev.appspot.com/houses/{houseId}/chore-evidence/{userId}/{fileName}
 
 const bucket = ref(getStorage());
 const housesRef = ref(getStorage(), 'houses');
@@ -65,6 +66,22 @@ export const uploadUserAvatar = async (
   return uploadPhoto(getUserAvatarUrl(userId), pathOnDevice, metadata);
 };
 
+// storage.rules: users/{uid}/avatar is written and read by its owner only, so
+// the owner reads its download URL once, here, and stores that in the user doc
+// (and the guest/admin copies); everyone else shows the URL.
+export const uploadUserAvatarAndGetUrl = async (
+  pathOnDevice: string,
+  userId: string,
+  metadata?: SettableMetadata,
+): Promise<string> => {
+  await uploadUserAvatar(pathOnDevice, userId, metadata);
+  return getDownloadURL(ref(getStorage(), getUserAvatarUrl(userId)));
+};
+
+/** Deletes users/{uid}/avatar (its owner may: storage.rules). */
+export const deleteUserAvatar = async (userId: string): Promise<void> =>
+  deleteObject(ref(getStorage(), getUserAvatarUrl(userId)));
+
 export const uploadGuestAvatar = async (
   pathOnDevice: string,
   houseId: string,
@@ -78,16 +95,19 @@ export const uploadGuestAvatar = async (
   );
 };
 
-const getChoreEvidenceUrl = (houseId: string, activityId: string) =>
-  `houses/${houseId}/chore-evidence/${activityId}`;
+// storage.rules: only the resident (userId = their account, holding the
+// house's guest claim) writes their own folder; house members read it.
+const getChoreEvidenceUrl = (houseId: string, userId: string, fileName: string) =>
+  `houses/${houseId}/chore-evidence/${userId}/${fileName}`;
 
 export const uploadChoreEvidencePhoto = async (
   pathOnDevice: string,
   houseId: string,
-  activityId: string,
+  userId: string,
+  fileName: string,
   metadata?: SettableMetadata,
 ): Promise<string> => {
-  const storagePath = getChoreEvidenceUrl(houseId, activityId);
+  const storagePath = getChoreEvidenceUrl(houseId, userId, fileName);
   await uploadPhoto(storagePath, pathOnDevice, metadata);
   return getDownloadURL(ref(getStorage(), storagePath));
 };

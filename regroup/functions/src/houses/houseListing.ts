@@ -16,14 +16,17 @@
  * subscription and Stripe fields.
  *
  * Listed: a house that isn't a demo house, has a name and a location, and
- * whose subscription is active, trialing or past_due (its grace period; owner,
- * 2026-11-27). Canceled, unpaid or any other status has no listing: a lapsed
- * operator can't act on an application. The house phone is public on purpose
- * (owner, 2026-11-27), for applicants to call.
+ * whose subscription is entitled (util/entitlement.ts): active or trialing, or
+ * past_due while the app's guest grace runs (guestGraceEndsAt; owner,
+ * 2026-11-27). Canceled, unpaid, a past-due house whose grace has ended, or any
+ * other status has no listing: a lapsed operator can't act on an application.
+ * No house write happens when the grace ends, so the hourly
+ * houseListingGraceSweep re-plans past-due houses (scheduled/houseListingGrace.ts).
+ * The house phone is public on purpose (owner, 2026-11-27), for applicants to call.
  */
+import { evaluateEntitlement } from '../util/entitlement';
+
 export const LISTING_GEOHASH_PRECISION = 6;
-// past_due stays listed: the house is in its grace period (owner, 2026-11-27).
-const LISTED_STATUSES = new Set(['active', 'trialing', 'past_due']);
 /** Free text an operator typed is public here, so each string is capped. */
 const STRING_CAP: Record<string, number> = {
   name: 200,
@@ -36,6 +39,18 @@ const DEFAULT_STRING_CAP = 100;
 const capped = (k: string, v: string) => v.slice(0, STRING_CAP[k] ?? DEFAULT_STRING_CAP);
 
 type Data = Record<string, unknown>;
+
+/** Listed only while entitled: the same ladder as the paywall, grace included. */
+function isListedSubscription(house: Data, now: number): boolean {
+  const deadline = house.guestGraceEndsAt;
+  return evaluateEntitlement(
+    {
+      subscriptionStatus: String(house.subscriptionStatus ?? ''),
+      guestGraceEndsAt: typeof deadline === 'string' ? deadline : null,
+    },
+    now,
+  ).entitled;
+}
 
 export interface HouseListing {
   id: string;
@@ -91,6 +106,7 @@ const BOOLEAN_FIELDS = ['certified', 'wifi'] as const;
 export const LISTING_SOURCE_FIELDS: string[] = [
   'isDemoHouse',
   'subscriptionStatus',
+  'guestGraceEndsAt',
   'name',
   'geohash',
   'phases',
@@ -106,10 +122,14 @@ const countOf = (v: unknown): number =>
   Array.isArray(v) ? v.length : isObject(v) ? Object.keys(v).length : 0;
 
 /** The house's public listing, or null when it shouldn't be listed. */
-export function toHouseListing(houseId: string, house: Data | undefined): HouseListing | null {
+export function toHouseListing(
+  houseId: string,
+  house: Data | undefined,
+  now: number = Date.now(),
+): HouseListing | null {
   if (!house) return null;
   if (house.isDemoHouse === true) return null;
-  if (!LISTED_STATUSES.has(String(house.subscriptionStatus ?? ''))) return null;
+  if (!isListedSubscription(house, now)) return null;
   const name = typeof house.name === 'string' ? capped('name', house.name.trim()) : '';
   const geohash = typeof house.geohash === 'string' ? house.geohash : '';
   if (!name || geohash.length < LISTING_GEOHASH_PRECISION || geohash === 'unknown') return null;
@@ -150,8 +170,9 @@ export function planHouseListing(
   houseId: string,
   house: Data | undefined,
   existing: Data | undefined,
+  now: number = Date.now(),
 ): ListingPlan {
-  const listing = toHouseListing(houseId, house);
+  const listing = toHouseListing(houseId, house, now);
   if (!listing) return existing ? { kind: 'delete' } : { kind: 'unchanged' };
   if (existing && sameListing(listing, existing)) return { kind: 'unchanged' };
   return { kind: 'write', listing };

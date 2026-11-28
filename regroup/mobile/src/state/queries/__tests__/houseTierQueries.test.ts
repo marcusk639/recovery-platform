@@ -7,7 +7,12 @@
 import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { houseTierKeys, useMayEditGuestMoney, useMayEditRentMoney } from '../houseTierQueries';
+import {
+  houseTierKeys,
+  useApplicationsAccess,
+  useMayEditGuestMoney,
+  useMayEditRentMoney,
+} from '../houseTierQueries';
 import { getMyHouseTiers } from '../../../services/houseTiers';
 
 jest.mock('../../../../firebase-setup', () => ({ auth: { currentUser: { uid: 'manager-uid' } } }));
@@ -121,5 +126,82 @@ describe('useMayEditGuestMoney', () => {
     mockGetMyHouseTiers.mockResolvedValue({ h1: 'owner' });
     const { result } = renderFor({ houseId: 'h1', userId: '' });
     await waitFor(() => expect(result.current).toBe(true));
+  });
+});
+
+// The application screens wait on this (owners and managers only, owner decision
+// 2026-11-27). Unlike useHouseMoneyAccess, a failed read is 'error', never 'no', so
+// a manager whose tier call failed is offered a retry, not told they may not.
+describe('useApplicationsAccess', () => {
+  beforeEach(() => mockGetMyHouseTiers.mockReset());
+
+  let queryClient: QueryClient;
+  const renderAccess = (houseId: string) => {
+    queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: React.ReactNode }) =>
+      React.createElement(QueryClientProvider, { client: queryClient }, children);
+    return renderHook(() => useApplicationsAccess(houseId), { wrapper });
+  };
+
+  it.each([
+    ['owner', 'yes'],
+    ['manager', 'yes'],
+    ['peerLeader', 'no'],
+    ['resident', 'no'],
+  ])('a caller whose tier is %s -> %s', async (tier, expected) => {
+    mockGetMyHouseTiers.mockResolvedValue({ h1: tier });
+    const { result } = renderAccess('h1');
+    await waitFor(() => expect(result.current.access).toBe(expected));
+  });
+
+  it('is no for a house the caller holds no tier in', async () => {
+    mockGetMyHouseTiers.mockResolvedValue({ other: 'owner' });
+    const { result } = renderAccess('h1');
+    await waitFor(() => expect(result.current.access).toBe('no'));
+  });
+
+  it('is checking while the tier loads', () => {
+    mockGetMyHouseTiers.mockReturnValue(new Promise(() => {}));
+    const { result } = renderAccess('h1');
+    expect(result.current.access).toBe('checking');
+  });
+
+  it('is error, not no, when the tier lookup fails, and retry asks again', async () => {
+    mockGetMyHouseTiers.mockRejectedValueOnce(new Error('offline'));
+    mockGetMyHouseTiers.mockResolvedValueOnce({ h1: 'manager' });
+    const { result } = renderAccess('h1');
+    await waitFor(() => expect(result.current.access).toBe('error'));
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.access).toBe('yes'));
+    expect(mockGetMyHouseTiers).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows the spinner, not the retry, while a retry is asking', async () => {
+    mockGetMyHouseTiers.mockRejectedValueOnce(new Error('offline'));
+    mockGetMyHouseTiers.mockReturnValueOnce(new Promise(() => {}));
+    const { result } = renderAccess('h1');
+    await waitFor(() => expect(result.current.access).toBe('error'));
+    act(() => result.current.retry());
+    await waitFor(() => expect(result.current.access).toBe('checking'));
+  });
+
+  // A failed background refetch keeps the tiers it already had (react-query v5
+  // sets status 'error' but keeps data), so a manager on the list stays on it.
+  it('keeps a known tier when a later refetch fails', async () => {
+    mockGetMyHouseTiers.mockResolvedValueOnce({ h1: 'manager' });
+    mockGetMyHouseTiers.mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderAccess('h1');
+    await waitFor(() => expect(result.current.access).toBe('yes'));
+    act(() => result.current.retry());
+    await waitFor(() => expect(queryClient.getQueryState(houseTierKeys.mine)?.status).toBe('error'));
+    await act(async () => {});
+    expect(queryClient.getQueryData(houseTierKeys.mine)).toEqual({ h1: 'manager' });
+    expect(result.current.access).toBe('yes');
+  });
+
+  it('is no straight away without a house, and does not ask', () => {
+    const { result } = renderAccess('');
+    expect(result.current.access).toBe('no');
+    expect(mockGetMyHouseTiers).not.toHaveBeenCalled();
   });
 });

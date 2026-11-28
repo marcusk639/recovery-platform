@@ -1,6 +1,7 @@
 import { auth } from 'firebase-admin';
 import UserClaims from '../entities/UserClaim';
 import { Role } from '../entities/Roles';
+import { setUserClaims } from './userClaims';
 
 /**
  * Reads and normalises custom claims from a Firebase Auth user record.
@@ -39,6 +40,8 @@ function parseCurrentClaims(
     potentialSuperAdmin: typeof raw.potentialSuperAdmin === 'boolean'
       ? raw.potentialSuperAdmin
       : undefined,
+    // The demo account's marker (util/demoAccount.ts) survives every rewrite.
+    ...(raw.demo === true ? { demo: true as const } : {}),
   };
 }
 
@@ -106,7 +109,7 @@ export const grantHouseRoles = async (
     admin[houseId] = true;
     superAdmin[houseId] = true;
   }
-  await auth().setCustomUserClaims(userId, {
+  await setUserClaims(userId, {
     ...current,
     admin,
     superAdmin,
@@ -147,7 +150,7 @@ export const revokeHouseRoles = async (
     next[role] = remaining;
   }
   if (!changed) return;
-  await auth().setCustomUserClaims(userId, {
+  await setUserClaims(userId, {
     ...next,
     ...(potentialSuperAdmin !== undefined ? { potentialSuperAdmin } : {}),
   });
@@ -181,7 +184,7 @@ export const addHouseRoles = async (
     next[role] = granted;
   }
   if (!changed) return;
-  await auth().setCustomUserClaims(userId, {
+  await setUserClaims(userId, {
     ...next,
     ...(potentialSuperAdmin !== undefined ? { potentialSuperAdmin } : {}),
   });

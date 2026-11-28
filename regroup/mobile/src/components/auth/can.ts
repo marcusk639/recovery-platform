@@ -28,6 +28,13 @@ const check = (rules: AuthRules, role: Role, action: Action, data: any) => {
   return false;
 };
 
+/**
+ * The same check as `<Can>`, for code that decides without rendering (a list
+ * of settings entries, say).
+ */
+export const can = (role: Role, action: Action, data: any = null): boolean =>
+  check(rules, role, action, data);
+
 // Defaults in the parameter list: React 19 ignores defaultProps on function
 // components, which left `<Can>` without `yes` or `no` throwing.
 const Can = ({
@@ -43,7 +50,7 @@ const Can = ({
   yes?: () => any;
   no?: () => any;
 }) => {
-  if (check(rules, role, action, data)) {
+  if (can(role, action, data)) {
     return yes();
   } else {
     return no();
