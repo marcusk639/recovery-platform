@@ -19,6 +19,7 @@ import { houseCollection, getHouse, removeGuestPrivileges } from './house';
 import { findGuestBed } from '../util/house';
 import cloneDeep from 'lodash/cloneDeep';
 import { asCents } from '../util/money';
+import { withoutServerOwnedHouseFields } from './houseWrites';
 
 export const guestCollection = collection(firestore, 'guests');
 export const archiveCollection = collection(firestore, 'guest-archive');
@@ -256,7 +257,7 @@ export async function createGuest(newGuest: Guest): Promise<Guest> {
   const batch = writeBatch(firestore);
   const house = await getHouse(newGuest.houseId);
   const newHouse = { ...house, currentCapacity: house.currentCapacity + 1 };
-  batch.update(doc(houseCollection, house.id), newHouse);
+  batch.update(doc(houseCollection, house.id), withoutServerOwnedHouseFields(newHouse));
   batch.set(doc(guestCollection, newGuest.id), newGuest);
   await batch.commit();
   return newGuest;
@@ -295,7 +296,10 @@ export async function deleteGuest(guest: Guest, house: House) {
     rooms,
   };
   // batch.update(userCollection.doc(guest.userId), removeUserFromHouse());
-  batch.update(doc(houseCollection, house.id), updatedHouse as DocumentData);
+  batch.update(
+    doc(houseCollection, house.id),
+    withoutServerOwnedHouseFields(updatedHouse) as DocumentData,
+  );
   await batch.commit();
   return { house: updatedHouse, guest };
 }
@@ -335,7 +339,7 @@ export async function customizePhase(guest: Guest, house: House) {
     phase: guest.phase,
     updatedAt: new Date().toISOString(),
   });
-  batch.update(doc(houseCollection, house.id), house as DocumentData);
+  batch.update(doc(houseCollection, house.id), withoutServerOwnedHouseFields(house) as DocumentData);
   await batch.commit();
   return { guest, house };
 }

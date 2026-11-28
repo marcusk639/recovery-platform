@@ -7,6 +7,7 @@ import { firestore } from '../../firebase-setup';
 import { PartialHouseWithId } from '../entities/House';
 import { Dispute } from '../entities/Dispute';
 import * as crud from './crud';
+import { withoutServerOwnedHouseFields } from './houseWrites';
 
 const houseCollection = collection(firestore, 'houses');
 const disputesCollection = collection(firestore, 'disputes');
@@ -26,7 +27,7 @@ export function updateDispute(
   resolvedDispute?: Dispute,
 ) {
   const batch = writeBatch(firestore);
-  batch.update(doc(houseCollection, house.id), house);
+  batch.update(doc(houseCollection, house.id), withoutServerOwnedHouseFields(house));
   if (resolvedDispute) {
     batch.set(doc(disputesCollection, resolvedDispute.id), resolvedDispute);
   }
