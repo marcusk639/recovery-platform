@@ -59,7 +59,7 @@ jest.mock('../../../services/admin', () => ({
   getHouseAdmins: jest.fn(() => Promise.resolve([])),
   updateAdmin: (...args: any[]) => mockUpdateAdmin(...args),
   deleteAdmin: (...args: any[]) => mockDeleteAdminService(...args),
-  sendAdminInvite: mockSendAdminInvite,
+  sendAdminInvite: (...args: any[]) => mockSendAdminInvite(...args),
   createAdminId: jest.fn(() => 'new-admin-id'),
   createId: jest.fn(() => 'new-admin-id'),
   getAdmins: jest.fn(() => Promise.resolve({})),
@@ -584,6 +584,35 @@ describe('AdminManagement', () => {
           expect.stringContaining('Failed to send invitation'),
         );
       });
+    });
+
+    // M3: a refused invitation (e.g. its email failed: unavailable) used to
+    // leave no trace. It is logged with the error code, never the address.
+    it('logs a failed invite with its code, not the address', async () => {
+      const logging = require('../../../util/logging');
+      const logSpy = jest.spyOn(logging, 'logException').mockImplementation(() => undefined);
+      // clearAllMocks keeps queued Once values; an earlier one must not answer.
+      mockSendAdminInvite.mockReset();
+      mockSendAdminInvite.mockRejectedValue(
+        Object.assign(new Error('could not email fail@example.com'), {
+          code: 'functions/unavailable',
+        }),
+      );
+
+      const store = buildStore({});
+      const { getByTestId } = renderScreen(store);
+      fireEvent.changeText(getByTestId('invite-email-input'), 'fail@example.com');
+      await act(async () => {
+        fireEvent.press(getByTestId('send-invite-button'));
+      });
+
+      await waitFor(() => expect(logSpy).toHaveBeenCalledTimes(1));
+      const logged = JSON.stringify(logSpy.mock.calls, (_k, v) =>
+        v instanceof Error ? { message: v.message } : v,
+      );
+      expect(logged).toContain('functions/unavailable');
+      expect(logged).not.toContain('fail@example.com');
+      logSpy.mockRestore();
     });
   });
 

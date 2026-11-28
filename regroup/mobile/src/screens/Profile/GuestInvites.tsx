@@ -1,5 +1,6 @@
 // Phase 3.3: Migrated from withLoadingModal HOC to useModal hook
 import React, { useState, useCallback, useEffect } from "react";
+import { Alert } from "react-native";
 import { useModal } from "../../context";
 import { GuestSetupForm } from "../SetupWizards/GuestSetup";
 import { extractGuestEmails } from "../../util/house";
@@ -21,6 +22,23 @@ import { logException } from "../../util/logging";
 interface Props {
   navigation: NativeStackNavigationProp<RootStackParamList>;
 }
+
+/** The addresses entered this time, normalized as extractGuestEmails stores them. */
+const enteredEmails = (guestEmails: string[]): string[] =>
+  Array.from(
+    new Set(
+      guestEmails
+        .filter((email) => email && email !== "deleted")
+        .map((email) => email.trim().toLowerCase())
+        .filter(Boolean)
+    )
+  );
+
+/** What the operator is told when some or all invitations were not sent. */
+const notSentMessage = (unsent: number, total: number): string =>
+  unsent >= total
+    ? "We couldn't send the invitations. Please try again."
+    : `${unsent} of ${total} invitations couldn't be sent. The addresses still in the form weren't invited; please try again.`;
 
 /**
  * Guest Invites Screen
@@ -45,13 +63,11 @@ const GuestInvites: React.FC<Props> = ({ navigation }) => {
 
   const [sendingEmails, setSendingEmailsState] = useState(false);
   const [success, setSuccess] = useState<boolean | null>(null);
-  const [failure, setFailure] = useState<boolean | null>(null);
 
   const setSendingEmails = useCallback(
-    (sending: boolean, successVal?: boolean, failureVal?: boolean) => {
+    (sending: boolean, successVal?: boolean) => {
       setSendingEmailsState(sending);
       setSuccess(successVal ?? null);
-      setFailure(failureVal ?? null);
     },
     []
   );
@@ -71,7 +87,8 @@ const GuestInvites: React.FC<Props> = ({ navigation }) => {
         selectedHouse={house ?? undefined}
         onSubmit={async (values, formikBag) => {
           if (!house || !user) return;
-          setSendingEmails(true, undefined, undefined);
+          setSendingEmails(true);
+          const emails = enteredEmails(values.guestEmails);
           const updatedHouse = extractGuestEmails(house, values.guestEmails);
           updatedHouse.pendingGuestInvites = Array.from(
             new Set([...(updatedHouse.pendingGuestInvites || [])])
@@ -86,25 +103,39 @@ const GuestInvites: React.FC<Props> = ({ navigation }) => {
               houseId: updatedHouse.id,
               values: updatedHouse,
             });
-            const sendResult = await sendAllInvites(
-              { [updatedHouse.id]: updatedHouse },
-              user as User,
-              true,
-              false,
-              false
+            // Only the addresses entered now: pendingGuestInvites keeps every
+            // guest ever invited here, and re-sending them made a new
+            // invitation (and held another resident slot) for each. One call
+            // per address, so a failure names the addresses not sent.
+            const results = await Promise.all(
+              emails.map((email) =>
+                sendAllInvites(
+                  { [updatedHouse.id]: { ...updatedHouse, pendingGuestInvites: [email] } },
+                  user as User,
+                  true,
+                  false,
+                  false
+                )
+              )
             );
-            // sendAllInvites settles each invitation and reports failures as
-            // a count rather than rejecting; surface them as a failure.
-            if (sendResult?.failed) {
-              throw new Error(
-                `${sendResult.failed} guest invitation(s) could not be sent`
+            const unsent = emails.filter((_, i) => results[i]?.failed);
+            if (unsent.length) {
+              // Counts only: the addresses are PII.
+              logException(
+                new Error(`${unsent.length} of ${emails.length} guest invitation(s) could not be sent`),
+                "Failed to send guest invites"
               );
+              setSendingEmails(false);
+              formikBag?.setFieldValue?.("guestEmails", unsent);
+              Alert.alert("Invitations not sent", notSentMessage(unsent.length, emails.length));
+              return;
             }
-            setSendingEmails(false, true, false);
+            setSendingEmails(false, true);
             navigation.goBack();
           } catch (error) {
             logException(error, "Failed to send guest invites");
-            setSendingEmails(false, false, true);
+            setSendingEmails(false);
+            Alert.alert("Invitations not sent", notSentMessage(emails.length, emails.length));
           }
         }}
       />
