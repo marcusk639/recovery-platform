@@ -1,7 +1,6 @@
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import { isPrimaryOwner } from "../util/houseRoles";
 import { isSalesOpen } from "../util/salesSwitch";
-import { setOperatorHousesStatus } from "../util/operatorHouses";
 import { logger } from "firebase-functions";
 import * as admin from "firebase-admin";
 import isNil from "lodash/isNil";
@@ -31,6 +30,7 @@ import {
   applyBundleDiscountToSubscription,
   failedBeforeSubscription,
   findLiveSubscriptionForUser,
+  findLiveSubscriptionsForUser,
   isUnrecordedReplacement,
   replacementMetadataFrom,
 } from "../api/stripe";
@@ -239,6 +239,24 @@ async function reverseUnrecordedCheckout(
   throw new HttpsError("internal", CHECKOUT_REVERSED_MESSAGE);
 }
 
+/**
+ * Why a new replacement can't be created now, or null. It needs tier billing
+ * on, and a legacy (tier-less) plan isn't recreated: the operator picks a plan.
+ * A tier no longer for sale (Oxford Network) is refused as at checkout, which
+ * is where the operator then picks a plan (checkoutGuard allows it).
+ */
+async function reactivationClosed(stored: OperatorSubscription): Promise<HttpsError | null> {
+  if (!isTierBillingEnabled()) return new HttpsError("failed-precondition", BILLING_OFF_MESSAGE);
+  if (!storedTierOnSale(stored.houseType, stored.tier)) {
+    return new HttpsError(
+      "failed-precondition",
+      "This plan is no longer offered. Choose a plan to subscribe again.",
+    );
+  }
+  if (!(await isSalesOpen())) return new HttpsError("failed-precondition", SALES_CLOSED_MESSAGE);
+  return null;
+}
+
 /** setSubscriptionStatus, logging when the record no longer names the subscription. */
 async function writeStatusOf(
   uid: string,
@@ -261,14 +279,14 @@ async function writeStatusOf(
 
 /**
  * Records Reactivate's replacement, which Stripe has already created and, with
- * no trial, charged for: the subscriptions doc (the webhooks find a
+ * no trial, charged for: the subscriptions doc first (the webhooks find a
  * subscription only through it, and its first events can arrive before the
- * record points at it), the record, then the house statuses. The webhooks
- * don't write the record or houses for a subscription the record doesn't name,
- * so a failure here is finished by the operator's next Reactivate: it records
- * the replacement left live (isUnrecordedReplacement), or, once the record
- * names it, sets the house statuses again. A failure is logged with the new ids
- * at ERROR in case that retry never comes.
+ * record points at it), then the record and the house statuses in one
+ * transaction. The webhooks don't write the record or houses for a
+ * subscription the record doesn't name, so a failure leaves the record as it
+ * was and the operator's next Reactivate adopts the replacement left live
+ * (isUnrecordedReplacement). The new ids are logged at ERROR in case that
+ * retry never comes.
  */
 async function recordReplacement(
   uid: string,
@@ -288,9 +306,7 @@ async function recordReplacement(
       guestCount: 0,
       userId: uid,
     });
-    const written = await writeReplacementSubscription(uid, replacement);
-    await setOperatorHousesStatus(uid, written.status);
-    return written;
+    return await writeReplacementSubscription(uid, replacement);
   } catch (error) {
     logger.error("Reactivate's replacement is live in Stripe but its records aren't all written: finish them by hand", {
       userId: uid,
@@ -318,20 +334,14 @@ async function endedInStripe(subscriptionId: string): Promise<boolean> {
  * a retry, another plan or the next day's idempotency key can't add a second.
  */
 async function refuseUnrecordedSubscription(claim: CheckoutClaim, email: string): Promise<void> {
-  const live = await findUnrecordedSubscription(claim, email);
-  if (live) await refuseUnrecorded(claim, live);
+  const live = await lookUpUnrecorded(claim, () => findLiveSubscriptionForUser(claim.uid, email));
+  if (live) await refuseUnrecorded(claim, [live]);
 }
 
-/** The live subscription Stripe holds for the operator that the record doesn't show, or null. */
-async function findUnrecordedSubscription(
-  claim: CheckoutClaim,
-  email: string,
-  knownCustomerId?: string,
-): Promise<Awaited<ReturnType<typeof findLiveSubscriptionForUser>>> {
+/** A Stripe lookup under the lock: a failure frees the lock and is `unavailable`. */
+async function lookUpUnrecorded<T>(claim: CheckoutClaim, lookup: () => Promise<T>): Promise<T> {
   try {
-    return knownCustomerId
-      ? await findLiveSubscriptionForUser(claim.uid, email, knownCustomerId)
-      : await findLiveSubscriptionForUser(claim.uid, email);
+    return await lookup();
   } catch (error) {
     await releaseCheckout(claim);
     logger.error("Checkout could not check Stripe for an existing subscription", {
@@ -344,12 +354,13 @@ async function findUnrecordedSubscription(
 
 async function refuseUnrecorded(
   claim: CheckoutClaim,
-  live: NonNullable<Awaited<ReturnType<typeof findLiveSubscriptionForUser>>>,
+  live: Array<{ id: string }>,
 ): Promise<never> {
   await releaseCheckout(claim);
   logger.error("Checkout refused: Stripe has a live subscription the record doesn't show", {
     userId: claim.uid,
-    subscriptionId: live.id,
+    subscriptionId: live[0]?.id,
+    subscriptionIds: live.map((sub) => sub.id),
   });
   throw new HttpsError(
     "failed-precondition",
@@ -606,10 +617,8 @@ export const reactivateOperatorSubscription = onCall(
     if (status === "active" || status === "trialing") {
       // Already live. Creating another Stripe subscription here would bill the
       // operator twice over and orphan the original, which would keep charging
-      // with nothing in Firestore pointing at it. The house statuses are set
-      // again (idempotent): a replacement whose house write failed after the
-      // record named it is finished here (recordReplacement).
-      await setOperatorHousesStatus(data.user.id, status);
+      // with nothing in Firestore pointing at it. Nothing to write: the record
+      // and its houses' statuses were written together (recordReplacement).
       return { ...data.user, subscriptionMetadata: storedMetadata };
     }
 
@@ -623,22 +632,6 @@ export const reactivateOperatorSubscription = onCall(
     } else if (status === "canceled") {
       // Terminal in Stripe: a canceled subscription cannot be resumed, so a
       // replacement is the only route back. The sole branch allowed to create.
-      // A replacement is a new subscription, so it needs tier billing on, and a
-      // legacy (tier-less) one isn't recreated: the operator picks a plan.
-      if (!isTierBillingEnabled()) {
-        throw new HttpsError("failed-precondition", BILLING_OFF_MESSAGE);
-      }
-      // A tier no longer for sale (Oxford Network) is refused as at checkout,
-      // which is where the operator then picks a plan (checkoutGuard allows it).
-      if (!storedTierOnSale(storedMetadata.houseType, storedMetadata.tier)) {
-        throw new HttpsError(
-          "failed-precondition",
-          "This plan is no longer offered. Choose a plan to subscribe again.",
-        );
-      }
-      if (!(await isSalesOpen())) {
-        throw new HttpsError("failed-precondition", SALES_CLOSED_MESSAGE);
-      }
       // The stored email, which the Stripe customer was created with; the
       // lookup below lists that customer's subscriptions.
       const email = firestoreUser.email || request.auth.token.email;
@@ -651,22 +644,26 @@ export const reactivateOperatorSubscription = onCall(
       // The checkout lock, then Stripe: no second subscription from a
       // concurrent checkout or Reactivate, or one a failed record write left.
       const claim = await claimReactivation(data.user.id);
-      const unrecorded = await findUnrecordedSubscription(
-        claim,
-        email,
-        storedMetadata.customerId,
+      const unrecorded = await lookUpUnrecorded(claim, () =>
+        findLiveSubscriptionsForUser(claim.uid, email, storedMetadata.customerId),
       );
       let freshMetadata: Awaited<ReturnType<typeof reactivateSubscription>>;
-      if (unrecorded && isUnrecordedReplacement(unrecorded, storedMetadata)) {
+      if (unrecorded.length === 1 && isUnrecordedReplacement(unrecorded[0], storedMetadata)) {
         // An earlier Reactivate's replacement, live in Stripe and paid for, whose
-        // records failed: recorded now instead of refused or created again.
+        // records failed: recorded now instead of refused or created again,
+        // whatever the gates below say, since the operator has already paid.
         logger.warn("Reactivate recording the replacement an earlier attempt left unrecorded", {
           userId: data.user.id,
-          subscriptionId: unrecorded.id,
+          subscriptionId: unrecorded[0].id,
         });
-        freshMetadata = replacementMetadataFrom(unrecorded, storedMetadata, storedMetadata.customerId);
+        freshMetadata = replacementMetadataFrom(unrecorded[0], storedMetadata, storedMetadata.customerId);
       } else {
-        if (unrecorded) await refuseUnrecorded(claim, unrecorded);
+        if (unrecorded.length > 0) await refuseUnrecorded(claim, unrecorded);
+        const closed = await reactivationClosed(storedMetadata);
+        if (closed) {
+          await releaseCheckout(claim);
+          throw closed;
+        }
         try {
           freshMetadata = await reactivateSubscription(
             storedMetadata.customerId,

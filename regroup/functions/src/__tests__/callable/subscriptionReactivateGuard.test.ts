@@ -37,6 +37,11 @@ jest.mock('../../api/stripe', () => ({
   reactivateSubscription: (...a: unknown[]) => mockReactivate(...a),
   uncancelSubscription: jest.fn(),
   findLiveSubscriptionForUser: (...a: unknown[]) => mockFindLive(...a),
+  // Reactivate looks for every live unrecorded subscription.
+  findLiveSubscriptionsForUser: async (...a: unknown[]) => {
+    const live = await mockFindLive(...a);
+    return live ? [live] : [];
+  },
   failedBeforeSubscription: (e: { beforeSubscription?: boolean } | null) => !!e?.beforeSubscription,
   // The live subscriptions here are never Reactivate's own replacement
   // (subscriptionReactivateReplacement.test.ts covers that one).

@@ -46,6 +46,11 @@ jest.mock('../../api/stripe', () => ({
   reactivateSubscription: (customer: string, meta: { houses?: object }) =>
     mockReactivate(customer, meta),
   findLiveSubscriptionForUser: (...a: unknown[]) => mockFindLive(...a),
+  // Reactivate looks for every live unrecorded subscription.
+  findLiveSubscriptionsForUser: async (...a: unknown[]) => {
+    const live = await mockFindLive(...a);
+    return live ? [live] : [];
+  },
   failedBeforeSubscription: () => false,
   // Which live subscription is a replacement is tested in api/reactivate.test.ts.
   isUnrecordedReplacement: (...a: unknown[]) => mockIsUnrecordedReplacement(...a),
@@ -235,7 +240,8 @@ describe('a retry after the replacement was left unfinished', () => {
     expect(upsertSubscriptionDoc()).toHaveBeenCalledWith(
       expect.objectContaining({ stripeSubscriptionId: 'sub_new' }),
     );
-    expect(setOperatorHousesStatus()).toHaveBeenCalledWith('op', 'active');
+    // In the record's own transaction (subscriptionReactivateAdoption.test.ts).
+    expect(setOperatorHousesStatus()).toHaveBeenCalledWith('op', 'active', expect.anything());
   });
 
   it('still refuses any other live subscription the record does not show', async () => {
@@ -250,7 +256,10 @@ describe('a retry after the replacement was left unfinished', () => {
     expect(mockStored.subscriptionMetadata.subscriptionId).toBe('sub_old');
   });
 
-  it('sets the house statuses of a plan already live again', async () => {
+  // The record and house statuses are written together, so a live record's
+  // houses were written with it; a Reactivate then writes nothing (a write
+  // from this read could undo a cancellation that lands meanwhile).
+  it('leaves the house statuses of a plan already live alone', async () => {
     mockStaleRead = {
       id: 'op',
       email: 'op@test.com',
@@ -261,6 +270,6 @@ describe('a retry after the replacement was left unfinished', () => {
     await reactivate();
 
     expect(mockReactivate).not.toHaveBeenCalled();
-    expect(setOperatorHousesStatus()).toHaveBeenCalledWith('op', 'active');
+    expect(setOperatorHousesStatus()).not.toHaveBeenCalled();
   });
 });

@@ -16,6 +16,12 @@ jest.mock('../../api/firestore', () => {
 jest.mock('firebase-functions', () => ({
   logger: { info: jest.fn(), error: jest.fn(), warn: jest.fn() },
 }));
+// util/operatorHouses reads houses through firebase-admin: the same store.
+jest.mock('firebase-admin', () => ({
+  firestore: Object.assign(() => require('../helpers/memFirestore').memDb, {
+    FieldValue: require('../helpers/memFirestore').fieldValue,
+  }),
+}));
 
 import { mem } from '../helpers/memFirestore';
 import {
@@ -108,6 +114,31 @@ describe('setSubscriptionStatus', () => {
 });
 
 describe('writeReplacementSubscription', () => {
+  // Written apart, a failure between them left a record naming the replacement
+  // with its houses still canceled, which nothing would repair.
+  it("writes the houses' statuses in the record's own transaction", async () => {
+    seed({ ...PLAN, status: 'canceled', houses: {} });
+    mem.seed('houses/h1', { id: 'h1', ownerId: 'op', subscriptionStatus: 'canceled' });
+    await writeReplacementSubscription('op', { subscriptionId: 'sub_new', status: 'active' });
+
+    expect(stored()).toMatchObject({ subscriptionId: 'sub_new', status: 'active' });
+    expect(mem.get('houses/h1')).toMatchObject({ subscriptionStatus: 'active' });
+  });
+
+  it('writes neither the record nor the houses when the commit fails', async () => {
+    seed({ ...PLAN, status: 'canceled', houses: {} });
+    mem.seed('houses/h1', { id: 'h1', ownerId: 'op', subscriptionStatus: 'canceled' });
+    mem.beforeCommit = () => {
+      throw new Error('UNAVAILABLE');
+    };
+
+    await expect(
+      writeReplacementSubscription('op', { subscriptionId: 'sub_new', status: 'active' }),
+    ).rejects.toThrow('UNAVAILABLE');
+    expect(stored()).toMatchObject({ subscriptionId: 'sub_1', status: 'canceled' });
+    expect(mem.get('houses/h1')).toMatchObject({ subscriptionStatus: 'canceled' });
+  });
+
   it('keeps the stored houses map, drops the lock, and leaves potentialSuperAdmin alone', async () => {
     seed(
       { ...PLAN, status: 'canceled', checkoutStartedAt: 42, houses: { h1: { numberOfGuests: 2 } } },

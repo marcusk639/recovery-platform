@@ -1,4 +1,6 @@
+import type * as admin from 'firebase-admin';
 import { ratsFirestore, stripUndefinedDeep, userCollection } from '../api/firestore';
+import { setOperatorHousesStatus } from './operatorHouses';
 
 type HousesMap = Record<string, unknown>;
 
@@ -28,23 +30,31 @@ export const writeOperatorSubscription = async <M extends object>(
  * read before Stripe created it, so its own map could drop a resident counted
  * meanwhile or bring back a house deleted meanwhile. Replacing the metadata
  * drops `checkoutStartedAt`, which releases Reactivate's lock: the replacement
- * never carries one.
+ * never carries one. The houses' statuses are written in the same transaction:
+ * written apart, a failure between them left a record naming the replacement
+ * with its houses still canceled, which no retry would see.
  */
-export const writeReplacementSubscription = async <M extends object>(
+export const writeReplacementSubscription = async <M extends { status?: string }>(
   uid: string,
   meta: M,
-): Promise<M & { houses: HousesMap }> => writeKeepingHouses(uid, meta, {});
+): Promise<M & { houses: HousesMap }> =>
+  writeKeepingHouses(uid, meta, {}, async (tx) => {
+    await setOperatorHousesStatus(uid, meta.status ?? '', tx);
+  });
 
 const writeKeepingHouses = async <M extends object>(
   uid: string,
   meta: M,
   extra: Record<string, unknown>,
+  // Reads and writes more in the transaction (after its read, before its write).
+  alongside?: (tx: admin.firestore.Transaction) => Promise<void>,
 ): Promise<M & { houses: HousesMap }> => {
   const ref = userCollection.doc(uid);
   return ratsFirestore.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     const houses = (snap.data()?.subscriptionMetadata?.houses ?? {}) as HousesMap;
     const written = { ...meta, houses };
+    if (alongside) await alongside(tx);
     tx.update(ref, { subscriptionMetadata: stripUndefinedDeep(written), ...extra });
     return written;
   });

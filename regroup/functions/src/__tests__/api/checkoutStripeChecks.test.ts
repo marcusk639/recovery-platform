@@ -31,6 +31,7 @@ jest.mock('stripe', () =>
 import {
   failedBeforeSubscription,
   findLiveSubscriptionForUser,
+  findLiveSubscriptionsForUser,
   initializeTierCustomer,
 } from '../../api/stripe';
 
@@ -191,6 +192,18 @@ describe('findLiveSubscriptionForUser', () => {
     await expect(findLiveSubscriptionForUser('uid_1', 'op@test.com', 'cus_1')).rejects.toThrow(
       'stripe down',
     );
+  });
+
+  // Reactivate adopts a replacement only when it is the one live subscription,
+  // so its lookup lists them all: the customers, then the search, deduplicated.
+  it('lists every live one, from the customers and the search, each once', async () => {
+    mockCustomersList.mockResolvedValue({ data: [{ id: 'cus_1' }] });
+    mockSubscriptionsList.mockResolvedValue({ data: [sub('sub_a', 'active')] });
+    mockSubscriptionsSearch.mockResolvedValue({
+      data: [sub('sub_a', 'active'), sub('sub_b', 'trialing'), sub('sub_c', 'canceled')],
+    });
+    const live = await findLiveSubscriptionsForUser('uid_1', 'op@test.com', 'cus_1');
+    expect(live.map((s) => s.id)).toEqual(['sub_a', 'sub_b']);
   });
 
   it('refuses an id that could change the search query', async () => {

@@ -56,6 +56,7 @@ jest.mock("../../api/stripe", () => ({
   // Checkout's Stripe-side checks: no unrecorded subscription here
   // (covered in subscriptionCheckoutStripe.test.ts).
   findLiveSubscriptionForUser: async () => null,
+  findLiveSubscriptionsForUser: async () => [],
   failedBeforeSubscription: () => false,
   updateSubscriptionItem: mockUpdateSubscriptionItem,
   getSubscriptionItem: mockGetSubscriptionItem,
@@ -140,10 +141,12 @@ const mockSetSubscriptionStatus = jest.fn(async (uid: string, _sub: string, stat
   return { written: true, subscriptionMetadata };
 });
 // Reactivate's replacement, also recorded on mockUpdateUser. Like the real one
-// it keeps the stored houses map (subscriptionReactivateReplacement.test.ts).
-const mockWriteReplacementSubscription = jest.fn(async (uid: string, meta: object) => {
+// it keeps the stored houses map and writes the house statuses with the record
+// (subscriptionReactivateReplacement.test.ts, subscriptionFieldWrites.test.ts).
+const mockWriteReplacementSubscription = jest.fn(async (uid: string, meta: { status?: string }) => {
   const houses = (await mockGetUser(uid))?.subscriptionMetadata?.houses ?? {};
   const written = { ...meta, houses };
+  await mockSetOperatorHousesStatus(uid, meta.status);
   await mockUpdateUser(uid, { subscriptionMetadata: written });
   return written;
 });

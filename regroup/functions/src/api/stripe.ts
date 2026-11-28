@@ -12,6 +12,7 @@ import {
 import { assertPaymentMethodUsable } from "./cardValidation";
 import { periodEndSeconds } from "../util/subscriptionPeriod";
 import { isResourceMissing } from "../util/stripe";
+import { operatorStatusFromStripe } from "../webhooks/subscriptionState";
 import { HttpsError } from "firebase-functions/v2/https";
 
 /**
@@ -271,8 +272,10 @@ export const replacementMetadataFrom = (
   freshMetadata.houses = stored.houses ?? {};
   mapSubscriptionToMetadata(subscription, freshMetadata, customerId);
   freshMetadata.subscriptionItemId = subscription.items.data[0].id;
-  // Stripe's status (incomplete when the first payment needs action), not an assumed "active".
-  freshMetadata.status = subscription.status;
+  // Stripe's status (incomplete when the first payment needs action), not an
+  // assumed "active"; "cancelling" for one adopted after the operator set it to
+  // cancel at period end in the billing portal.
+  freshMetadata.status = operatorStatusFromStripe(subscription);
   return freshMetadata;
 };
 
@@ -587,28 +590,48 @@ const listSubscriptionsOf = async (customer: string): Promise<Stripe.Subscriptio
 export const findLiveSubscriptionForUser = async (
   userId: string,
   email: string,
-  // Reactivate's stored customer, which it creates the replacement on: the
-  // email it was made with may not be the account's now.
   knownCustomerId?: string,
-): Promise<Stripe.Subscription | null> => {
+): Promise<Stripe.Subscription | null> =>
+  (await liveSubscriptionsFor(userId, email, knownCustomerId, true))[0] ?? null;
+
+/**
+ * Every live subscription for this operator, each once: what Reactivate looks
+ * for, since it adopts a replacement an earlier attempt left only when that is
+ * the one live subscription (two would leave one billing unseen). It lists the
+ * stored customer too: Reactivate creates on it, and the email it was made
+ * with may not be the account's now.
+ */
+export const findLiveSubscriptionsForUser = (
+  userId: string,
+  email: string,
+  knownCustomerId?: string,
+): Promise<Stripe.Subscription[]> => liveSubscriptionsFor(userId, email, knownCustomerId, false);
+
+const liveSubscriptionsFor = async (
+  userId: string,
+  email: string,
+  knownCustomerId: string | undefined,
+  firstOnly: boolean,
+): Promise<Stripe.Subscription[]> => {
   if (!/^[A-Za-z0-9_-]+$/.test(userId)) {
     throw new Error("findLiveSubscriptionForUser: unexpected user id");
   }
   const isLive = (sub: Stripe.Subscription) =>
     sub.metadata?.userId === userId && !ENDED_STATUSES.has(sub.status);
+  const live = new Map<string, Stripe.Subscription>();
   const customers = await stripe.customers.list({ email, limit: 20 });
   const customerIds = new Set(customers.data.map((c) => c.id));
   if (knownCustomerId) customerIds.add(knownCustomerId);
   for (const customer of customerIds) {
-    const subs = await listSubscriptionsOf(customer);
-    const live = subs.find(isLive);
-    if (live) return live;
+    for (const sub of (await listSubscriptionsOf(customer)).filter(isLive)) live.set(sub.id, sub);
+    if (firstOnly && live.size > 0) return [...live.values()];
   }
   const found = await stripe.subscriptions.search({
     query: `metadata['userId']:'${userId}'`,
     limit: 20,
   });
-  return found.data.find(isLive) ?? null;
+  for (const sub of found.data.filter(isLive)) live.set(sub.id, sub);
+  return [...live.values()];
 };
 
 /**
