@@ -601,10 +601,14 @@ service cloud.firestore {
           (!changed.hasAny(['weeklyRent']) ||
             (d.weeklyRent is number && d.weeklyRent >= 0 && d.weeklyRent <= 2500));
       }
+      // stripeAccountId and stripeStatus are where rent goes (createPaymentIntent,
+      // scheduled collection): only connectStripeAccount and the account.updated
+      // webhook write them, so no client, the owner included, can redirect rent.
+      // The app strips these names from house saves (services/houseWrites.ts).
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()
           .hasAny(['subscriptionStatus', 'guestGraceEndsAt', 'stripeAccountApi', 'superAdminId', 'houseType', 'ownerId',
-                   'rentChargesStartDate', 'rentChargesStartedAtMs']) &&
+                   'rentChargesStartDate', 'rentChargesStartedAtMs', 'stripeAccountId', 'stripeStatus']) &&
         rentSettingsValid() &&
         rentPricingAllowed() &&
         (hasSuperAdminRoleInHouse([houseId]) ||

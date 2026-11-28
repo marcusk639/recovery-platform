@@ -2249,7 +2249,8 @@ describe("houses/{houseId} — delete", () => {
 // stripeAccountId/stripeStatus/monthlyRent/weeklyRent/adminIds/ownerId
 // directly via the API/SDK even though the UI never exposes that capability
 // to them. Tightened so admins are held to the same sensitive-field
-// allowlist as guests; only superAdmin may touch those fields.
+// allowlist as guests; only superAdmin may touch those fields (the Stripe
+// Connect pair is server-only for everyone since M1).
 // ---------------------------------------------------------------------------
 describe("houses/{houseId} — update: sensitive fields restricted to superAdmin", () => {
   async function seedHouse() {
@@ -2349,13 +2350,15 @@ describe("houses/{houseId} — update: sensitive fields restricted to superAdmin
   });
 
   describe("superAdmin", () => {
-    test("ALLOW a superAdmin updating stripeAccountId", async () => {
+    // Server-only since M1 (2026-11-27): rent goes to stripeAccountId, so not
+    // even the owner may change it (houseStripeFields.rules.test.ts).
+    test("DENY a superAdmin updating stripeAccountId", async () => {
       await seedHouse();
       const ctx = testEnv.authenticatedContext(
         ADMIN_UID,
         authHouseSuperAdmin(ADMIN_UID, HOUSE_ID),
       );
-      await assertSucceeds(
+      await assertFails(
         updateDoc(houseRef(ctx), { stripeAccountId: "acct_new" }),
       );
     });

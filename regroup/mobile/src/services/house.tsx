@@ -35,6 +35,7 @@ import { houseIdsRemoved } from '../util/admin';
 import { geohash, getGeohashRange } from '../util/geolocation';
 import { getTimezone } from '../../google/timezone';
 import { getCurrentTime } from '../util/display';
+import { withoutServerOwnedHouseFields } from './houseWrites';
 export const houseCollection = collection(firestore, 'houses');
 
 export function shapeHouses(docs: QueryDocumentSnapshot[]): {
@@ -140,7 +141,7 @@ export async function updateHouse(houseId: string, values: Partial<House>): Prom
     values.chores = cleanedChores;
   }
 
-  return crud.update<Partial<House>>(houseCollection, values);
+  return crud.update<Partial<House>>(houseCollection, withoutServerOwnedHouseFields(values));
 }
 
 export async function updateHouseAwaitingVerification(
@@ -411,5 +412,8 @@ export async function finalizeHouseSetup(
     setupComplete: true,
     updatedAt: getCurrentTime(),
   };
-  await crud.update<House>(houseCollection, { id: houseId, ...updates });
+  await crud.update<House>(
+    houseCollection,
+    withoutServerOwnedHouseFields({ id: houseId, ...updates } as House),
+  );
 }
