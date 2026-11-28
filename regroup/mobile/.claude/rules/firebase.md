@@ -7,7 +7,7 @@ paths: 'src/**/*.{ts,tsx},firebase/**'
 
 ## Modular API only
 
-RNFirebase 26 (since the RN 0.88 upgrade) has only the modular API. Import functions from the package and pass the instances exported by `firebase-setup.ts` (`firestore`, `auth`, `functions`, `storage`, `messaging`). The namespaced forms (`firestore().collection(...)`, `firestore.collection(...)`, `FirebaseFirestore.*`, default imports) no longer exist, and `tsc` rejects them.
+RNFirebase 26 (since the RN 0.88 upgrade) has only the modular API. Import functions from the package and pass the instances exported by `firebase-setup.ts` (`firestore`, `auth`, `functions`, `storage`, `messaging`). The namespaced forms (`firestore().collection(...)`, `firestore.collection(...)`, `FirebaseFirestore.*`, default imports) no longer exist, and `tsc` rejects them. One exception still works: the `Functions` instance keeps its `httpsCallable(name)` method (26.4.1 types it on `Functions`, and the modular `httpsCallable(functions, name)` just calls it), so `services/houseTiers.ts`'s `functions.httpsCallable('myHouseTiers')` type-checks and runs; the portal's `adapter/firebase-setup.ts` shims that method. New code uses the modular form below.
 
 ```ts
 import { collection, doc, getDoc, query, where, orderBy, limit } from '@react-native-firebase/firestore';
