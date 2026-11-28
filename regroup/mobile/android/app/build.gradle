@@ -95,8 +95,8 @@ android {
         applicationId 'com.regroup.app'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 39
-        versionName "0.55"
+        versionCode 40
+        versionName "0.56"
         // The App Links host (AndroidManifest.xml); regroup/app-links.json is the source.
         manifestPlaceholders = [appLinkHost: 'regroup-app.com']
     }

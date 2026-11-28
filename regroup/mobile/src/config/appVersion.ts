@@ -8,6 +8,6 @@
  * while they differ.
  */
 export const APP_VERSION = {
-  ios: '1.53',
-  android: '0.55',
+  ios: '1.54',
+  android: '0.56',
 } as const;

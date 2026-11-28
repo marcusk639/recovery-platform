@@ -6,11 +6,12 @@ const ios = Platform.OS === 'ios';
 
 export const checkLocationPermissions = async () => {
   if (Platform.OS === 'ios') {
-    const always = await Permissions.check(PERMISSIONS.IOS.LOCATION_ALWAYS);
+    // When-in-use only: the app never asks for Always, and the Podfile links
+    // only the LocationWhenInUse handler (setup_permissions).
     const whenInUse = await Permissions.check(
       PERMISSIONS.IOS.LOCATION_WHEN_IN_USE,
     );
-    return always === RESULTS.GRANTED || whenInUse === RESULTS.GRANTED;
+    return whenInUse === RESULTS.GRANTED;
   }
 
   if (Platform.OS === 'android') {
