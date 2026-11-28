@@ -265,11 +265,14 @@ describe('a retry after the replacement was left unfinished', () => {
       email: 'op@test.com',
       subscriptionMetadata: { ...CANCELED, subscriptionId: 'sub_new', status: 'active' },
     };
+    // The plan's cancellation lands after Reactivate read it as live.
     mockStored = JSON.parse(JSON.stringify(mockStaleRead));
+    mockStored.subscriptionMetadata.status = 'canceled';
 
     await reactivate();
 
     expect(mockReactivate).not.toHaveBeenCalled();
     expect(setOperatorHousesStatus()).not.toHaveBeenCalled();
+    expect(mockStored.subscriptionMetadata.status).toBe('canceled');
   });
 });

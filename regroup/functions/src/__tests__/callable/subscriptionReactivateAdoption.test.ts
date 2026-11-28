@@ -217,6 +217,24 @@ describe('adopting the replacement an earlier Reactivate left live', () => {
     expect(mockReactivate).not.toHaveBeenCalled();
     expect(mockStored.subscriptionMetadata.checkoutStartedAt).toBe(0);
   });
+
+  // The gates run under the lock, so each refusal must free it.
+  it.each<[string, () => unknown, object]>([
+    [
+      'the tier is no longer for sale',
+      () => (process.env.STRIPE_PRICE_OXFORD_NETWORK = 'price_net'),
+      { houseType: 'oxford', tier: 'network' },
+    ],
+    ['tier billing is off', () => delete process.env.TIER_BILLING_ENABLED, {}],
+  ])('with nothing to adopt, refuses when %s, and frees the lock', async (_label, close, meta) => {
+    storeOperator(meta);
+    mockFindLives.mockResolvedValue([]);
+    close();
+
+    await expect(reactivate()).rejects.toMatchObject({ code: 'failed-precondition' });
+    expect(mockReactivate).not.toHaveBeenCalled();
+    expect(mockStored.subscriptionMetadata.checkoutStartedAt).toBe(0);
+  });
 });
 
 // The record and the house statuses are written together: either fails, neither

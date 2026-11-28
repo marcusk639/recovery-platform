@@ -139,6 +139,21 @@ describe('writeReplacementSubscription', () => {
     expect(mem.get('houses/h1')).toMatchObject({ subscriptionStatus: 'canceled' });
   });
 
+  // The failing-commit test above can't tell these apart: a batch of the houses'
+  // own would hit the same failing hook. Only the transaction may write them.
+  it("writes the houses through the record's transaction, not a batch of their own", async () => {
+    seed({ ...PLAN, status: 'canceled', houses: {} });
+    mem.seed('houses/h1', { id: 'h1', ownerId: 'op', subscriptionStatus: 'canceled' });
+    const batch = jest.spyOn(memDb, 'batch');
+    try {
+      await writeReplacementSubscription('op', { subscriptionId: 'sub_new', status: 'active' });
+      expect(batch).not.toHaveBeenCalled();
+      expect(mem.get('houses/h1')).toMatchObject({ subscriptionStatus: 'active' });
+    } finally {
+      batch.mockRestore();
+    }
+  });
+
   it('keeps the stored houses map, drops the lock, and leaves potentialSuperAdmin alone', async () => {
     seed(
       { ...PLAN, status: 'canceled', checkoutStartedAt: 42, houses: { h1: { numberOfGuests: 2 } } },
