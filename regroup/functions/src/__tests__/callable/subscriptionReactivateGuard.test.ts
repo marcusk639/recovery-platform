@@ -37,7 +37,15 @@ jest.mock('../../api/stripe', () => ({
   reactivateSubscription: (...a: unknown[]) => mockReactivate(...a),
   uncancelSubscription: jest.fn(),
   findLiveSubscriptionForUser: (...a: unknown[]) => mockFindLive(...a),
+  // Reactivate looks for every live unrecorded subscription.
+  findLiveSubscriptionsForUser: async (...a: unknown[]) => {
+    const live = await mockFindLive(...a);
+    return live ? [live] : [];
+  },
   failedBeforeSubscription: (e: { beforeSubscription?: boolean } | null) => !!e?.beforeSubscription,
+  // The live subscriptions here are never Reactivate's own replacement
+  // (subscriptionReactivateReplacement.test.ts covers that one).
+  isUnrecordedReplacement: () => false,
 }));
 
 // One stored user doc, read by getUser and through the guard's transaction.
@@ -67,7 +75,15 @@ jest.mock('../../api/firestore', () => ({
   getHouse: jest.fn(),
   upsertSubscriptionDoc: jest.fn(),
 }));
-jest.mock('../../util/operatorSubscriptionWrite', () => ({ writeOperatorSubscription: jest.fn() }));
+// The replacement is written keeping the stored houses map
+// (subscriptionReactivateReplacement.test.ts); here it replaces the record.
+jest.mock('../../util/operatorSubscriptionWrite', () => ({
+  writeOperatorSubscription: jest.fn(),
+  writeReplacementSubscription: async (uid: string, meta: Record<string, any>) => {
+    await mockUpdateUser(uid, { subscriptionMetadata: meta });
+    return meta;
+  },
+}));
 jest.mock('../../util/email', () => ({ sendEmail: jest.fn(), regroupEmail: 'x@y.z' }));
 jest.mock('../../api/stripeDeletion', () => ({ closeOperatorBilling: jest.fn() }));
 jest.mock('../../util/operatorHouses', () => ({ setOperatorHousesStatus: jest.fn() }));

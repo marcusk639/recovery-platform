@@ -16,8 +16,18 @@ jest.mock('firebase-functions/params', () => ({ defineSecret: (name: string) => 
 jest.mock('stripe', () => jest.fn().mockImplementation(() => ({})));
 jest.mock('../../api/stripe', () => ({}));
 jest.mock('../../util/superAdminClaim', () => ({ grantPotentialSuperAdminClaim: jest.fn() }));
-jest.mock('../../util/operatorSubscriptionWrite', () => ({ writeOperatorSubscription: jest.fn() }));
 const mockUpdateUser = jest.fn();
+// The houses map is written through changeSubscriptionHouses; recorded here
+// on mockUpdateUser, as the write these tests check for.
+jest.mock('../../util/operatorSubscriptionWrite', () => ({
+  writeOperatorSubscription: jest.fn(),
+  changeSubscriptionHouses: async (uid: string, change: (h: object, m: object) => object) => {
+    const meta = { tier: 'professional', maxProperties: 3, houses: {} };
+    const houses = change({}, meta);
+    await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, houses } });
+    return { ...meta, houses };
+  },
+}));
 jest.mock('../../api/firestore', () => ({
   getUser: async (id: string) => ({
     id,

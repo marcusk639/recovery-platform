@@ -116,11 +116,34 @@ const mockGetHouse = jest.fn();
 const mockGetUser = jest.fn();
 const mockGetInvitationsForHouse = jest.fn();
 const mockUpdateUser = jest.fn();
+let mockOccupancyFails = false;
 jest.mock('../../api/firestore', () => ({
   getHouse: (...args: unknown[]) => mockGetHouse(...args),
   getUser: (...args: unknown[]) => mockGetUser(...args),
   getInvitationsForHouse: (...args: unknown[]) => mockGetInvitationsForHouse(...args),
   updateUser: (...args: unknown[]) => mockUpdateUser(...args),
+  houseCollection: { doc: (id: string) => ({ id }) },
+}));
+// Occupancy is written through changeSubscriptionHouses (tested in
+// subscriptionMetadataWrites.test.ts); here it applies to the mocked owner and
+// records the result on mockUpdateUser, as the write these tests check for. A
+// house read in its transaction exists when mockGetHouse returns one.
+jest.mock('../../util/operatorSubscriptionWrite', () => ({
+  changeSubscriptionHouses: async (
+    uid: string,
+    change: (
+      h: Record<string, { numberOfGuests: number }>,
+      meta: object,
+      tx: unknown,
+    ) => object | Promise<object>,
+  ) => {
+    if (mockOccupancyFails) throw new Error('ABORTED: transaction contention');
+    const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
+    const tx = { get: async (ref: { id: string }) => ({ exists: !!(await mockGetHouse(ref.id)) }) };
+    const houses = await change(meta.houses ?? {}, meta, tx);
+    await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, houses } });
+    return houses;
+  },
 }));
 
 // Token util — deterministic for testing.
@@ -813,6 +836,38 @@ describe('resident capacity enforcement', () => {
           subscriptionMetadata: expect.objectContaining({
             houses: expect.objectContaining({ 'house-1': { numberOfGuests: 6 } }),
           }),
+        }),
+      );
+    });
+
+    // Best-effort, as the grant already succeeded; but a failure leaves the cap
+    // undercounted, so it is logged with the error and the owner to reconcile.
+    it('ALLOW: a failure to record occupancy is logged with its error, and the redeem stands', async () => {
+      mockInvitationsDocGet.mockResolvedValue({
+        exists: true,
+        data: () => ({ ...VALID_GUEST }),
+      });
+      mockGetHouse.mockResolvedValue({ ownerId: 'owner-uid' });
+      mockGetUser.mockResolvedValue({ subscriptionMetadata: ownerMeta(10, 5) });
+      mockCreateClaims.mockResolvedValue({ guest: ['house-1'] });
+      mockOccupancyFails = true;
+      try {
+        const result = await call(
+          redeemInvitation,
+          { token: 'TEST_TOKEN_FIXED' },
+          { uid: 'alice-uid', token: { email: 'alice@x.com' } },
+        );
+        expect(result).toEqual({ houseId: 'house-1', role: 'guest' });
+      } finally {
+        mockOccupancyFails = false;
+      }
+      const { logger } = require('firebase-functions');
+      expect(logger.error).toHaveBeenCalledWith(
+        'redeemInvitation: failed to record resident occupancy',
+        expect.objectContaining({
+          houseId: 'house-1',
+          ownerId: 'owner-uid',
+          error: expect.stringContaining('ABORTED'),
         }),
       );
     });
