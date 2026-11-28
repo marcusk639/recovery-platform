@@ -620,8 +620,10 @@ export const reactivateOperatorSubscription = onCall(
     if (status === "active" || status === "trialing") {
       // Already live. Creating another Stripe subscription here would bill the
       // operator twice over and orphan the original, which would keep charging
-      // with nothing in Firestore pointing at it. Nothing to write: the record
-      // and its houses' statuses were written together (recordReplacement).
+      // with nothing in Firestore pointing at it. Nothing to write: the webhooks
+      // keep a live record and its houses current (a replacement's were written
+      // together, recordReplacement), and a write from this read could undo a
+      // cancellation that lands meanwhile.
       return { ...data.user, subscriptionMetadata: storedMetadata };
     }
 

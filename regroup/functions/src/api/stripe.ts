@@ -222,7 +222,7 @@ export const createItemsFromMetadata = (
 /**
  * Reactivate creates the replacement on the stored customer, which charges its
  * saved card. A customer Stripe no longer has (deleted, say by support) can't
- * be billed. findLiveSubscriptionForUser counts it as holding nothing, so
+ * be billed. findLiveSubscriptionsForUser counts it as holding nothing, so
  * without this check the create would fail with an error not marked as before
  * any subscription, and the lock would be held until it expires. Refusing here,
  * before anything is created, frees the lock and tells the operator to contact
@@ -283,7 +283,7 @@ export const replacementMetadataFrom = (
  * Whether a live subscription the record doesn't show is the replacement a
  * Reactivate left when its writes failed after Stripe's create: on the stored
  * customer, with the stored plan's price as its only item. (That it is this
- * operator's, by metadata.userId, findLiveSubscriptionForUser already checked.)
+ * operator's, by metadata.userId, findLiveSubscriptionsForUser already checked.)
  * A retry records that one instead of being refused, so the operator isn't
  * left paying for a plan the record calls canceled; any other is refused.
  */
