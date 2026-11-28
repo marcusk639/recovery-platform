@@ -123,10 +123,16 @@ export function webBaseUrl(): string {
 
 /**
  * Deletes an invitation whose email failed (createInvitation then refuses).
- * Logs the house and role only: the token is the invitation's credential, and
- * a Firestore error can quote the document path that carries it.
+ * Logs the house and role only, plus createdAt when the delete fails so the
+ * leftover can be found: the token is the invitation's credential, and a
+ * Firestore error can quote the document path that carries it.
  */
-async function removeUnsentInvitation(token: string, houseId: string, role: string): Promise<void> {
+async function removeUnsentInvitation(
+  token: string,
+  houseId: string,
+  role: string,
+  createdAt: string,
+): Promise<void> {
   logger.error('createInvitation: invitation email not sent', { houseId, role });
   try {
     await admin.firestore().collection('invitations').doc(token).delete();
@@ -134,6 +140,7 @@ async function removeUnsentInvitation(token: string, houseId: string, role: stri
     logger.error('createInvitation: unsent invitation not removed', {
       houseId,
       role,
+      createdAt,
       code: (error as { code?: unknown } | null)?.code,
     });
   }
@@ -250,11 +257,8 @@ export const createInvitation = onCall({ secrets: [SENDGRID_API_KEY] }, async (r
     // hear it failed. A pending invitation also holds a resident slot
     // (util/inviteCapacity), so the unsent one is removed and a retry starts
     // clean. sendEmail has logged the SendGrid error.
-    await removeUnsentInvitation(token, input.houseId, input.role);
-    throw new HttpsError(
-      'unavailable',
-      "We couldn't send the invitation email, so the invitation wasn't saved. Please try again.",
-    );
+    await removeUnsentInvitation(token, input.houseId, input.role, invitation.createdAt);
+    throw new HttpsError('unavailable', "We couldn't send the invitation email. Please try again.");
   }
 
   logger.info('createInvitation: issued', {
