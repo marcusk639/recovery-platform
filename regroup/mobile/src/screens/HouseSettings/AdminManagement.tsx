@@ -194,7 +194,13 @@ const AdminManagement: React.FC<Props> = ({ navigation }) => {
         "Invitation Sent",
         `An invitation has been sent to ${inviteEmail.trim()}.`
       );
-    } catch {
+    } catch (error) {
+      // The code only: the error's message can quote the invited address.
+      const code = (error as { code?: unknown } | null)?.code;
+      logException(
+        new Error("AdminManagement: invitation failed"),
+        `house=${house.id} code=${typeof code === "string" ? code : "unknown"}`
+      );
       Alert.alert("Error", "Failed to send invitation. Please try again.");
     } finally {
       setInviting(false);
