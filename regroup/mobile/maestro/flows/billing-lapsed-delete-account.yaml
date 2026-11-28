@@ -37,7 +37,21 @@ tags:
 - tapOn:
     id: delete-password-input
 - inputText: not-the-password
-- hideKeyboard
+# Close the keyboard: iOS through its toolbar Done (hideKeyboard is flaky
+# there), Android with the back key.
+- runFlow:
+    when:
+      platform: iOS
+    commands:
+      - tapOn:
+          text: "Done"
+          optional: true
+- runFlow:
+    when:
+      platform: Android
+    commands:
+      - hideKeyboard
+- waitForAnimationToEnd
 - tapOn:
     id: delete-account-button
 - extendedWaitUntil:
