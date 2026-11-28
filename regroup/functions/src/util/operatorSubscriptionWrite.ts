@@ -69,18 +69,23 @@ type StoredMetadata = Record<string, any>;
  * read earlier would put back fields changed meanwhile, such as the checkout
  * lock (util/checkoutGuard) or a house createHouses added (a freed
  * property-cap slot). `change` gets the stored map and the stored metadata (the
- * plan's caps) and throws to refuse (the cap checks). Firestore runs it again
- * when the doc changed before the commit, so it must have no side effects.
- * Returns the stored metadata as written.
+ * plan's caps) and throws to refuse (the cap checks). It also gets the
+ * transaction, to read anything else it decides on there (it may only read).
+ * Firestore runs it again when a doc it read changed before the commit, so it
+ * must have no side effects. Returns the stored metadata as written.
  */
 export const changeSubscriptionHouses = async (
   uid: string,
-  change: (houses: SubscriptionHouses, stored: StoredMetadata) => SubscriptionHouses,
+  change: (
+    houses: SubscriptionHouses,
+    stored: StoredMetadata,
+    tx: admin.firestore.Transaction,
+  ) => SubscriptionHouses | Promise<SubscriptionHouses>,
 ): Promise<StoredMetadata> => {
   const ref = userCollection.doc(uid);
   return ratsFirestore.runTransaction(async (tx) => {
     const meta = ((await tx.get(ref)).data()?.subscriptionMetadata ?? {}) as StoredMetadata;
-    const houses = change((meta.houses ?? {}) as SubscriptionHouses, meta);
+    const houses = await change((meta.houses ?? {}) as SubscriptionHouses, meta, tx);
     const lastUpdatedAt = new Date().toISOString();
     tx.update(ref, {
       'subscriptionMetadata.houses': houses,

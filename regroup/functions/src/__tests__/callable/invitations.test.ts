@@ -120,18 +120,25 @@ jest.mock('../../api/firestore', () => ({
   getUser: (...args: unknown[]) => mockGetUser(...args),
   getInvitationsForHouse: (...args: unknown[]) => mockGetInvitationsForHouse(...args),
   updateUser: (...args: unknown[]) => mockUpdateUser(...args),
+  houseCollection: { doc: (id: string) => ({ id }) },
 }));
 // Occupancy is written through changeSubscriptionHouses (tested in
 // subscriptionMetadataWrites.test.ts); here it applies to the mocked owner and
-// records the result on mockUpdateUser, as the write these tests check for.
+// records the result on mockUpdateUser, as the write these tests check for. A
+// house read in its transaction exists when mockGetHouse returns one.
 jest.mock('../../util/operatorSubscriptionWrite', () => ({
   changeSubscriptionHouses: async (
     uid: string,
-    change: (h: Record<string, { numberOfGuests: number }>, meta: object) => object,
+    change: (
+      h: Record<string, { numberOfGuests: number }>,
+      meta: object,
+      tx: unknown,
+    ) => object | Promise<object>,
   ) => {
     if (mockOccupancyFails) throw new Error('ABORTED: transaction contention');
     const meta = (await mockGetUser(uid))?.subscriptionMetadata ?? {};
-    const houses = change(meta.houses ?? {}, meta);
+    const tx = { get: async (ref: { id: string }) => ({ exists: !!(await mockGetHouse(ref.id)) }) };
+    const houses = await change(meta.houses ?? {}, meta, tx);
     await mockUpdateUser(uid, { subscriptionMetadata: { ...meta, houses } });
     return houses;
   },

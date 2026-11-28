@@ -23,7 +23,7 @@ jest.mock('firebase-admin', () => ({
   }),
 }));
 
-import { mem } from '../helpers/memFirestore';
+import { mem, memDb } from '../helpers/memFirestore';
 import {
   changeSubscriptionHouses,
   setSubscriptionStatus,
@@ -183,5 +183,24 @@ describe('recordResidentAccepted', () => {
     await recordResidentAccepted('op', 'h1');
 
     expect(stored().houses).toEqual({ h2: { numberOfGuests: 0 } });
+  });
+
+  // onHouseDeleted can free the slot after the house was found but before the
+  // count commits. The transaction runs again on the changed map, and must see
+  // the house gone rather than add it back as a house missing from the plan.
+  it("doesn't bring back a house deleted while the count was being written", async () => {
+    seed({ ...TIER, houses: { h1: { numberOfGuests: 1 } } });
+    mem.seed('houses/h1', { id: 'h1' });
+    raceOnce(async () => {
+      await memDb.collection('houses').doc('h1').delete();
+      await changeSubscriptionHouses('op', (h) => {
+        const rest = { ...h };
+        delete rest.h1;
+        return rest;
+      });
+    });
+    await recordResidentAccepted('op', 'h1');
+
+    expect(stored().houses).toEqual({});
   });
 });

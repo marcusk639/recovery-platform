@@ -42,22 +42,32 @@ const mockApplyUpdate = (data: Record<string, unknown>) => {
     else mockStored[top] = value;
   }
 };
-jest.mock('../../api/firestore', () => ({
-  userCollection: { doc: (id: string) => ({ id }) },
-  stripUndefinedDeep: (v: unknown) => v,
-  ratsFirestore: {
-    runTransaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-      fn({
-        get: async () => ({ exists: true, data: () => mockStored }),
-        update: (_ref: unknown, data: Record<string, unknown>) => mockApplyUpdate(data),
-      }),
-  },
-  getUser: jest.fn(async () => JSON.parse(JSON.stringify(mockStaleRead))),
-  updateUser: jest.fn(async (_id: string, data: Record<string, unknown>) => mockApplyUpdate(data)),
-  getHouse: jest.fn(async () => undefined),
-  getInvitationsForHouse: jest.fn(async () => []),
-  upsertSubscriptionDoc: jest.fn(),
-}));
+jest.mock('../../api/firestore', () => {
+  // A house doc read in a transaction exists when getHouse returns one.
+  const getHouse = jest.fn(async (_id: string): Promise<object | undefined> => undefined);
+  return {
+    userCollection: { doc: (id: string) => ({ id }) },
+    houseCollection: { doc: (id: string) => ({ id, house: true }) },
+    stripUndefinedDeep: (v: unknown) => v,
+    ratsFirestore: {
+      runTransaction: async (fn: (tx: unknown) => Promise<unknown>) =>
+        fn({
+          get: async (ref: { id: string; house?: boolean }) =>
+            ref.house
+              ? { exists: !!(await getHouse(ref.id)) }
+              : { exists: true, data: () => mockStored },
+          update: (_ref: unknown, data: Record<string, unknown>) => mockApplyUpdate(data),
+        }),
+    },
+    getUser: jest.fn(async () => JSON.parse(JSON.stringify(mockStaleRead))),
+    updateUser: jest.fn(async (_id: string, data: Record<string, unknown>) =>
+      mockApplyUpdate(data),
+    ),
+    getHouse,
+    getInvitationsForHouse: jest.fn(async () => []),
+    upsertSubscriptionDoc: jest.fn(),
+  };
+});
 jest.mock('../../util/houseRoles', () => ({ isPrimaryOwner: async () => true }));
 jest.mock('../../util/email', () => ({ sendEmail: jest.fn(), regroupEmail: 'x@y.z' }));
 jest.mock('../../util/operatorHouses', () => ({ setOperatorHousesStatus: jest.fn() }));

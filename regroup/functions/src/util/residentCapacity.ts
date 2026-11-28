@@ -1,6 +1,6 @@
 import { logger } from 'firebase-functions';
 import { HttpsError } from 'firebase-functions/v2/https';
-import { getHouse, getUser, getInvitationsForHouse } from '../api/firestore';
+import { getUser, getInvitationsForHouse, houseCollection } from '../api/firestore';
 import { changeSubscriptionHouses } from './operatorSubscriptionWrite';
 import { totalResidents } from './tierCaps';
 import { Invitation, InvitationRole } from '../entities/Invitation';
@@ -110,8 +110,10 @@ export async function assertResidentCapacityAvailable(
  * takes a property slot, and logged at error for ops to reconcile:
  * assertResidentCapacityAvailable admits such a house, so leaving the resident
  * out would let every redeem past the cap. A house whose doc is gone (deleted
- * since the invitation) isn't brought back: onHouseDeleted freed its slot. No-op
- * for non-tier subscriptions and when the owner can't be resolved.
+ * since the invitation) isn't brought back: onHouseDeleted freed its slot. The
+ * house is read in the count's transaction, so a delete whose slot is freed
+ * while the count is written is seen too. No-op for non-tier subscriptions and
+ * when the owner can't be resolved.
  */
 export async function recordResidentAccepted(
   ownerId: string | undefined,
@@ -122,14 +124,14 @@ export async function recordResidentAccepted(
   const meta = owner?.subscriptionMetadata;
   if (!meta?.tier) return;
 
-  const houseExists = !!(await getHouse(houseId));
+  const houseRef = houseCollection.doc(houseId);
   // From the stored map, writing only it: see changeSubscriptionHouses.
   // Set in the transaction's callback, which may run more than once: the last run wins.
   let outcome = 'counted' as 'counted' | 'added' | 'deleted';
-  await changeSubscriptionHouses(ownerId, (houses) => {
+  await changeSubscriptionHouses(ownerId, async (houses, _stored, tx) => {
     if (houseId in houses) {
       outcome = 'counted';
-    } else if (!houseExists) {
+    } else if (!(await tx.get(houseRef)).exists) {
       outcome = 'deleted';
       return houses;
     } else {
