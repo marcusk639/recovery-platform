@@ -544,9 +544,10 @@ service cloud.firestore {
       // regular admin only 'house:partial-edit' and reserves
       // 'house:full-edit' (the action gating these exact fields in
       // HouseSummary.tsx) for superAdmin alone. A regular admin could bypass
-      // the UI-only restriction via a direct write. superAdmin can update
-      // anything; regular admins and guests share the same sensitive-field
-      // restriction.
+      // the UI-only restriction via a direct write. superAdmin skips the
+      // sensitive-field allowlist but not the server-owned guard below
+      // (subscriptionStatus, ownerId, and since M1 the Stripe Connect pair);
+      // regular admins and guests share the same sensitive-field restriction.
       // isDemoScopedHouses gates the whole expression (rather than relying on
       // isGuest()'s internal gate alone) since this rule also calls the raw
       // hasSuperAdminRoleInHouse/hasAdminRoleInHouse helpers directly, which
@@ -602,8 +603,10 @@ service cloud.firestore {
             (d.weeklyRent is number && d.weeklyRent >= 0 && d.weeklyRent <= 2500));
       }
       // stripeAccountId and stripeStatus are where rent goes (createPaymentIntent,
-      // scheduled collection): only connectStripeAccount and the account.updated
-      // webhook write them, so no client, the owner included, can redirect rent.
+      // scheduled collection): only the server writes them, through the Admin SDK
+      // (createHouses, the connect/disconnect/status callables, the Connect
+      // webhooks, account deletion), so no client, the owner included, can
+      // redirect rent.
       // The app strips these names from house saves (services/houseWrites.ts).
       allow update: if isDemoScopedHouses([houseId]) &&
         !request.resource.data.diff(resource.data).affectedKeys()

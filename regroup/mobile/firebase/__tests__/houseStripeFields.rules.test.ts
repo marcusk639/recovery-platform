@@ -3,10 +3,11 @@
  *
  * createPaymentIntent sends rent to houses/{id}.stripeAccountId once
  * stripeStatus is "active", and scheduled rent collection (rentDestination.ts)
- * reads the same fields. Only the server writes them: connectStripeAccount and
- * the account.updated webhook, through the Admin SDK. A client of any rank,
- * the owner and co-owners included, must not be able to point rent at another
- * connected account or mark an unfinished one active.
+ * reads the same fields. Only the server writes them, through the Admin SDK
+ * (createHouses, the connect/disconnect/status callables, the Connect webhooks,
+ * account deletion). A client of any rank, the owner and co-owners included,
+ * must not be able to point rent at another connected account or mark an
+ * unfinished one active.
  *
  * Requires the Firebase Firestore emulator running on port 8080.
  *
@@ -100,5 +101,50 @@ describe('houses/{houseId} Stripe Connect fields are server-only', () => {
 
   it('lets a house superAdmin save a whole-house copy whose Stripe fields are unchanged', async () => {
     await assertSucceeds(updateDoc(ownerHouseRef(), { ...seededHouse, name: 'Renamed House' }));
+  });
+
+  it('BLOCKS a merge set that changes stripeAccountId', async () => {
+    await assertFails(
+      setDoc(ownerHouseRef(), { stripeAccountId: 'acct_someone_else' }, { merge: true }),
+    );
+  });
+});
+
+// Before Connect is set up the house has neither field: the first account must
+// still come from connectStripeAccount, not from a client adding the fields.
+describe('a house with no Stripe Connect account yet', () => {
+  const unconnectedHouse: Record<string, unknown> = { ...seededHouse };
+  delete unconnectedHouse.stripeAccountId;
+  delete unconnectedHouse.stripeStatus;
+  const hijack = { stripeAccountId: 'acct_someone_else', stripeStatus: 'active' };
+
+  beforeEach(async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), unconnectedHouse);
+    });
+  });
+
+  it('BLOCKS a house superAdmin adding an active account', async () => {
+    await assertFails(updateDoc(ownerHouseRef(), hijack));
+  });
+
+  it('BLOCKS a house manager (admin claim) adding an active account', async () => {
+    const ctx = testEnv.authenticatedContext('manager', { admin: { [HOUSE_ID]: true } });
+    await assertFails(updateDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), hijack));
+  });
+
+  it('BLOCKS a house manager (admin claim) adding only stripeStatus', async () => {
+    const ctx = testEnv.authenticatedContext('manager', { admin: { [HOUSE_ID]: true } });
+    await assertFails(
+      updateDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), { stripeStatus: 'active' }),
+    );
+  });
+
+  it('lets the same house superAdmin and manager rename the house', async () => {
+    await assertSucceeds(updateDoc(ownerHouseRef(), { name: 'Renamed House' }));
+    const ctx = testEnv.authenticatedContext('manager', { admin: { [HOUSE_ID]: true } });
+    await assertSucceeds(
+      updateDoc(doc(ctx.firestore(), `houses/${HOUSE_ID}`), { name: 'Renamed Again' }),
+    );
   });
 });

@@ -90,7 +90,7 @@ describe('withoutServerOwnedHouseFields', () => {
       /allow update: if isDemoScopedHouses\(\[houseId\]\) &&\s*!request\.resource\.data\.diff\(resource\.data\)\.affectedKeys\(\)\s*\.hasAny\(\[([^\]]*)\]\)/,
     );
     expect(rule).not.toBeNull();
-    const fromRules = [...rule![1].matchAll(/'([A-Za-z]+)'/g)].map((m) => m[1]).sort();
+    const fromRules = [...rule![1].matchAll(/['"]([A-Za-z0-9_]+)['"]/g)].map((m) => m[1]).sort();
 
     expect([...SERVER_OWNED_HOUSE_FIELDS].sort()).toEqual(fromRules);
   });
@@ -131,12 +131,14 @@ describe('whole-house saves send no server-owned field', () => {
     seedDoc('guests/g1', { id: 'g1', houseId: 'h1' });
     await customizePhase({ id: 'g1', phase: 'p' } as any, staleHouse() as any);
     expectNoServerOwnedField();
+    expect(houseWrites()[0].data).toEqual(expect.objectContaining({ id: 'h1', phases: {} }));
   });
 
   it('updateDispute', async () => {
     seedDoc('houses/h1', staleHouse());
     await updateDispute(staleHouse() as any);
     expectNoServerOwnedField();
+    expect(houseWrites()[0].data).toEqual(expect.objectContaining({ id: 'h1', name: 'Oak' }));
   });
 
   it('updateHouseBatch', async () => {
