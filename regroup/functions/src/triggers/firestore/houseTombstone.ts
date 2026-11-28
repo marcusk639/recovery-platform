@@ -14,9 +14,13 @@ export const deletedAtFor = (eventTime: string | undefined): string => {
  * Frees the deleted house's slot in its owner's subscription houses map (the
  * property-cap count), in a transaction so it cannot race createHouses.
  * updateSubscriptionHouses frees a slot only for a house whose doc is already
- * gone; this trigger frees it automatically. Writers that rewrite the whole
- * subscriptionMetadata outside a transaction can still race this and restore a
- * deleted house's entry (a known gap). Returns false when the owner doc or
+ * gone; this trigger frees it automatically. Writers of the map change it from
+ * the copy read in their own transaction (functions/CLAUDE.md, "Write only the
+ * `subscriptionMetadata` fields you change"), so none puts back an entry this
+ * removed from a stale copy. The operator can still add a deleted house back on
+ * purpose: updateSubscriptionHouses' add checks only their owner record, which
+ * outlives the house, and that costs only their own slot until they remove it.
+ * Returns false when the owner doc or
  * the map entry is already gone (so redelivery is safe), true when it freed one.
  */
 export const releaseSubscriptionSlot = async (
