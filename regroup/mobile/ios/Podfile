@@ -19,17 +19,15 @@ $StripeDisableSPM = true
 platform :ios, min_ios_version_supported
 prepare_react_native_project!
 
-# react-native-permissions 5: the iOS permission handlers the app uses (they
-# were `reactNativePermissionsIOS` in package.json on 3.x).
+# react-native-permissions 5: link only the iOS permission handlers the JS
+# calls (src/util/permissions.ts checks and requests when-in-use location).
+# Every linked handler references its iOS API, and App Store Connect can refuse a
+# binary that references an API without its Info.plist purpose string
+# (ITMS-90683), so add a handler only together with its purpose string.
+# Camera, photos and notifications don't go through this library:
+# react-native-image-picker and @react-native-firebase/messaging ask for them.
 setup_permissions([
-  'Camera',
-  'LocationAccuracy',
-  'LocationAlways',
   'LocationWhenInUse',
-  'Motion',
-  'Notifications',
-  'PhotoLibrary',
-  'PhotoLibraryAddOnly',
 ])
 
 # The e2e configurations are Release builds of the app (bundled JS, no Metro)

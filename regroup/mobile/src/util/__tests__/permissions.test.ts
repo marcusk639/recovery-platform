@@ -100,25 +100,25 @@ beforeEach(() => jest.clearAllMocks());
 // ─── checkLocationPermissions ─────────────────────────────────────────────────
 
 describe('checkLocationPermissions', () => {
-  it('iOS — true when LOCATION_ALWAYS is granted', async () => {
+  // The app asks only for when-in-use location; the LocationAlways handler is
+  // not linked (ios/Podfile setup_permissions), so it must never be checked.
+  it('iOS — checks only LOCATION_WHEN_IN_USE, never LOCATION_ALWAYS', async () => {
     const { permCheck } = mocks();
-    permCheck
-      .mockResolvedValueOnce('granted')  // LOCATION_ALWAYS
-      .mockResolvedValueOnce('denied');  // LOCATION_WHEN_IN_USE
+    permCheck.mockResolvedValue('granted');
     const { checkLocationPermissions } = loadPermissions('ios');
-    await expect(checkLocationPermissions()).resolves.toBe(true);
+    await checkLocationPermissions();
+    expect(permCheck).toHaveBeenCalledTimes(1);
+    expect(permCheck).toHaveBeenCalledWith('ios.permission.LOCATION_WHEN_IN_USE');
   });
 
   it('iOS — true when LOCATION_WHEN_IN_USE is granted', async () => {
     const { permCheck } = mocks();
-    permCheck
-      .mockResolvedValueOnce('denied')   // LOCATION_ALWAYS
-      .mockResolvedValueOnce('granted'); // LOCATION_WHEN_IN_USE
+    permCheck.mockResolvedValueOnce('granted'); // LOCATION_WHEN_IN_USE
     const { checkLocationPermissions } = loadPermissions('ios');
     await expect(checkLocationPermissions()).resolves.toBe(true);
   });
 
-  it('iOS — false when both permissions are denied', async () => {
+  it('iOS — false when LOCATION_WHEN_IN_USE is denied', async () => {
     const { permCheck } = mocks();
     permCheck.mockResolvedValue('denied');
     const { checkLocationPermissions } = loadPermissions('ios');
@@ -271,9 +271,7 @@ describe('checkAndRequestLocationPermissions', () => {
   describe('on iOS', () => {
     it('returns true immediately when already granted (skips request)', async () => {
       const { permCheck, permRequest } = mocks();
-      permCheck
-        .mockResolvedValueOnce('granted') // LOCATION_ALWAYS
-        .mockResolvedValueOnce('denied');
+      permCheck.mockResolvedValueOnce('granted'); // LOCATION_WHEN_IN_USE
       const { checkAndRequestLocationPermissions } = loadPermissions('ios');
       const result = await checkAndRequestLocationPermissions();
       expect(result).toBe(true);

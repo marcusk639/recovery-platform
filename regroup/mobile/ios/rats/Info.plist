@@ -73,8 +73,12 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Regroup uses your camera to attach photos to resident activity reports and house documentation.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Regroup uses your location only while you're using the app, to verify meeting attendance and record check-ins at house locations. It doesn't track your location in the background.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Regroup uses your location to verify meeting attendance and record check-ins at house locations.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Regroup only adds a photo to your library if you choose to save one you took in the app.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Regroup uses your photo library to attach images to activity reports and resident profiles.</string>
 	<key>RCTNewArchEnabled</key>
