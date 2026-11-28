@@ -190,7 +190,7 @@ for v in "${VARIANTS[@]}"; do
       verify e2eStaging com.regroup.app.e2e.stg "Regroup e2e stg" regroup-e2e \
         regroup-e2e-variant=staging none ;;
     release)
-      verify release com.regroup.app rats phoenix-cleanhouse \
+      verify release com.regroup.app Regroup phoenix-cleanhouse \
         regroup-e2e-variant=none none ;;
     *)
       echo "unknown variant: $v (expected e2eEmulator, e2eStaging or release)" >&2
