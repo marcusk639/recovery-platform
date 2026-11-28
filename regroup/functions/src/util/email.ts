@@ -15,9 +15,11 @@ function initSendGrid() {
 
 /**
  * Sends an email via SendGrid.
- * Errors are caught and logged rather than propagated to the caller.
+ * Errors are caught and logged rather than propagated to the caller. Resolves
+ * true once SendGrid accepts the message and false when the send failed, for
+ * a caller whose user must hear about it (createInvitation).
  */
-export const sendEmail = async (email: Email): Promise<void> => {
+export const sendEmail = async (email: Email): Promise<boolean> => {
   initSendGrid();
   try {
     const emailData: MailDataRequired = {
@@ -32,6 +34,7 @@ export const sendEmail = async (email: Email): Promise<void> => {
     };
 
     await sendgrid.send(emailData);
+    return true;
   } catch (error) {
     // Allowlist, never the whole error. A SendGrid ResponseError carries
     // response.body and request, and its `message` echoes the recipient
@@ -56,5 +59,6 @@ export const sendEmail = async (email: Email): Promise<void> => {
         help: e?.help,
       })),
     });
+    return false;
   }
 };

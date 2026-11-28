@@ -75,10 +75,10 @@ describe('sendEmail', () => {
     }));
   });
 
-  it('swallows errors silently (does not throw)', async () => {
+  it('swallows errors (does not throw) and reports the send failed', async () => {
     mockSendgridSend.mockRejectedValue(new Error('SMTP error'));
     await expect(sendEmail({ to: 'u@t.com', from: regroupEmail, subject: 'Hi', text: 'Hi' }))
-      .resolves.toBeUndefined();
+      .resolves.toBe(false);
   });
 
   it('does not log the recipient or message body when sendgrid rejects', async () => {
@@ -151,5 +151,23 @@ describe('sendEmail', () => {
     expect(payload).not.toContain('does not match a verified Sender Identity');
     expect(payload).not.toContain('ops@regroup-app.com');
     errorSpy.mockRestore();
+  });
+});
+
+// M3 (2026-11-27): the caller learns whether the email went, so an invitation
+// whose email failed is not reported as sent.
+describe('sendEmail result', () => {
+  it('resolves true once SendGrid accepts the message', async () => {
+    mockSendgridSend.mockResolvedValue([{}]);
+    await expect(
+      sendEmail({ to: 'user@test.com', from: regroupEmail, subject: 'Hi', text: 'Hi' }),
+    ).resolves.toBe(true);
+  });
+
+  it('resolves false, and still does not throw, when SendGrid refuses it', async () => {
+    mockSendgridSend.mockRejectedValue(new Error('Forbidden'));
+    await expect(
+      sendEmail({ to: 'user@test.com', from: regroupEmail, subject: 'Hi', text: 'Hi' }),
+    ).resolves.toBe(false);
   });
 });
