@@ -171,3 +171,40 @@ describe('sendEmail result', () => {
     ).resolves.toBe(false);
   });
 });
+
+// The e2e emulator (demo-regroup-e2e) has no SendGrid key, so every send there
+// fails; createInvitation now refuses on a failed send, which would break the
+// portal browser tests and Maestro flows that invite. There the email is
+// skipped and reported sent. Only that exact emulator: elsewhere it is sent.
+describe('sendEmail in the e2e emulator', () => {
+  const saved = { emu: process.env.FUNCTIONS_EMULATOR, project: process.env.GCLOUD_PROJECT };
+  afterEach(() => {
+    process.env.FUNCTIONS_EMULATOR = saved.emu;
+    process.env.GCLOUD_PROJECT = saved.project;
+    if (saved.emu === undefined) delete process.env.FUNCTIONS_EMULATOR;
+    if (saved.project === undefined) delete process.env.GCLOUD_PROJECT;
+  });
+
+  it('skips SendGrid and resolves true in demo-regroup-e2e', async () => {
+    process.env.FUNCTIONS_EMULATOR = 'true';
+    process.env.GCLOUD_PROJECT = 'demo-regroup-e2e';
+    await expect(
+      sendEmail({ to: 'user@test.com', from: regroupEmail, subject: 'Hi', text: 'Hi' }),
+    ).resolves.toBe(true);
+    expect(mockSendgridSend).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['another emulator project', 'true', 'phoenix-cleanhouse'],
+    ['a deployed function', undefined, 'demo-regroup-e2e'],
+  ])('still sends through SendGrid in %s', async (_label, emu, project) => {
+    if (emu === undefined) delete process.env.FUNCTIONS_EMULATOR;
+    else process.env.FUNCTIONS_EMULATOR = emu;
+    process.env.GCLOUD_PROJECT = project;
+    mockSendgridSend.mockResolvedValue([{}]);
+    await expect(
+      sendEmail({ to: 'user@test.com', from: regroupEmail, subject: 'Hi', text: 'Hi' }),
+    ).resolves.toBe(true);
+    expect(mockSendgridSend).toHaveBeenCalledTimes(1);
+  });
+});

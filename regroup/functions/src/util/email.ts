@@ -2,6 +2,7 @@ import { Email } from "../entities/Email";
 import sendgrid from "@sendgrid/mail";
 import type { MailDataRequired } from "@sendgrid/helpers/classes/mail";
 import { logger } from "firebase-functions";
+import { isE2EEmulator } from "./emulatorFaults";
 
 export const regroupEmail = "admin@regroup-app.com";
 
@@ -18,8 +19,12 @@ function initSendGrid() {
  * Errors are caught and logged rather than propagated to the caller. Resolves
  * true once SendGrid accepts the message and false when the send failed, for
  * a caller whose user must hear about it (createInvitation).
+ * In the e2e emulator (demo-regroup-e2e), which has no SendGrid key, nothing
+ * is sent and it resolves true, so the portal browser tests and Maestro flows
+ * that invite still get an invitation.
  */
 export const sendEmail = async (email: Email): Promise<boolean> => {
+  if (isE2EEmulator()) return true;
   initSendGrid();
   try {
     const emailData: MailDataRequired = {
