@@ -11,6 +11,9 @@ import {
 } from "../util/tierPricing";
 import { assertPaymentMethodUsable } from "./cardValidation";
 import { periodEndSeconds } from "../util/subscriptionPeriod";
+import { isResourceMissing } from "../util/stripe";
+import { operatorStatusFromStripe } from "../webhooks/subscriptionState";
+import { HttpsError } from "firebase-functions/v2/https";
 
 /**
  * Trial length for all new subscriptions. Stripe applies trial_period_days
@@ -216,6 +219,94 @@ export const createItemsFromMetadata = (
   ];
 };
 
+/**
+ * Reactivate creates the replacement on the stored customer, which charges its
+ * saved card. A customer Stripe no longer has (deleted, say by support) can't
+ * be billed. findLiveSubscriptionsForUser counts it as holding nothing, so
+ * without this check the create would fail with an error not marked as before
+ * any subscription, and the lock would be held until it expires. Refusing here,
+ * before anything is created, frees the lock and tells the operator to contact
+ * support; the refusal is logged so support can find it. Any other Stripe error
+ * is thrown as it is (still before any subscription).
+ */
+const assertCustomerOnFile = async (customerId: string, userId?: string): Promise<void> => {
+  let gone: boolean;
+  try {
+    gone = (await stripe.customers.retrieve(customerId)).deleted === true;
+  } catch (error) {
+    if (!isResourceMissing(error)) throw error;
+    gone = true;
+  }
+  if (gone) {
+    logger.warn("Reactivate refused: the stored Stripe customer is no longer on file", {
+      userId,
+      customerId,
+    });
+    throw new HttpsError(
+      "failed-precondition",
+      "This plan's billing details are no longer on file, so it can't be restarted. Please contact support.",
+    );
+  }
+};
+
+/**
+ * Reactivate's replacement as the operator record holds it: the stored tier
+ * plan, on the subscription Stripe created for it.
+ */
+export const replacementMetadataFrom = (
+  subscription: Stripe.Subscription,
+  stored: OperatorSubscription,
+  customerId: string,
+): OperatorSubscription => {
+  const houseType = stored.houseType as HouseType;
+  const freshMetadata = new OperatorSubscription();
+  freshMetadata.houseType = houseType;
+  freshMetadata.tier = stored.tier;
+  freshMetadata.billingInterval = storedBillingInterval(stored.billingInterval);
+  // The replacement replaces the whole plan: left at its default false, an
+  // Oxford operator lost the Oxford features they pay for.
+  freshMetadata.oxfordEnabled = houseType === "oxford";
+  freshMetadata.maxResidents = stored.maxResidents;
+  freshMetadata.maxProperties = stored.maxProperties;
+  // Replaced with the stored map when written (writeReplacementSubscription).
+  freshMetadata.houses = stored.houses ?? {};
+  mapSubscriptionToMetadata(subscription, freshMetadata, customerId);
+  freshMetadata.subscriptionItemId = subscription.items.data[0].id;
+  // Stripe's status (incomplete when the first payment needs action), not an
+  // assumed "active"; "cancelling" for one adopted after the operator set it to
+  // cancel at period end in the billing portal.
+  freshMetadata.status = operatorStatusFromStripe(subscription);
+  return freshMetadata;
+};
+
+/**
+ * Whether a live subscription the record doesn't show is the replacement a
+ * Reactivate left when its writes failed after Stripe's create: on the stored
+ * customer, with the stored plan's price as its only item. (That it is this
+ * operator's, by metadata.userId, findLiveSubscriptionsForUser already checked.)
+ * A retry records that one instead of being refused, so the operator isn't
+ * left paying for a plan the record calls canceled; any other is refused.
+ */
+export const isUnrecordedReplacement = (
+  live: Stripe.Subscription,
+  stored: OperatorSubscription,
+): boolean => {
+  const customer = typeof live.customer === "string" ? live.customer : live.customer?.id;
+  const items = live.items?.data ?? [];
+  if (customer !== stored.customerId || items.length !== 1) return false;
+  let price: string;
+  try {
+    price = resolveTierPriceId(
+      stored.houseType as HouseType,
+      stored.tier as TierKey,
+      storedBillingInterval(stored.billingInterval),
+    );
+  } catch {
+    return false;
+  }
+  return (items[0].price?.id ?? items[0].plan?.id) === price;
+};
+
 export const reactivateSubscription = async (
   customerId: string,
   subscriptionMetadata: OperatorSubscription,
@@ -239,9 +330,11 @@ export const reactivateSubscription = async (
     let price: string;
     try {
       price = resolveTierPriceId(houseType, tier, billingInterval);
+      await assertCustomerOnFile(customerId, userId);
       await attempt.beforeCreate();
     } catch (error) {
-      // Before Stripe is called, so the callable may free the checkout lock.
+      // Before Stripe creates the subscription, so the callable may free the
+      // checkout lock.
       throw markedBeforeSubscription(error);
     }
     const subscription = await stripe.subscriptions.create(
@@ -252,18 +345,7 @@ export const reactivateSubscription = async (
       },
       { idempotencyKey: `${reactivateKey}-tier` },
     );
-    const freshMetadata = new OperatorSubscription();
-    freshMetadata.houseType = houseType;
-    freshMetadata.tier = tier;
-    freshMetadata.billingInterval = billingInterval;
-    freshMetadata.maxResidents = subscriptionMetadata.maxResidents;
-    freshMetadata.maxProperties = subscriptionMetadata.maxProperties;
-    freshMetadata.houses = subscriptionMetadata.houses ?? {};
-    mapSubscriptionToMetadata(subscription, freshMetadata, customerId);
-    freshMetadata.subscriptionItemId = subscription.items.data[0].id;
-    // Stripe's status (incomplete when the first payment needs action), not an assumed "active".
-    freshMetadata.status = subscription.status;
-    return freshMetadata;
+    return replacementMetadataFrom(subscription, subscriptionMetadata, customerId);
   }
 
   const subscription = await stripe.subscriptions.create(
@@ -480,6 +562,22 @@ export const failedBeforeSubscription = (error: unknown): boolean =>
 const ENDED_STATUSES = new Set(["canceled", "incomplete_expired"]);
 
 /**
+ * A customer's subscriptions, or none when Stripe no longer has the customer:
+ * deleting a customer cancels its subscriptions, so nothing live is there.
+ */
+const listSubscriptionsOf = async (customer: string): Promise<Stripe.Subscription[]> => {
+  try {
+    return (await stripe.subscriptions.list({ customer, status: "all", limit: 20 })).data;
+  } catch (error) {
+    if (!isResourceMissing(error)) throw error;
+    logger.warn("Stored Stripe customer not found; counted as holding no subscription", {
+      customerId: customer,
+    });
+    return [];
+  }
+};
+
+/**
  * A Stripe subscription for this operator that hasn't ended, or null: checkout's
  * second check, for one the operator record doesn't show (a checkout whose
  * record write failed and could not be cancelled). Every tier subscription
@@ -492,28 +590,48 @@ const ENDED_STATUSES = new Set(["canceled", "incomplete_expired"]);
 export const findLiveSubscriptionForUser = async (
   userId: string,
   email: string,
-  // Reactivate's stored customer, which it creates the replacement on: the
-  // email it was made with may not be the account's now.
   knownCustomerId?: string,
-): Promise<Stripe.Subscription | null> => {
+): Promise<Stripe.Subscription | null> =>
+  (await liveSubscriptionsFor(userId, email, knownCustomerId, true))[0] ?? null;
+
+/**
+ * Every live subscription for this operator, each once: what Reactivate looks
+ * for, since it adopts a replacement an earlier attempt left only when that is
+ * the one live subscription (two would leave one billing unseen). It lists the
+ * stored customer too: Reactivate creates on it, and the email it was made
+ * with may not be the account's now.
+ */
+export const findLiveSubscriptionsForUser = (
+  userId: string,
+  email: string,
+  knownCustomerId?: string,
+): Promise<Stripe.Subscription[]> => liveSubscriptionsFor(userId, email, knownCustomerId, false);
+
+const liveSubscriptionsFor = async (
+  userId: string,
+  email: string,
+  knownCustomerId: string | undefined,
+  firstOnly: boolean,
+): Promise<Stripe.Subscription[]> => {
   if (!/^[A-Za-z0-9_-]+$/.test(userId)) {
     throw new Error("findLiveSubscriptionForUser: unexpected user id");
   }
   const isLive = (sub: Stripe.Subscription) =>
     sub.metadata?.userId === userId && !ENDED_STATUSES.has(sub.status);
+  const live = new Map<string, Stripe.Subscription>();
   const customers = await stripe.customers.list({ email, limit: 20 });
   const customerIds = new Set(customers.data.map((c) => c.id));
   if (knownCustomerId) customerIds.add(knownCustomerId);
   for (const customer of customerIds) {
-    const subs = await stripe.subscriptions.list({ customer, status: "all", limit: 20 });
-    const live = subs.data.find(isLive);
-    if (live) return live;
+    for (const sub of (await listSubscriptionsOf(customer)).filter(isLive)) live.set(sub.id, sub);
+    if (firstOnly && live.size > 0) return [...live.values()];
   }
   const found = await stripe.subscriptions.search({
     query: `metadata['userId']:'${userId}'`,
     limit: 20,
   });
-  return found.data.find(isLive) ?? null;
+  for (const sub of found.data.filter(isLive)) live.set(sub.id, sub);
+  return [...live.values()];
 };
 
 /**
@@ -589,59 +707,3 @@ export const initializeTierCustomer = async (
   };
 };
 
-export const updateSubscriptionMetadata = (
-  user: User,
-  houseId: string,
-  action: "add" | "remove",
-  houseIds: string[],
-  forHouse: boolean = false,
-) => {
-  if (!forHouse) {
-    const currentGuests =
-      user.subscriptionMetadata.houses[houseId]?.numberOfGuests ?? 0;
-    return {
-      ...user.subscriptionMetadata,
-      houses: {
-        ...user.subscriptionMetadata.houses,
-        [houseId]: {
-          numberOfGuests:
-            action === "add"
-              ? currentGuests + 1
-              : Math.max(0, currentGuests - 1),
-        },
-      },
-    };
-  } else {
-    if (action === "add") {
-      const houseEntry: Record<string, { numberOfGuests: number }> = {};
-      if (houseIds && houseIds.length) {
-        houseIds.forEach((id) => {
-          houseEntry[id] = {
-            numberOfGuests: 0,
-          };
-        });
-      }
-      if (houseId) {
-        houseEntry[houseId] = {
-          numberOfGuests: 0,
-        };
-      }
-      return {
-        ...user.subscriptionMetadata,
-        houses: {
-          ...user.subscriptionMetadata.houses,
-          ...houseEntry,
-        },
-      };
-    } else {
-      // Immutable removal — spread creates a new houses object without houseId.
-      // delete on a shallow copy would mutate the original houses reference.
-      const { [houseId]: _removed, ...remainingHouses } =
-        user.subscriptionMetadata.houses;
-      return {
-        ...user.subscriptionMetadata,
-        houses: remainingHouses,
-      };
-    }
-  }
-};

@@ -315,13 +315,19 @@ jobs:
           echo "portal=${portal}" >> "$GITHUB_OUTPUT"
 
   regroup-portal-e2e:
-    name: regroup/portal — browser tests
+    name: regroup/portal — browser tests (${{ matrix.shard }}/6)
     needs: changes
     # Blocking, but only for changes to the portal itself, so the portal still never
     # blocks a mobile PR before launch. A skipped job counts as passed.
     if: needs.changes.outputs.portal == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 30
+    # The tests share one set of emulators, so one worker per runner. Each shard is
+    # its own runner with its own emulators; Playwright keeps a spec file in one shard.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -364,12 +370,12 @@ jobs:
             echo "::error::Add the REGROUP_PORTAL_E2E_STRIPE_ACCOUNT_ID repository secret, the sandbox's connected account."
             exit 1
           fi
-          regroup/portal/scripts/e2e.sh --production
+          regroup/portal/scripts/e2e.sh --production --shard=${{ matrix.shard }}/6
       - name: Failure screenshots
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: regroup-portal-e2e-results
+          name: regroup-portal-e2e-results-${{ matrix.shard }}
           path: regroup/portal/test-results
           retention-days: 7
 

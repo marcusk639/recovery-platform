@@ -8,11 +8,13 @@ import { operatorStatusToHouseStatus } from './entitlement';
  * that changes the subscription itself, such as replacing a canceled one: the
  * webhooks that would otherwise follow can arrive before the operator's record
  * points at the new subscription, and skip it. A live status ends any grace.
- * Returns the number of houses written.
+ * Given a transaction, reads and writes the houses in it, so they commit with
+ * the record (writeReplacementSubscription). Returns the number of houses written.
  */
 export async function setOperatorHousesStatus(
   operatorUid: string,
   status: string,
+  tx?: admin.firestore.Transaction,
 ): Promise<number> {
   const houseStatus = operatorStatusToHouseStatus(status);
   if (!houseStatus) {
@@ -23,18 +25,22 @@ export async function setOperatorHousesStatus(
     return 0;
   }
   const db = admin.firestore();
-  const snap = await db.collection('houses').where('ownerId', '==', operatorUid).get();
+  const query = db.collection('houses').where('ownerId', '==', operatorUid);
+  const snap = tx ? await tx.get(query) : await query.get();
   if (snap.docs.length === 0) return 0;
   const live = houseStatus === 'active' || houseStatus === 'trialing';
-  const batch = db.batch();
-  for (const doc of snap.docs) {
-    batch.update(doc.ref, {
-      subscriptionStatus: houseStatus,
-      ...(live ? { guestGraceEndsAt: admin.firestore.FieldValue.delete() } : {}),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
+  const fields = {
+    subscriptionStatus: houseStatus,
+    ...(live ? { guestGraceEndsAt: admin.firestore.FieldValue.delete() } : {}),
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  };
+  if (tx) {
+    for (const doc of snap.docs) tx.update(doc.ref, fields);
+  } else {
+    const batch = db.batch();
+    for (const doc of snap.docs) batch.update(doc.ref, fields);
+    await batch.commit();
   }
-  await batch.commit();
   logger.info('setOperatorHousesStatus', {
     operatorUid,
     status: houseStatus,

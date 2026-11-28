@@ -45,7 +45,12 @@ export async function recordSlotTaken(
   if (!roleConsumesResidentSlot(role)) return;
   try {
     await recordResidentAccepted(owner, houseId);
-  } catch {
-    logger.warn('redeemInvitation: failed to record resident occupancy', { houseId });
+  } catch (error) {
+    // The cap is undercounted until this is reconciled, so log what to fix.
+    logger.error('redeemInvitation: failed to record resident occupancy', {
+      houseId,
+      ownerId: owner,
+      error: error instanceof Error ? error.message : String(error),
+    });
   }
 }

@@ -4,17 +4,28 @@
 // createTierSubscription.test.ts) since api/stripe.ts wraps `new Stripe(...)`.
 
 const mockSubscriptionsCreate = jest.fn();
+const mockCustomersRetrieve = jest.fn();
 
 jest.mock("stripe", () =>
   jest.fn().mockImplementation(() => ({
     subscriptions: {
       create: (...args: unknown[]) => mockSubscriptionsCreate(...args),
     },
+    customers: {
+      retrieve: (...args: unknown[]) => mockCustomersRetrieve(...args),
+    },
   })),
 );
 
-import { failedBeforeSubscription, reactivateSubscription } from "../../api/stripe";
+import { logger } from "firebase-functions";
+import {
+  failedBeforeSubscription,
+  isUnrecordedReplacement,
+  reactivateSubscription,
+} from "../../api/stripe";
 import OperatorSubscription from "../../entities/OperatorSubscription";
+
+const warn = jest.spyOn(logger, "warn").mockImplementation(() => undefined);
 
 describe("reactivateSubscription", () => {
   beforeEach(() => {
@@ -23,6 +34,8 @@ describe("reactivateSubscription", () => {
     process.env.STRIPE_API_VERSION = "2026-01-28.clover";
     process.env.STRIPE_HOUSE_PRICE_ID = "price_house";
     process.env.STRIPE_GUEST_PRICE_ID = "price_guest";
+    mockCustomersRetrieve.mockImplementation(async (id: string) => ({ id }));
+    warn.mockClear();
   });
 
   it("recreates a single-item subscription for a tier subscription", async () => {
@@ -54,6 +67,32 @@ describe("reactivateSubscription", () => {
     expect(fresh.subscriptionItemId).toBe("si_2");
     expect(fresh.tier).toBe("standard");
     expect(fresh.houseType).toBe("oxford");
+  });
+
+  // The replacement replaces the whole plan: built fresh, it left oxfordEnabled
+  // at its default false, which shut a paying Oxford operator out of Oxford.
+  it.each([
+    ["oxford", "standard", "STRIPE_PRICE_OXFORD_STANDARD", true],
+    ["traditional", "starter", "STRIPE_PRICE_TRAD_STARTER", false],
+  ])("restarts a %s plan with oxfordEnabled as the plan has it", async (houseType, tier, env, oxford) => {
+    process.env[env] = "price_x";
+    mockSubscriptionsCreate.mockResolvedValue({
+      id: "sub_7",
+      status: "active",
+      trial_end: null,
+      billing_cycle_anchor: 1893456000,
+      items: { data: [{ id: "si_7", plan: { id: "price_x" } }] },
+    });
+    const meta = Object.assign(new OperatorSubscription(), {
+      tier,
+      houseType,
+      customerId: "cus_7",
+      houses: {},
+    });
+
+    const fresh = await reactivateSubscription("cus_7", meta, "uid_7");
+
+    expect(fresh.oxfordEnabled).toBe(oxford);
   });
 
   it("records the status Stripe gave the replacement", async () => {
@@ -166,6 +205,48 @@ describe("reactivateSubscription", () => {
       expect(failedBeforeSubscription(error)).toBe(true);
     });
 
+    // The replacement is created on the stored customer. If Stripe no longer has
+    // it (deleted, say by support), the create would fail after the lookup with
+    // an error not marked as before any subscription, holding the lock.
+    it.each([
+      ["deleted", async (id: string) => ({ id, deleted: true })],
+      [
+        "missing",
+        async () => {
+          throw Object.assign(new Error("No such customer"), {
+            type: "StripeInvalidRequestError",
+            code: "resource_missing",
+          });
+        },
+      ],
+    ])("refuses a stored customer Stripe has %s, before creating anything", async (_label, retrieve) => {
+      process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_std";
+      mockCustomersRetrieve.mockImplementation(retrieve);
+      const error = await reactivateSubscription("cus_4", tierMeta(), "uid_4").catch(
+        (e: unknown) => e,
+      );
+      expect(error).toMatchObject({ code: "failed-precondition" });
+      expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
+      expect(failedBeforeSubscription(error)).toBe(true);
+      // The operator is told to contact support, so the server logs it.
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("no longer on file"),
+        expect.objectContaining({ userId: "uid_4", customerId: "cus_4" }),
+      );
+    });
+
+    it("reports a Stripe outage as itself, not as billing details gone", async () => {
+      process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_std";
+      mockCustomersRetrieve.mockRejectedValue(new Error("stripe down"));
+      const error = await reactivateSubscription("cus_4", tierMeta(), "uid_4").catch(
+        (e: unknown) => e,
+      );
+      expect(error).not.toMatchObject({ code: "failed-precondition" });
+      expect(error).toMatchObject({ message: "stripe down" });
+      expect(mockSubscriptionsCreate).not.toHaveBeenCalled();
+      expect(failedBeforeSubscription(error)).toBe(true);
+    });
+
     it("does not mark a failed create, which may follow a subscription Stripe made", async () => {
       process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_oxford_std";
       mockSubscriptionsCreate.mockRejectedValue(new Error("timeout"));
@@ -175,5 +256,55 @@ describe("reactivateSubscription", () => {
       expect(error).toBeInstanceOf(Error);
       expect(failedBeforeSubscription(error)).toBe(false);
     });
+  });
+});
+
+// A Reactivate whose records failed after Stripe's create leaves its replacement
+// live. A retry records it instead of being refused, but only when it is that
+// replacement: this operator's (findLiveSubscriptionForUser checks the userId),
+// on the stored customer, on the stored plan's price, and the only item.
+describe("isUnrecordedReplacement", () => {
+  const stored = () =>
+    Object.assign(new OperatorSubscription(), {
+      tier: "standard",
+      houseType: "oxford",
+      billingInterval: "year",
+      customerId: "cus_8",
+      status: "canceled",
+      houses: {},
+    });
+  const live = (over: { customer?: string; price?: string; items?: unknown[] } = {}) =>
+    ({
+      id: "sub_8",
+      status: "active",
+      customer: over.customer ?? "cus_8",
+      metadata: { userId: "uid_8" },
+      items: { data: over.items ?? [{ id: "si_8", price: { id: over.price ?? "price_year" } }] },
+    }) as never;
+
+  beforeEach(() => {
+    process.env.STRIPE_PRICE_OXFORD_STANDARD = "price_month";
+    process.env.STRIPE_PRICE_OXFORD_STANDARD_ANNUAL = "price_year";
+  });
+  afterEach(() => delete process.env.STRIPE_PRICE_OXFORD_STANDARD_ANNUAL);
+
+  it("is true for a subscription on the stored customer at the stored plan's price", () => {
+    expect(isUnrecordedReplacement(live(), stored())).toBe(true);
+  });
+
+  it.each([
+    ["another customer", { customer: "cus_other" }],
+    ["another price (the monthly one)", { price: "price_month" }],
+    [
+      "a second item",
+      { items: [{ id: "si_8", price: { id: "price_year" } }, { id: "si_9", price: { id: "price_x" } }] },
+    ],
+  ])("is false for %s", (_label, over) => {
+    expect(isUnrecordedReplacement(live(over), stored())).toBe(false);
+  });
+
+  it("is false for a plan whose price isn't configured", () => {
+    delete process.env.STRIPE_PRICE_OXFORD_STANDARD_ANNUAL;
+    expect(isUnrecordedReplacement(live(), stored())).toBe(false);
   });
 });

@@ -145,63 +145,6 @@ export async function getHousesByAttributes(
   return shapeHouses(result.docs);
 }
 
-export async function getUserBySubscription(subscriptionId: string): Promise<User | null> {
-  const result = await userCollection
-    .where('subscriptionMetadata.subscriptionId', '==', subscriptionId)
-    .get();
-  if (result.empty) return null;
-  return result.docs[0].data() as User;
-}
-
-export async function updateHouseStatuses(superAdminId: string, status: string) {
-  const result = await houseCollection.where('superAdminIds', 'array-contains', superAdminId).get();
-  const batch = ratsFirestore.batch();
-  result.docs.forEach((doc) => {
-    batch.update(doc.ref, { subscriptionStatus: status });
-  });
-  return batch.commit();
-}
-
-export async function updateUserSubscriptionStatus(subscriptionId: string, status: string) {
-  const user = await getUserBySubscription(subscriptionId);
-  if (!user) {
-    logger.warn('updateUserSubscriptionStatus: no user for subscription');
-    return;
-  }
-  const subscriptionMetadata: Partial<User> = {
-    subscriptionMetadata: {
-      ...user.subscriptionMetadata,
-      status,
-    },
-  };
-  await updateHouseStatuses(user.adminId, status);
-  return userCollection.doc(user.id!).update(subscriptionMetadata);
-}
-
-export async function updateUserPeriodEnd(
-  endDate: number,
-  subscriptionId: string,
-  cancel: boolean = false,
-) {
-  const user = await getUserBySubscription(subscriptionId);
-  if (!user) {
-    logger.warn('updateUserPeriodEnd: no user for subscription');
-    return;
-  }
-  const subscriptionMetadata: Partial<User> = {
-    subscriptionMetadata: {
-      ...user.subscriptionMetadata,
-      currentPeriodEnd: endDate,
-    },
-  };
-  if (cancel) {
-    // "canceled" is Stripe's spelling and the canonical one across the codebase.
-    subscriptionMetadata.subscriptionMetadata!.status = 'canceled';
-    await updateHouseStatuses(user.adminId, 'canceled');
-  }
-  return userCollection.doc(user.id!).update(subscriptionMetadata);
-}
-
 export async function getUsers(attribute: string, value: string) {
   return userCollection.where(attribute, '==', value).get();
 }
