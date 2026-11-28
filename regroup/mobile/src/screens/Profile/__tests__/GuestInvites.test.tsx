@@ -131,6 +131,84 @@ describe("GuestInvites", () => {
   });
 });
 
+// M3 (2026-11-27): createInvitation now refuses an invitation whose email
+// failed. The screen used to show nothing on a failure (its failure state was
+// never rendered), and every submit re-sent the whole accumulated
+// pendingGuestInvites list, so a retry re-invited guests already invited (each
+// pending invitation holds a resident slot).
+describe("GuestInvites: what is sent and what the operator is told", () => {
+  const { Alert } = require("react-native");
+  let alertSpy: jest.SpyInstance;
+  const sentEmails = () =>
+    mockSendAllInvites.mock.calls.flatMap(
+      ([houses]: any[]) => Object.values(houses).flatMap((h: any) => h.pendingGuestInvites)
+    );
+  const bag = () => ({ setFieldValue: jest.fn() });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    alertSpy = jest.spyOn(Alert, "alert").mockImplementation(() => undefined);
+    mockUpdateHouseMutateAsync.mockResolvedValue(undefined);
+    mockSendAllInvites.mockResolvedValue({ sent: 1, failed: 0, failures: [] } as any);
+    mockExtractGuestEmails.mockImplementation((house: any, guestEmails: any) => ({
+      ...house,
+      pendingGuestInvites: ["earlier@x.com", ...guestEmails.map((e: string) => e.trim().toLowerCase())],
+    }));
+  });
+  afterEach(() => alertSpy.mockRestore());
+
+  function renderScreen() {
+    const navigation: any = { goBack: jest.fn(), navigate: jest.fn() };
+    render(<GuestInvites navigation={navigation} />);
+    return navigation;
+  }
+
+  it("invites only the addresses entered now, not guests already pending", async () => {
+    renderScreen();
+    await capturedOnSubmit({ guestEmails: ["New@X.com ", "two@x.com"] }, bag());
+    expect(sentEmails().sort()).toEqual(["new@x.com", "two@x.com"]);
+    expect(mockUpdateHouseMutateAsync).toHaveBeenCalledWith({
+      houseId: "house-1",
+      values: expect.objectContaining({
+        pendingGuestInvites: ["earlier@x.com", "new@x.com", "two@x.com"],
+      }),
+    });
+  });
+
+  it("tells the operator which were not sent and leaves only those in the form", async () => {
+    mockSendAllInvites.mockImplementation((async (houses: any) => {
+      const [email] = (Object.values(houses)[0] as any).pendingGuestInvites;
+      return email === "two@x.com"
+        ? { sent: 0, failed: 1, failures: [{ houseId: "house-1", role: "guest" }] }
+        : { sent: 1, failed: 0, failures: [] };
+    }) as any);
+    const navigation = renderScreen();
+    const formikBag = bag();
+    await capturedOnSubmit({ guestEmails: ["one@x.com", "two@x.com"] }, formikBag);
+
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    expect(alertSpy.mock.calls[0][1]).toMatch(/1 of 2/);
+    expect(formikBag.setFieldValue).toHaveBeenCalledWith("guestEmails", ["two@x.com"]);
+    expect(navigation.goBack).not.toHaveBeenCalled();
+    expect(JSON.stringify(mockLogException.mock.calls)).not.toContain("@x.com");
+  });
+
+  it("tells the operator when nothing could be sent", async () => {
+    mockSendAllInvites.mockRejectedValue(new Error("email service down"));
+    const navigation = renderScreen();
+    await capturedOnSubmit({ guestEmails: ["one@x.com"] }, bag());
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    expect(navigation.goBack).not.toHaveBeenCalled();
+  });
+
+  it("says nothing extra and goes back when every invitation went", async () => {
+    const navigation = renderScreen();
+    await capturedOnSubmit({ guestEmails: ["one@x.com"] }, bag());
+    expect(alertSpy).not.toHaveBeenCalled();
+    expect(navigation.goBack).toHaveBeenCalled();
+  });
+});
+
 // ─── Keyboard (plan Task 15) ──────────────────────────────────────────────────
 describe("GuestInvites keyboard", () => {
   it("puts the invite form and its pinned Send Invites button in the Android resize view", () => {
