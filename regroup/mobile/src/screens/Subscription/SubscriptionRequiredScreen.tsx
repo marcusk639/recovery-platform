@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { useQueryClient } from '@tanstack/react-query';
+import { Routes } from '../../navigation/types';
 import { useAppDispatch, useAppSelector } from '../../state/store';
 import { houseKeys } from '../../state/queries/houseQueries';
 import { logout } from '../../state/slices/userSlice';
@@ -19,9 +21,17 @@ import { openWebBilling } from '../../services/webBilling';
  *  2. "I've subscribed"     — invalidates React Query user cache so the
  *                             gate re-evaluates without requiring a restart
  *  3. "Sign out"            — dispatches the logout thunk
+ *  4. "Delete account"      — opens the Delete account screen, the same one
+ *                             Personal offers (password check, deleteAccount
+ *                             callable). The gate replaces the whole tab
+ *                             navigator, so without this a lapsed operator
+ *                             could not delete in the app (App Store
+ *                             5.1.1(v)). The route is a root modal, outside
+ *                             the gate.
  */
 const SubscriptionRequiredScreen: React.FC = () => {
   const dispatch = useAppDispatch();
+  const navigation = useNavigation<any>();
   const queryClient = useQueryClient();
   const currentUser = useAppSelector(s => s.user.user);
 
@@ -44,6 +54,10 @@ const SubscriptionRequiredScreen: React.FC = () => {
 
   const handleSignOut = () => {
     dispatch(logout());
+  };
+
+  const handleDeleteAccount = () => {
+    navigation.navigate(Routes.DeleteAccount);
   };
 
   return (
@@ -83,6 +97,14 @@ const SubscriptionRequiredScreen: React.FC = () => {
         text="Sign out"
         style={styles.signOutLink}
         onPress={handleSignOut}
+      />
+
+      <RatsText
+        testID="btn-delete-account"
+        translate={false}
+        text="Delete account"
+        style={styles.deleteAccountLink}
+        onPress={handleDeleteAccount}
       />
     </View>
   );
@@ -131,6 +153,12 @@ const styles = StyleSheet.create({
     fontSize: fontSize.regular,
     color: color.baby_blue,
     textDecorationLine: 'underline',
+  },
+  deleteAccountLink: {
+    fontSize: fontSize.regular,
+    color: color.dark_grey,
+    textDecorationLine: 'underline',
+    marginTop: normalize(24),
   },
 });
 

@@ -16,7 +16,8 @@ import { Routes } from '../../navigation/types';
  * They can't fix it, but they keep read-only access to their own data (owner
  * decision, launch spec §4.1 item 2): their payment history (receipts and CSV
  * export) and their own documents. This view replaces the tabs, so nothing
- * else is reachable in the app. The two screens are modal routes outside the
+ * else is reachable in the app except sign-out and the Delete account screen
+ * (App Store 5.1.1(v)). The screens are modal routes outside the
  * gate: no deep link may open them (limitedViewLinks.test.ts), and no deep
  * link may open any other modal route either (linking.ts allowlist).
  *
@@ -39,6 +40,7 @@ const ResidentLimitedView: React.FC = () => {
       guestId: guest!.id,
       title: 'My Documents',
     });
+  const openDeleteAccount = () => navigation.navigate(Routes.DeleteAccount);
 
   return (
     <View testID="resident-limited-view" style={styles.container}>
@@ -73,6 +75,12 @@ const ResidentLimitedView: React.FC = () => {
       {/* RatsText drops testID, so the touch target carries it. */}
       <TouchableOpacity testID="limited-sign-out" onPress={() => dispatch(logout())}>
         <RatsText translate={false} text="Sign out" style={styles.signOutLink} />
+      </TouchableOpacity>
+
+      {/* App Store 5.1.1(v): Personal is out of reach here, so this is the way
+          to the same Delete account screen (a root modal, outside the gate). */}
+      <TouchableOpacity testID="limited-delete-account" onPress={openDeleteAccount}>
+        <RatsText translate={false} text="Delete account" style={styles.deleteAccountLink} />
       </TouchableOpacity>
     </View>
   );
@@ -116,6 +124,12 @@ const styles = StyleSheet.create({
     color: color.baby_blue,
     textDecorationLine: 'underline',
     marginTop: normalize(8),
+  },
+  deleteAccountLink: {
+    fontSize: fontSize.regular,
+    color: color.dark_grey,
+    textDecorationLine: 'underline',
+    marginTop: normalize(24),
   },
 });
 

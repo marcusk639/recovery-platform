@@ -71,6 +71,22 @@ tags:
     visible:
       id: "resident-limited-view"
     timeout: 15000
+# BILL-023's resident half (App Store 5.1.1(v)): the limited view also opens the
+# Delete account screen. Opened only, nothing typed: this flow's account stays.
+- tapOn:
+    id: "limited-delete-account"
+- extendedWaitUntil:
+    visible:
+      id: "delete-password-input"
+    timeout: 15000
+- assertVisible:
+    id: "delete-account-button"
+- tapOn:
+    id: "back-button"
+- extendedWaitUntil:
+    visible:
+      id: "resident-limited-view"
+    timeout: 15000
 # Their own document, read-only; not the house's.
 - tapOn:
     id: "limited-documents"
