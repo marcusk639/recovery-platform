@@ -364,7 +364,7 @@ export async function updateHouseBatch(
       promises.push(removeAdminPrivileges(after, removedAdminHouses, removedSuperAdminHouses));
     }
   });
-  batch.update(doc(houseCollection, house.id), house as DocumentData);
+  batch.update(doc(houseCollection, house.id), withoutServerOwnedHouseFields(house) as DocumentData);
   updatedAdmins.forEach((admin) => {
     batch.update(doc(adminCollection, admin.id), admin as DocumentData);
   });

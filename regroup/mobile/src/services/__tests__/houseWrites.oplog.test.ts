@@ -26,7 +26,7 @@ jest.mock('../../util/logging', () => ({ logException: jest.fn() }));
 
 import { getOpLog, resetOpLog, seedDoc } from '../../../__mocks__/firebase-modular/log';
 import { SERVER_OWNED_HOUSE_FIELDS, withoutServerOwnedHouseFields } from '../houseWrites';
-import { finalizeHouseSetup, updateHouse } from '../house';
+import { finalizeHouseSetup, updateHouse, updateHouseBatch } from '../house';
 import { createGuest, customizePhase, deleteGuest } from '../guest';
 import { updateDispute } from '../dispute';
 
@@ -137,5 +137,12 @@ describe('whole-house saves send no server-owned field', () => {
     seedDoc('houses/h1', staleHouse());
     await updateDispute(staleHouse() as any);
     expectNoServerOwnedField();
+  });
+
+  it('updateHouseBatch', async () => {
+    seedDoc('houses/h1', staleHouse());
+    await updateHouseBatch(staleHouse() as any, staleHouse() as any, {}, {}, {}, {});
+    expectNoServerOwnedField();
+    expect(houseWrites()[0].data).toEqual(expect.objectContaining({ id: 'h1', name: 'Oak' }));
   });
 });
