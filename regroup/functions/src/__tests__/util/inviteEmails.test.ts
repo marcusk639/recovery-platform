@@ -64,3 +64,13 @@ describe('sendOneInviteEmail', () => {
     expect(mockSendEmail.mock.calls[0][0].html).toContain('href="#"');
   });
 });
+
+// M3 (2026-11-27): createInvitation needs to know the email failed.
+describe('sendOneInviteEmail result', () => {
+  it.each([true, false])('resolves what sendEmail resolved (%s)', async (sent) => {
+    mockSendEmail.mockResolvedValueOnce(sent);
+    await expect(
+      sendOneInviteEmail({ toEmail: 'a@b.com', inviteLink: 'https://regroup-app.com/invite#token=T', role: 'guest' }),
+    ).resolves.toBe(sent);
+  });
+});

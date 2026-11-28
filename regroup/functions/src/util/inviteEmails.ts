@@ -26,7 +26,7 @@ export interface SendOneInviteParams {
  */
 export async function sendOneInviteEmail(
   params: SendOneInviteParams
-): Promise<void> {
+): Promise<boolean> {
   const { toEmail, inviteLink, role } = params;
 
   // The link is an https app link: emailed as-is in both bodies. (It used to
@@ -78,7 +78,7 @@ export async function sendOneInviteEmail(
   ].join("");
 
 
-  await sendEmail({
+  return sendEmail({
     text,
     html,
     to: toEmail,

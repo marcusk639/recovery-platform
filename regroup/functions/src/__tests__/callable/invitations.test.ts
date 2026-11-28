@@ -17,6 +17,7 @@ const mockHouseGet = jest.fn();
 const mockInvitationsSet = jest.fn();
 const mockInvitationsDocGet = jest.fn();
 const mockInvitationsDocUpdate = jest.fn();
+const mockInvitationsDocDelete = jest.fn().mockResolvedValue(undefined);
 // Stable refs so redeem tests can assert on these — the `auth: jest.fn(() => …)`
 // pattern would otherwise return a fresh setCustomUserClaims jest.fn per call,
 // making assertions impossible. mockCreateClaims is mocked via its own
@@ -66,10 +67,11 @@ jest.mock('firebase-admin', () => ({
       if (name === 'houses') return { doc: (_id: string) => ({ get: mockHouseGet }) };
       if (name === 'invitations')
         return {
-          doc: (_id: string) => ({
+          doc: (id: string) => ({
             get: mockInvitationsDocGet,
             set: mockInvitationsSet,
             update: mockInvitationsDocUpdate,
+            delete: () => mockInvitationsDocDelete(id),
           }),
         };
       return {};
@@ -157,7 +159,9 @@ jest.mock('../../util/entitlement', () => ({
     mockEnforceHouseEntitlement(...args),
 }));
 
-const mockSendOneInviteEmail = jest.fn();
+// Resolves true (sent) unless a test says otherwise; createInvitation refuses
+// only on false, so a bare jest.fn() resolving undefined would hide a loosened check.
+const mockSendOneInviteEmail = jest.fn().mockResolvedValue(true);
 jest.mock('../../util/inviteEmails', () => ({
   sendOneInviteEmail: (...args: unknown[]) => mockSendOneInviteEmail(...args),
 }));
@@ -935,5 +939,94 @@ describe('createInvitation — entitlement gate', () => {
     }
     expect(caught?.code).toBe('failed-precondition');
     expect(mockInvitationsSet).not.toHaveBeenCalled();
+  });
+});
+
+// M3 (2026-11-27): the invitation email is the only way an invitee gets the
+// link. When it fails the operator must hear so, and the pending invitation,
+// which holds a resident slot (util/inviteCapacity), must not stay behind.
+describe('createInvitation — the invitation email is not sent', () => {
+  const adminCaller = { uid: 'inviter-uid', token: { admin: { 'house-1': true } } };
+  const input = { email: 'newadmin@x.com', houseId: 'house-1', role: 'admin' };
+
+  beforeEach(() => {
+    // The entitlement describe above leaves a rejecting implementation behind.
+    mockEnforceHouseEntitlement.mockReset();
+    mockEnforceHouseEntitlement.mockResolvedValue(undefined);
+    mockHouseGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ ownerId: 'someone-else', adminIds: ['inviter-admin-id'] }),
+    });
+    mockSendOneInviteEmail.mockReset();
+    mockSendOneInviteEmail.mockResolvedValueOnce(false);
+  });
+
+  it('removes the unsent invitation and refuses with unavailable', async () => {
+    // Not "wasn't saved": that is untrue when the removal fails too.
+    await expect(call(createInvitation, input, adminCaller)).rejects.toMatchObject({
+      code: 'unavailable',
+      message: "We couldn't send the invitation email. Please try again.",
+    });
+    expect(mockInvitationsSet).toHaveBeenCalledTimes(1);
+    expect(mockInvitationsDocDelete).toHaveBeenCalledTimes(1);
+  });
+
+  it('still refuses with unavailable when removing the invitation fails too', async () => {
+    mockInvitationsDocDelete.mockRejectedValueOnce(new Error('deadline-exceeded'));
+    await expect(call(createInvitation, input, adminCaller)).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+  });
+
+  it('refuses only once the removal has finished', async () => {
+    let finishDelete: () => void = () => undefined;
+    mockInvitationsDocDelete.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finishDelete = resolve;
+      }),
+    );
+    let settled = false;
+    const pending = call(createInvitation, input, adminCaller).catch((e: unknown) => {
+      settled = true;
+      return e;
+    });
+    await new Promise((r) => setImmediate(r));
+    expect(mockInvitationsDocDelete).toHaveBeenCalledTimes(1);
+    expect(settled).toBe(false);
+    finishDelete();
+    await expect(pending).resolves.toMatchObject({ code: 'unavailable' });
+  });
+
+  it('removes the invitation it wrote, not another one', async () => {
+    await expect(call(createInvitation, input, adminCaller)).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+    expect(mockInvitationsSet.mock.calls[0][0].token).toBe('TEST_TOKEN_FIXED');
+    expect(mockInvitationsDocDelete).toHaveBeenCalledWith('TEST_TOKEN_FIXED');
+  });
+
+  it('logs the failed removal with its code, never the token', async () => {
+    const { logger } = require('firebase-functions');
+    mockInvitationsDocDelete.mockRejectedValueOnce(
+      Object.assign(new Error('invitations/TEST_TOKEN_FIXED: deadline'), { code: 4 }),
+    );
+    await expect(call(createInvitation, input, adminCaller)).rejects.toMatchObject({
+      code: 'unavailable',
+    });
+    const logged = JSON.stringify([logger.error.mock.calls, logger.warn.mock.calls, logger.info.mock.calls]);
+    expect(logged).not.toContain('TEST_TOKEN_FIXED');
+    expect(logger.error).toHaveBeenCalledWith(
+      'createInvitation: unsent invitation not removed',
+      { houseId: 'house-1', role: 'admin', createdAt: expect.any(String), code: 4 },
+    );
+  });
+
+  it('keeps the invitation and returns the token when the email went', async () => {
+    mockSendOneInviteEmail.mockReset();
+    mockSendOneInviteEmail.mockResolvedValueOnce(true);
+    await expect(call(createInvitation, input, adminCaller)).resolves.toEqual({
+      token: 'TEST_TOKEN_FIXED',
+    });
+    expect(mockInvitationsDocDelete).not.toHaveBeenCalled();
   });
 });
