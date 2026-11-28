@@ -51,8 +51,8 @@ Store builds are manual; no lane builds them.
 
 | Platform | Bundle / package id | Version (build) | Source                                                                                |
 | -------- | ------------------- | --------------- | ------------------------------------------------------------------------------------- |
-| iOS      | `com.rats.dev`      | 1.53 (40)       | `ios/rats.xcodeproj/project.pbxproj` (`MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`) |
-| Android  | `com.regroup.app`   | 0.55 (39)       | `android/app/build.gradle` `defaultConfig` (`versionName`, `versionCode`)             |
+| iOS      | `com.rats.dev`      | 1.54 (41)       | `ios/rats.xcodeproj/project.pbxproj` (`MARKETING_VERSION`, `CURRENT_PROJECT_VERSION`) |
+| Android  | `com.regroup.app`   | 0.56 (40)       | `android/app/build.gradle` `defaultConfig` (`versionName`, `versionCode`)             |
 
 - **fastlane** (`fastlane/Fastfile`, `Appfile`): three lanes. `ios metadata` (deliver, metadata and screenshots, no binary), `ios beta` (pilot uploads a prebuilt IPA from the hardcoded path `/tmp/regroup-export/rats.ipa`), and `android metadata` (supply, internal track, no APK/AAB). There is no build lane: archive and export the IPA yourself first. No App Store Connect auth is configured in the repo (no API key), so `deliver`/`pilot` need one from the environment or an interactive Apple ID sign-in. `beta` also passes `apple_id` an email address, where pilot expects the app's numeric Apple ID; check it before the first upload. The `screenshots/` directories the metadata lanes read are not committed. Android uses `fastlane/google-play-key.json` (gitignored).
 - **Android upload signing**: the `release` signing config reads the Gradle properties `MYAPP_UPLOAD_STORE_FILE`, `MYAPP_UPLOAD_STORE_PASSWORD`, `MYAPP_UPLOAD_KEY_ALIAS` and `MYAPP_UPLOAD_KEY_PASSWORD` (e.g. in `~/.gradle/gradle.properties`). It is applied only when `MYAPP_UPLOAD_STORE_FILE` is set, so **without them `assembleRelease`/`bundleRelease` still succeed but produce an unsigned artifact**. Nothing reads an `android/keystore.properties`.

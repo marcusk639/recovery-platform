@@ -421,18 +421,20 @@ close sales again, run the same with `--value=false`.
    `regroup/docs/operations/manual-tasks/2026-11-11-rn-0.88-device-runbook.md`, and record the DEVS rows in
    `regroup/mobile/docs/e2e/coverage-matrix.md`.
 2. **iOS:** Xcode → `regroup/mobile/ios/rats.xcworkspace`, scheme `rats`, Release → Product → Archive →
-   Distribute → App Store Connect. Bump the version and build first (the current ones are 1.53 (40)).
+   Distribute → App Store Connect. The repo is at 1.54 (41), bumped for this upload: check that App Store
+   Connect doesn't already hold that version or build, and bump again before any later upload.
 3. **Android:** sign with the upload key and run `cd regroup/mobile/android && ./gradlew bundleRelease`.
    Upload `app/build/outputs/bundle/release/app-release.aab` to the internal track, then production.
-   The current version is 0.55 (39).
+   The repo is at 0.56 (40), bumped for this upload: check that Play Console doesn't already hold
+   versionCode 40 or higher.
 4. **Review notes:** the demo operator account and what a reviewer should try.
 5. **Before release:** the owner's notice to existing operators (roadmap owner track, P10 step 10.1).
 
 ### Part F — Minimum app version (spec §5 step 10.6)
 
 Only once the new version is downloadable in that store: set earlier, it blocks everyone on that
-platform from an app they can't get yet. Each platform has its own value (iOS `1.53` and Android
-`0.55` today; use the version you just released).
+platform from an app they can't get yet. Each platform has its own value (the repo is at iOS `1.54`
+and Android `0.56`; use the version you just released).
 
 ```bash
 cd functions
